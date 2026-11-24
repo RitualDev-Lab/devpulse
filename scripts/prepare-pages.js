@@ -17,13 +17,36 @@ if (fs.existsSync(workerSrc)) {
   console.log('Copied worker.js -> assets/_worker.js');
 }
 
-// 2. Copy ALL directories and files from .open-next into assets (except assets itself)
+// 2. Copy ALL directories and files from .open-next into assets with dereference: true
+// This converts any symlinks into real files so Cloudflare Pages asset validation passes
 for (const item of fs.readdirSync(openNextDir)) {
   if (item === 'assets') continue;
   const src = path.join(openNextDir, item);
   const dest = path.join(assetsDir, item);
-  fs.cpSync(src, dest, { recursive: true });
-  console.log(`Copied ${item} -> assets/${item}`);
+  try {
+    fs.cpSync(src, dest, { recursive: true, dereference: true });
+    console.log(`Copied ${item} -> assets/${item} (dereferenced)`);
+  } catch (err) {
+    console.warn(`Warning copying ${item}:`, err.message);
+  }
 }
+
+// 3. Remove any remaining symlinks inside assets directory just in case
+function cleanSymlinks(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    try {
+      if (entry.isSymbolicLink()) {
+        fs.unlinkSync(fullPath);
+      } else if (entry.isDirectory()) {
+        cleanSymlinks(fullPath);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+}
+cleanSymlinks(assetsDir);
 
 console.log('Successfully prepared Cloudflare Pages assets with _worker.js and all dependencies.');
