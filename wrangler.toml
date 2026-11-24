@@ -2,3 +2,10 @@ name = "devpulse"
 pages_build_output_dir = ".open-next/assets"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
+
+[vars]
+TURSO_DATABASE_URL = "libsql://devpulse-ritual-dev-git.aws-us-east-2.turso.io"
+NEXT_PUBLIC_SUPABASE_URL = "https://udgiyoakgxremqeviwng.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_oGnWgyQqq-0v1Tot0JpUdw_sUyj_XqO"
+GITHUB_CLIENT_ID = "Ov23liPtuy9zT2SPXxL1"
+R2_BUCKET_NAME = "devpulse-storage"
