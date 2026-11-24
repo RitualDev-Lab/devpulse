@@ -52,7 +52,7 @@ export async function dispatchCrashAlerts(
  * Send rich Discord Embed alert
  */
 export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
-  const url = data.dashboardUrl || `https://devpulse.rolenest.in`;
+  const url = data.dashboardUrl || `https://devpulse.ritualdev.in`;
 
   const body = {
     username: "DevPulse Alerts",
@@ -96,7 +96,7 @@ export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
  * Send Slack Block Kit alert
  */
 export async function sendSlackAlert(webhookUrl: string, data: AlertPayload) {
-  const url = data.dashboardUrl || `https://devpulse.rolenest.in`;
+  const url = data.dashboardUrl || `https://devpulse.ritualdev.in`;
 
   const body = {
     text: `🚨 [DevPulse] New crash reported in ${data.projectName}: ${data.errorName}`,
@@ -160,7 +160,7 @@ export async function sendTelegramAlert(
   chatId: string,
   data: AlertPayload
 ) {
-  const url = data.dashboardUrl || `https://devpulse.rolenest.in`;
+  const url = data.dashboardUrl || `https://devpulse.ritualdev.in`;
   const text = `🚨 *DevPulse Crash Alert*\n\n*Project:* ${data.projectName}\n*Error:* \`${data.errorName}\`\n*Runtime:* ${data.runtime} (${data.version || "N/A"})\n*OS:* ${data.os || "Unknown"}\n\n*Message:*\n_${data.message.slice(0, 300)}_\n\n[Open Dashboard](${url})`;
 
   try {

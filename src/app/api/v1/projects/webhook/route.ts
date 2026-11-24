@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
           version: "v1.0.0",
           os: "Cloudflare Edge",
           environment: "production",
-          dashboardUrl: "https://devpulse.rolenest.in",
+          dashboardUrl: "https://devpulse.ritualdev.in",
         }
       );
     }

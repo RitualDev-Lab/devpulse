@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         os,
         environment,
         reporterEmail,
-        dashboardUrl: `https://devpulse.rolenest.in`,
+        dashboardUrl: `https://devpulse.ritualdev.in`,
       }
     ).catch((err) => console.error("Webhook alert error:", err));
 

@@ -13,7 +13,7 @@
 
 **DevPulse** is a unified command center designed for modern maintainers and indie hackers. If you maintain multiple repositories, ship npm packages, release PyPI libraries, or build CLI tools, DevPulse brings all your downloads, open issues, pull requests, and live runtime crashes into **one customizable, draggable mission control dashboard.**
 
-[Live Demo](https://devpulse.rolenest.in) • [Report a Bug](https://devpulse.rolenest.in/report/ritual-core) • [Documentation](#quick-start)
+[Live Demo](https://devpulse.ritualdev.in) • [Report a Bug](https://devpulse.ritualdev.in/report/ritual-core) • [Documentation](#quick-start)
 
 </div>
 
@@ -48,17 +48,17 @@ Copy-paste lightweight snippets directly into your packages:
 * **Node.js (`uncaughtException`):** Uses native global `fetch` — **0 extra npm dependencies**.
 
 ### 4. 📬 Public Bug Reporting Hub (`/report/[project-slug]`)
-* Share a public link (e.g. `devpulse.rolenest.in/report/my-lib`) for end-users to submit crash logs, reproduction steps, and contact info without needing GitHub logins.
+* Share a public link (e.g. `devpulse.ritualdev.in/report/my-lib`) for end-users to submit crash logs, reproduction steps, and contact info without needing GitHub logins.
 * Includes copy-pasteable Markdown shields for your GitHub `README.md`.
 
 ### 5. 🛡️ Dynamic SVG Badges for READMEs (`/api/badge/...`)
 Generate live shields for your package READMEs with real-time stats:
-* **Monthly Downloads:** `https://devpulse.rolenest.in/api/badge/downloads/ritual-core.svg`
-* **Crash-Free Health Rate:** `https://devpulse.rolenest.in/api/badge/health/ritual-core.svg`
+* **Monthly Downloads:** `https://devpulse.ritualdev.in/api/badge/downloads/ritual-core.svg`
+* **Crash-Free Health Rate:** `https://devpulse.ritualdev.in/api/badge/health/ritual-core.svg`
 
 ```markdown
-[![DevPulse Downloads](https://devpulse.rolenest.in/api/badge/downloads/ritual-core.svg)](https://devpulse.rolenest.in)
-[![DevPulse Health](https://devpulse.rolenest.in/api/badge/health/ritual-core.svg)](https://devpulse.rolenest.in)
+[![DevPulse Downloads](https://devpulse.ritualdev.in/api/badge/downloads/ritual-core.svg)](https://devpulse.ritualdev.in)
+[![DevPulse Health](https://devpulse.ritualdev.in/api/badge/health/ritual-core.svg)](https://devpulse.ritualdev.in)
 ```
 
 ### 6. 💻 Maintainer Companion CLI (`devpulse`)
@@ -71,7 +71,7 @@ npx @ritualdev/pulse crashes   # Streams the latest unhandled runtime crashes
 ### 7. 🍪 Cookie-Free GDPR-Compliant Web Analytics (`tracker.js`)
 A lightweight (< 2KB) snippet for documentation sites (Google Analytics alternative):
 ```html
-<script defer src="https://devpulse.rolenest.in/tracker.js" data-project="YOUR_PROJECT_KEY"></script>
+<script defer src="https://devpulse.ritualdev.in/tracker.js" data-project="YOUR_PROJECT_KEY"></script>
 ```
 Tracks unique pageviews, top referrers (GitHub, HackerNews, Reddit, X), device distribution, and country demographics with zero cookies.
 
@@ -95,7 +95,7 @@ Tracks unique pageviews, top referrers (GitHub, HackerNews, Reddit, X), device d
                                           ▼
                 ┌───────────────────────────────────────────────────┐
                 │        CLOUDFLARE PAGES / CUSTOM DOMAIN           │
-                │        (devpulse.rolenest.in / Edge CDN)          │
+                │        (devpulse.ritualdev.in / Edge CDN)         │
                 └───────────┬───────────────────┬───────────────────┘
                             │                   │
          ┌──────────────────┘                   └──────────────────┐
@@ -180,7 +180,7 @@ Add this snippet to your package's `__init__.py` or CLI entrypoint:
 import sys, traceback, platform, json, urllib.request
 
 class DevPulseTracker:
-    def __init__(self, api_key="YOUR_PROJECT_API_KEY", endpoint="https://devpulse.rolenest.in/api/v1/event"):
+    def __init__(self, api_key="YOUR_PROJECT_API_KEY", endpoint="https://devpulse.ritualdev.in/api/v1/event"):
         self.api_key = api_key
         self.endpoint = endpoint
         sys.excepthook = self._handle_exception
@@ -211,7 +211,7 @@ Add this snippet to your CLI or package entrypoint:
 export function initDevPulse({ apiKey = "YOUR_PROJECT_API_KEY", version = "1.0.0" } = {}) {
   const report = async (err, name) => {
     try {
-      await fetch("https://devpulse.rolenest.in/api/v1/event", {
+      await fetch("https://devpulse.ritualdev.in/api/v1/event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

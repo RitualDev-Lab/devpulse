@@ -20,7 +20,7 @@ interface WebAnalyticsCardProps {
 export function WebAnalyticsCard({ summary, projectSlug }: WebAnalyticsCardProps) {
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
-  const scriptSnippet = `<script defer src="https://devpulse.rolenest.in/tracker.js" data-project="${projectSlug}"></script>`;
+  const scriptSnippet = `<script defer src="https://devpulse.ritualdev.in/tracker.js" data-project="${projectSlug}"></script>`;
 
   const copyScript = () => {
     navigator.clipboard.writeText(scriptSnippet);

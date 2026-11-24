@@ -9,7 +9,7 @@
 const https = require("node:https");
 const http = require("node:http");
 
-const DEFAULT_HOST = process.env.DEVPULSE_HOST || "https://devpulse.rolenest.in";
+const DEFAULT_HOST = process.env.DEVPULSE_HOST || "https://devpulse.ritualdev.in";
 const DEFAULT_SLUG = process.env.DEVPULSE_PROJECT || "ritual-core";
 
 function fetchJson(url) {

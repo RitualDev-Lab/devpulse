@@ -11,7 +11,7 @@ interface BugReportBadgeCardProps {
 export function BugReportBadgeCard({ projectSlug, projectName }: BugReportBadgeCardProps) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedBadge, setCopiedBadge] = useState(false);
-  const [origin, setOrigin] = useState("https://devpulse.rolenest.in");
+  const [origin, setOrigin] = useState("https://devpulse.ritualdev.in");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
