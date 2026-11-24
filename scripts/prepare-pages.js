@@ -66,8 +66,33 @@ export default {
                         headers: { "content-type": "application/json" }
                     });
                 }
-                const { handler } = await import("./server-functions/default/handler.mjs");
-                const res = await handler(reqOrResp, env, ctx, request.signal);
+
+                const capturedErrors = [];
+                const originalConsoleError = console.error;
+                console.error = (...args) => {
+                    capturedErrors.push(args.map(a => (a && a.stack) ? a.stack : String(a)).join(" "));
+                    originalConsoleError(...args);
+                };
+
+                let res;
+                try {
+                    const { handler } = await import("./server-functions/default/handler.mjs");
+                    res = await handler(reqOrResp, env, ctx, request.signal);
+                } finally {
+                    console.error = originalConsoleError;
+                }
+
+                if (url.searchParams.has("__debug_errors") || (res && res.status === 500 && capturedErrors.length > 0)) {
+                    return new Response(JSON.stringify({
+                        status: res ? res.status : 500,
+                        errors: capturedErrors,
+                        url: request.url
+                    }, null, 2), {
+                        status: 500,
+                        headers: { "content-type": "application/json" }
+                    });
+                }
+
                 if (url.searchParams.has("__debug_res")) {
                     const cloned = res.clone();
                     const text = await cloned.text();
