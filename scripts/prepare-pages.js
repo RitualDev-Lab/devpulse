@@ -14,12 +14,12 @@ const handlerFile = path.join(openNextDir, 'server-functions/default/handler.mjs
 if (fs.existsSync(handlerFile)) {
   let content = fs.readFileSync(handlerFile, 'utf-8');
   content = content.replace(
-    'res.end("Internal Server Error")',
-    'res.end("Internal Server Error: " + (e?.stack || e?.message || e))'
+    /res\.end\(["']Internal Server Error["']\)/g,
+    'res.end("Internal Server Error: " + (typeof e !== "undefined" ? (e?.stack || e?.message || e) : "unknown"))'
   );
   content = content.replace(
-    'error("NextJS request failed.", e);',
-    'console.error("NextJS request failed.", e); res.statusCode = 500; res.setHeader("Content-Type", "text/plain"); res.end("DevPulse NextJS Request Failed:\\n" + (e?.stack || e?.message || String(e))); return;'
+    /["']NextJS request failed\.["'],\s*([a-zA-Z0-9_$]+)/g,
+    '"NextJS request failed.", $1); res.statusCode = 500; res.setHeader("Content-Type", "text/plain"); res.end("DevPulse NextJS Request Failed:\\n" + ($1?.stack || $1?.message || String($1))); return; ('
   );
   fs.writeFileSync(handlerFile, content, 'utf-8');
   console.log('Patched handler.mjs with detailed error output.');
@@ -29,8 +29,8 @@ const middlewareHandlerFile = path.join(openNextDir, 'middleware/handler.mjs');
 if (fs.existsSync(middlewareHandlerFile)) {
   let mContent = fs.readFileSync(middlewareHandlerFile, 'utf-8');
   mContent = mContent.replace(
-    'error("Error in routingHandler", e);',
-    'console.error("Error in routingHandler", e); return new Response("OpenNext Routing Error:\\n" + (e?.stack || e?.message || String(e)), { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } });'
+    /["']Error in routingHandler["'],\s*([a-zA-Z0-9_$]+)/g,
+    '"Error in routingHandler", $1); return new Response("OpenNext Routing Error:\\n" + ($1?.stack || $1?.message || String($1)), { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } }); ('
   );
   fs.writeFileSync(middlewareHandlerFile, mContent, 'utf-8');
   console.log('Patched middleware/handler.mjs with detailed error output.');
@@ -83,8 +83,31 @@ export default {
                 if (reqOrResp instanceof Response) {
                     return reqOrResp;
                 }
+                if (url.searchParams.has("__debug")) {
+                    return new Response(JSON.stringify({
+                        reqOrResp,
+                        envKeys: Object.keys(env || {}),
+                        url: request.url
+                    }, null, 2), {
+                        status: 200,
+                        headers: { "content-type": "application/json" }
+                    });
+                }
                 const { handler } = await import("./server-functions/default/handler.mjs");
-                return await handler(reqOrResp, env, ctx, request.signal);
+                const res = await handler(reqOrResp, env, ctx, request.signal);
+                if (url.searchParams.has("__debug_res")) {
+                    const cloned = res.clone();
+                    const text = await cloned.text();
+                    return new Response(JSON.stringify({
+                        status: res.status,
+                        headers: Object.fromEntries(res.headers.entries()),
+                        body: text
+                    }, null, 2), {
+                        status: 200,
+                        headers: { "content-type": "application/json" }
+                    });
+                }
+                return res;
             });
         } catch (err) {
             console.error("Next.js Server Execution Error:", err);

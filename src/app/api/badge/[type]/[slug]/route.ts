@@ -51,26 +51,33 @@ function generateSvgBadge(label: string, value: string, color: string): string {
 }
 
 export async function GET(req: NextRequest, { params }: BadgeRouteParams) {
-  const { type, slug } = await params;
-  const cleanSlug = slug.replace(/\.svg$/i, "");
+  try {
+    const { type, slug } = await params;
+    const cleanSlug = slug.replace(/\.svg$/i, "");
 
-  // Find project
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.slug, cleanSlug))
-    .limit(1);
+    // Find project
+    let project = null;
+    try {
+      const rows = await db
+        .select()
+        .from(projects)
+        .where(eq(projects.slug, cleanSlug))
+        .limit(1);
+      project = rows[0] || null;
+    } catch (dbErr: any) {
+      console.error("DB Error querying badge project:", dbErr);
+    }
 
-  if (!project) {
-    const errorSvg = generateSvgBadge("devpulse", "not found", "#71717a");
-    return new NextResponse(errorSvg, {
-      status: 404,
-      headers: {
-        "Content-Type": "image/svg+xml",
-        "Cache-Control": "no-cache",
-      },
-    });
-  }
+    if (!project) {
+      const errorSvg = generateSvgBadge("devpulse", "not found", "#71717a");
+      return new NextResponse(errorSvg, {
+        status: 404,
+        headers: {
+          "Content-Type": "image/svg+xml",
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
 
   let label = "devpulse";
   let value = "active";
@@ -158,4 +165,15 @@ export async function GET(req: NextRequest, { params }: BadgeRouteParams) {
       "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
     },
   });
+  } catch (outerErr: any) {
+    console.error("Fatal badge generation error:", outerErr);
+    const fallbackSvg = generateSvgBadge("badge", "error", "#ef4444");
+    return new NextResponse(fallbackSvg, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/svg+xml",
+        "Cache-Control": "no-cache",
+      },
+    });
+  }
 }
