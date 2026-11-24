@@ -1,20 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 
-function copyDirSync(src, dest) {
-  if (!fs.existsSync(src)) return;
-  fs.mkdirSync(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      copyDirSync(srcPath, destPath);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
 const openNextDir = path.resolve('.open-next');
 const assetsDir = path.resolve('.open-next/assets');
 
@@ -31,9 +17,15 @@ if (fs.existsSync(workerSrc)) {
   console.log('Copied worker.js -> assets/_worker.js');
 }
 
-// 2. Copy server-functions, middleware, and .build into assets so all relative imports resolve
-copyDirSync(path.join(openNextDir, 'server-functions'), path.join(assetsDir, 'server-functions'));
-copyDirSync(path.join(openNextDir, 'middleware'), path.join(assetsDir, 'middleware'));
-copyDirSync(path.join(openNextDir, '.build'), path.join(assetsDir, '.build'));
+// 2. Copy server-functions, middleware, and .build into assets using native fs.cpSync
+const dirsToCopy = ['server-functions', 'middleware', '.build'];
+for (const dir of dirsToCopy) {
+  const src = path.join(openNextDir, dir);
+  const dest = path.join(assetsDir, dir);
+  if (fs.existsSync(src)) {
+    fs.cpSync(src, dest, { recursive: true });
+    console.log(`Copied ${dir} -> assets/${dir}`);
+  }
+}
 
 console.log('Successfully prepared Cloudflare Pages assets with _worker.js and all dependencies.');
