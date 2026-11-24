@@ -3,7 +3,7 @@
 import React from "react";
 import { Container, Download, Star, ExternalLink, Tag, Clock } from "lucide-react";
 import type { DockerRepoStats } from "@/lib/integrations/docker";
-import { formatNumber, formatDate } from "@/lib/utils/format";
+import { formatNumber, formatCompactNumber, formatDate } from "@/lib/utils/format";
 
 interface DockerContainerCardProps {
   stats: DockerRepoStats | null;
@@ -76,8 +76,11 @@ export function DockerContainerCard({ stats, imageName }: DockerContainerCardPro
               <Download className="w-3.5 h-3.5 text-blue-400" />
               <span>Container Pulls</span>
             </div>
-            <p className="text-2xl font-black text-white tracking-tight">
-              {formatNumber(stats.pullCount)}
+            <p
+              className="text-2xl font-black text-white tracking-tight truncate"
+              title={formatNumber(stats.pullCount)}
+            >
+              {formatCompactNumber(stats.pullCount)}
             </p>
           </div>
 
@@ -86,8 +89,11 @@ export function DockerContainerCard({ stats, imageName }: DockerContainerCardPro
               <Star className="w-3.5 h-3.5 text-amber-400" />
               <span>Docker Stars</span>
             </div>
-            <p className="text-2xl font-black text-white tracking-tight">
-              {formatNumber(stats.starCount)}
+            <p
+              className="text-2xl font-black text-white tracking-tight truncate"
+              title={formatNumber(stats.starCount)}
+            >
+              {formatCompactNumber(stats.starCount)}
             </p>
           </div>
         </div>

@@ -3,7 +3,7 @@
 import React from "react";
 import { Download, ExternalLink, Box, Tag, BookOpen, Layers, GitFork, TrendingUp } from "lucide-react";
 import type { RustCrateStats } from "@/lib/integrations/crates";
-import { formatNumber } from "@/lib/utils/format";
+import { formatNumber, formatCompactNumber } from "@/lib/utils/format";
 
 interface RustCratesCardProps {
   stats: RustCrateStats | null;
@@ -78,8 +78,11 @@ export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
               <Download className="w-3 h-3 text-orange-400" />
               <span>Total DLs</span>
             </div>
-            <p className="text-base font-bold text-white tracking-tight">
-              {formatNumber(stats.totalDownloads)}
+            <p
+              className="text-sm sm:text-base font-bold text-white tracking-tight truncate"
+              title={formatNumber(stats.totalDownloads)}
+            >
+              {formatCompactNumber(stats.totalDownloads)}
             </p>
           </div>
 
@@ -88,8 +91,11 @@ export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
               <Layers className="w-3 h-3 text-amber-400" />
               <span>90d Velocity</span>
             </div>
-            <p className="text-base font-bold text-white tracking-tight">
-              {formatNumber(stats.recentDownloads)}
+            <p
+              className="text-sm sm:text-base font-bold text-white tracking-tight truncate"
+              title={formatNumber(stats.recentDownloads)}
+            >
+              {formatCompactNumber(stats.recentDownloads)}
             </p>
           </div>
 
@@ -98,8 +104,11 @@ export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
               <GitFork className="w-3 h-3 text-cyan-400" />
               <span>Dep Health</span>
             </div>
-            <p className="text-base font-bold text-cyan-400 tracking-tight" title={`${formatNumber(stats.reverseDependencies)} reverse dependencies`}>
-              {formatNumber(stats.reverseDependencies)}
+            <p
+              className="text-sm sm:text-base font-bold text-cyan-400 tracking-tight truncate"
+              title={`${formatNumber(stats.reverseDependencies)} reverse dependencies`}
+            >
+              {formatCompactNumber(stats.reverseDependencies)}
             </p>
           </div>
         </div>

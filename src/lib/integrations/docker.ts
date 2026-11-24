@@ -38,17 +38,29 @@ export async function fetchDockerRepoStats(imageName: string): Promise<DockerRep
     };
 
     const [repoRes, tagsRes] = await Promise.all([
-      fetch(`https://hub.docker.com/v2/repositories/${namespace}/${repository}/`, {
-        headers,
+      fetch(`https://hub.docker.com/v2/repositories/${namespace}/${repository}`, {
+        headers: {
+          "User-Agent": "Docker-Client/24.0.0 (linux)",
+          Accept: "application/json",
+        },
         next: { revalidate: 3600 },
-      }).catch(() => null),
+      }).catch((e) => {
+        console.warn("Docker repo fetch error:", e);
+        return null;
+      }),
       fetch(`https://hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=5`, {
-        headers,
+        headers: {
+          "User-Agent": "Docker-Client/24.0.0 (linux)",
+          Accept: "application/json",
+        },
         next: { revalidate: 3600 },
       }).catch(() => null),
     ]);
 
     if (!repoRes || !repoRes.ok) {
+      console.warn(
+        `Docker Hub returned ${repoRes?.status} ${repoRes?.statusText} for ${namespace}/${repository}`
+      );
       return null;
     }
 
