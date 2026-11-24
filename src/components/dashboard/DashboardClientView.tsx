@@ -7,6 +7,7 @@ import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
 import { IntegrationsModal } from "./IntegrationsModal";
 import { StorageSettingsModal } from "./StorageSettingsModal";
+import { DomainSettingsModal } from "./DomainSettingsModal";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
 import {
   normalizeThemeId,
@@ -35,6 +36,7 @@ export function DashboardClientView({
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [isStorageOpen, setIsStorageOpen] = useState(false);
+  const [isDomainsOpen, setIsDomainsOpen] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(() =>
     normalizeThemeId(initialData.project.theme)
   );
@@ -108,6 +110,7 @@ export function DashboardClientView({
         onOpenAlerts={() => setIsAlertsOpen(true)}
         onOpenIntegrations={() => setIsIntegrationsOpen(true)}
         onOpenStorage={() => setIsStorageOpen(true)}
+        onOpenDomains={() => setIsDomainsOpen(true)}
         customDomain={customDomain}
         storageTier={storageTier}
         onResetLayout={handleResetLayout}
@@ -191,6 +194,14 @@ export function DashboardClientView({
         isOpen={isStorageOpen}
         onClose={() => setIsStorageOpen(false)}
         initialTier={storageTier}
+        isDemo={isDemo}
+      />
+
+      {/* Subdomain, Custom Domain & White-Labeling Modal */}
+      <DomainSettingsModal
+        isOpen={isDomainsOpen}
+        onClose={() => setIsDomainsOpen(false)}
+        storageTier={storageTier}
         isDemo={isDemo}
       />
 

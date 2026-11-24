@@ -81,9 +81,15 @@ interface DragDropGridProps {
   data: DashboardData;
   isCustomizing: boolean;
   isDemo?: boolean;
+  isPublicPortal?: boolean;
 }
 
-export function DragDropGrid({ data, isCustomizing, isDemo = false }: DragDropGridProps) {
+export function DragDropGrid({
+  data,
+  isCustomizing,
+  isDemo = false,
+  isPublicPortal = false,
+}: DragDropGridProps) {
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
   const [activeCols, setActiveCols] = useState<12 | 8 | 4>(12);
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -123,11 +129,15 @@ export function DragDropGrid({ data, isCustomizing, isDemo = false }: DragDropGr
         ? [{ id: "revenue_stats", title: "Revenue & Monetization", defaultW: 6, defaultH: 1 }]
         : []),
       { id: "web_analytics", title: "Cookie-Free Web Traffic", defaultW: 4, defaultH: 1 },
-      { id: "error_stream", title: "Runtime Crashes & Bugs", defaultW: 8, defaultH: 1 },
-      { id: "telemetry_setup", title: "Package Crash SDK", defaultW: 4, defaultH: 1 },
+      ...(!isPublicPortal
+        ? [
+            { id: "error_stream", title: "Runtime Crashes & Bugs", defaultW: 8, defaultH: 1 },
+            { id: "telemetry_setup", title: "Package Crash SDK", defaultW: 4, defaultH: 1 },
+          ]
+        : []),
       { id: "bug_report_badge", title: "Public Bug Report Hub", defaultW: 4, defaultH: 1 },
     ],
-    [data]
+    [data, isPublicPortal]
   );
 
   // Build canonical 12-col layout merging saved DB layout with available ecosystem widgets

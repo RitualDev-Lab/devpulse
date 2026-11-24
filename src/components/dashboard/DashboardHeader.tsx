@@ -28,6 +28,7 @@ interface DashboardHeaderProps {
   onOpenAlerts: () => void;
   onOpenIntegrations: () => void;
   onOpenStorage?: () => void;
+  onOpenDomains?: () => void;
   customDomain?: string | null;
   storageTier: string;
   onResetLayout: () => void;
@@ -43,6 +44,7 @@ export function DashboardHeader({
   onOpenAlerts,
   onOpenIntegrations,
   onOpenStorage,
+  onOpenDomains,
   customDomain,
   storageTier,
   onResetLayout,
@@ -88,15 +90,18 @@ export function DashboardHeader({
 
           {/* Center / Right: Meta Statuses & Actions */}
           <div className="flex items-center flex-wrap gap-2 text-xs">
-            {customDomain && (
-              <div
-                className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300"
-                title="Verified Custom Domain"
-              >
-                <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="font-mono text-[11px]">{customDomain}</span>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={onOpenDomains}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"
+              title="Configure *.devpulse.ritualdev.in Subdomain, Custom Domain & White-Labeling"
+            >
+              <Globe className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-mono text-[11px] hidden lg:inline">
+                {customDomain || "Portal / Domain"}
+              </span>
+              <span className="lg:hidden">Portal</span>
+            </button>
 
             <button
               type="button"

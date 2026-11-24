@@ -9,8 +9,16 @@ export async function initDb() {
       email TEXT,
       avatar_url TEXT,
       storage_tier TEXT DEFAULT 'free' NOT NULL,
+      subdomain TEXT UNIQUE,
       custom_domain TEXT UNIQUE,
       custom_domain_verified INTEGER DEFAULT 0 NOT NULL,
+      custom_hostname_id TEXT,
+      custom_domain_ssl_status TEXT DEFAULT 'pending',
+      brand_title TEXT,
+      brand_description TEXT,
+      brand_favicon_url TEXT,
+      brand_og_image_url TEXT,
+      hide_powered_by INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
@@ -59,6 +67,14 @@ export async function initDb() {
     "ALTER TABLE error_events ADD COLUMN r2_object_key TEXT;",
     "ALTER TABLE error_events ADD COLUMN payload_size_bytes INTEGER DEFAULT 0 NOT NULL;",
     "ALTER TABLE error_events ADD COLUMN storage_provider TEXT DEFAULT 'turso' NOT NULL;",
+    "ALTER TABLE users ADD COLUMN subdomain TEXT;",
+    "ALTER TABLE users ADD COLUMN custom_hostname_id TEXT;",
+    "ALTER TABLE users ADD COLUMN custom_domain_ssl_status TEXT DEFAULT 'pending';",
+    "ALTER TABLE users ADD COLUMN brand_title TEXT;",
+    "ALTER TABLE users ADD COLUMN brand_description TEXT;",
+    "ALTER TABLE users ADD COLUMN brand_favicon_url TEXT;",
+    "ALTER TABLE users ADD COLUMN brand_og_image_url TEXT;",
+    "ALTER TABLE users ADD COLUMN hide_powered_by INTEGER DEFAULT 0 NOT NULL;",
   ];
 
   for (const query of optionalColumns) {

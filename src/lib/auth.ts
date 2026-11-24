@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
   email: string | null;
   avatarUrl: string | null;
   storageTier: string;
+  subdomain: string | null;
   customDomain: string | null;
   customDomainVerified: boolean;
 }
@@ -40,6 +41,12 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     const email = user.email || null;
     const avatarUrl = metadata.avatar_url || null;
 
+    const defaultSubdomain = githubUsername
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32) || `dev-${user.id.slice(0, 8)}`;
+
     // Ensure user row exists in Turso
     try {
       await db
@@ -51,6 +58,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
           email,
           avatarUrl,
           storageTier: "free",
+          subdomain: defaultSubdomain,
           customDomainVerified: false,
         })
         .onConflictDoUpdate({
@@ -93,6 +101,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
         email: u.email,
         avatarUrl: u.avatarUrl,
         storageTier: u.storageTier,
+        subdomain: u.subdomain || defaultSubdomain,
         customDomain: u.customDomain,
         customDomainVerified: u.customDomainVerified,
       };
@@ -105,6 +114,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       email,
       avatarUrl,
       storageTier: "free",
+      subdomain: defaultSubdomain,
       customDomain: null,
       customDomainVerified: false,
     };

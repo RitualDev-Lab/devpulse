@@ -12,8 +12,16 @@ export const users = sqliteTable("users", {
   email: text("email"),
   avatarUrl: text("avatar_url"),
   storageTier: text("storage_tier", { enum: ["free", "pro", "team", "enterprise", "byos"] }).default("free").notNull(),
-  customDomain: text("custom_domain").unique(), // 1 custom domain per user
+  subdomain: text("subdomain").unique(), // Free *.devpulse.ritualdev.in subdomain handle
+  customDomain: text("custom_domain").unique(), // Paid custom domain (e.g. stats.mytool.dev)
   customDomainVerified: integer("custom_domain_verified", { mode: "boolean" }).default(false).notNull(),
+  customHostnameId: text("custom_hostname_id"), // Cloudflare for SaaS Custom Hostname ID
+  customDomainSslStatus: text("custom_domain_ssl_status").default("pending"), // 'pending' | 'pending_validation' | 'active'
+  brandTitle: text("brand_title"),
+  brandDescription: text("brand_description"),
+  brandFaviconUrl: text("brand_favicon_url"),
+  brandOgImageUrl: text("brand_og_image_url"),
+  hidePoweredBy: integer("hide_powered_by", { mode: "boolean" }).default(false).notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
