@@ -3,9 +3,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { scanGitHubRepository } from "@/lib/scanner/github-scanner";
 import { db } from "@/db";
 import { projects, dashboardWidgets } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
+import { getEffectiveEntitlements } from "@/lib/billing/plans";
 
 export async function POST(request: Request) {
   try {
@@ -49,6 +50,26 @@ export async function POST(request: Request) {
         project: existing[0],
         summary: scanned.summary,
       });
+    }
+
+    const entitlements = getEffectiveEntitlements({ storageTier: user.storageTier });
+    if (entitlements.maxProjects !== null) {
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(projects)
+        .where(eq(projects.userId, user.id));
+
+      if (Number(count) >= entitlements.maxProjects) {
+        return NextResponse.json(
+          {
+            error: `Project limit reached (${entitlements.maxProjects} on ${entitlements.plan.name}). Upgrade to Developer Pro ($14/mo) or Team ($49/mo) in Billing to import more repositories.`,
+            code: "PROJECT_LIMIT_REACHED",
+            limit: entitlements.maxProjects,
+            plan: entitlements.plan.id,
+          },
+          { status: 402 }
+        );
+      }
     }
 
     // 3. Generate unique slug for user's project

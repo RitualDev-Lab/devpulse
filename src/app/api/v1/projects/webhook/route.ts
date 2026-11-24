@@ -4,6 +4,7 @@ import { projects } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { canUseAlertChannel } from "@/lib/billing/plans";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,11 +21,34 @@ export async function POST(req: NextRequest) {
       telegramBotToken,
       telegramChatId,
       genericWebhookUrl,
+      pagerdutyRoutingKey,
       testPing,
     } = body;
 
     if (!projectId) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+    }
+
+    if ((discordWebhookUrl && !canUseAlertChannel(user.storageTier, "discord")) ||
+        ((telegramBotToken || telegramChatId) && !canUseAlertChannel(user.storageTier, "telegram"))) {
+      return NextResponse.json(
+        {
+          error: "Discord and Telegram instant crash alerts require Developer Pro ($14/mo) or Team ($49/mo).",
+          code: "ALERT_TIER_REQUIRED",
+        },
+        { status: 402 }
+      );
+    }
+
+    if ((slackWebhookUrl && !canUseAlertChannel(user.storageTier, "slack")) ||
+        (pagerdutyRoutingKey && !canUseAlertChannel(user.storageTier, "pagerduty"))) {
+      return NextResponse.json(
+        {
+          error: "Slack & PagerDuty multi-channel alert routing requires Team / Studio ($49/mo).",
+          code: "ALERT_TEAM_REQUIRED",
+        },
+        { status: 402 }
+      );
     }
 
     // Update webhook settings strictly scoped to authenticated user's project
@@ -36,6 +60,7 @@ export async function POST(req: NextRequest) {
         telegramBotToken: telegramBotToken || null,
         telegramChatId: telegramChatId || null,
         genericWebhookUrl: genericWebhookUrl || null,
+        pagerdutyRoutingKey: pagerdutyRoutingKey || null,
       })
       .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)));
 
@@ -48,6 +73,7 @@ export async function POST(req: NextRequest) {
           telegramBotToken,
           telegramChatId,
           genericWebhookUrl,
+          pagerdutyRoutingKey,
         },
         {
           eventId: "err_test_ping",

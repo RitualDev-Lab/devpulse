@@ -10,6 +10,7 @@ import {
   Package,
   Cpu,
   Globe,
+  Check,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 
@@ -46,6 +47,7 @@ export default function HomePage() {
             <a href="#about" className="hover:text-white transition">About</a>
             <a href="#features" className="hover:text-white transition">Features</a>
             <a href="#revenue" className="hover:text-white transition">Revenue Engine</a>
+            <a href="#pricing" className="hover:text-white transition">Pricing</a>
             <a href="#cli" className="hover:text-white transition">Terminal CLI</a>
             <a
               href="https://github.com/ritualdev-lab/devpulse"
@@ -345,6 +347,142 @@ export default function HomePage() {
             <p className="text-xs text-zinc-400 leading-relaxed">
               Embed live dynamic shields like <code className="text-zinc-300">/api/badge/downloads/...svg</code> directly into GitHub READMEs.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Commercial SaaS Pricing Section */}
+      <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 py-20 border-t border-zinc-900 space-y-10">
+        <div className="text-center max-w-2xl mx-auto space-y-3">
+          <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">
+            Transparent Developer Pricing
+          </span>
+          <h3 className="text-3xl sm:text-4xl font-extrabold text-white">
+            Start Free. Scale With Your Ecosystem.
+          </h3>
+          <p className="text-sm text-zinc-400">
+            Powered by Dodo Payments with instant tier provisioning, modular domain/storage add-ons, and automated SSL.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Free */}
+          <div className="p-7 rounded-3xl bg-zinc-900/50 border border-zinc-800 flex flex-col justify-between space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-bold text-white">Free</span>
+                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300">
+                  OSS Solo
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-extrabold text-white">$0</span>
+                <span className="text-xs text-zinc-400">/month</span>
+              </div>
+              <ul className="space-y-2.5 text-xs text-zinc-300">
+                {[
+                  "1 Project workspace",
+                  "1 Free *.devpulse.ritualdev.in subdomain",
+                  "100 MB Cloudflare R2 storage (7d lifecycle)",
+                  "7-day analytics & telemetry history",
+                  "Generic webhook alerts & preset themes",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <Link
+              href="/dashboard"
+              className="w-full py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-center text-xs font-bold text-white transition"
+            >
+              Get Started Free
+            </Link>
+          </div>
+
+          {/* Developer Pro */}
+          <div className="p-7 rounded-3xl bg-indigo-950/30 border border-indigo-500/60 shadow-2xl shadow-indigo-950/30 flex flex-col justify-between space-y-6 relative">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-bold text-white">Developer Pro</span>
+                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                  Popular
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-extrabold text-white">$14</span>
+                <span className="text-xs text-zinc-400">/month</span>
+              </div>
+              <ul className="space-y-2.5 text-xs text-zinc-200">
+                {[
+                  "5 Projects + 1-Click GitHub Import",
+                  "1 Custom Domain with automatic SSL",
+                  "5 GB Cloudflare R2 storage (90d lifecycle)",
+                  "90-day analytics & metrics history",
+                  "Discord & Telegram crash alerts",
+                  "Scoped Custom CSS & white-label portals",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <Link
+              href="/dashboard"
+              className="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-center text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition"
+            >
+              Upgrade to Pro
+            </Link>
+          </div>
+
+          {/* Team / Studio */}
+          <div className="p-7 rounded-3xl bg-zinc-900/50 border border-zinc-800 flex flex-col justify-between space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-bold text-white">Team / Studio</span>
+                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  BYOS + Scale
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-extrabold text-white">$49</span>
+                <span className="text-xs text-zinc-400">/month</span>
+              </div>
+              <ul className="space-y-2.5 text-xs text-zinc-300">
+                {[
+                  "Unlimited Projects & workspaces",
+                  "5 Custom Domains with automatic SSL",
+                  "50 GB R2 storage + BYOS (own R2 / S3)",
+                  "365-day analytics & telemetry history",
+                  "Multi-channel PagerDuty, Slack, Discord & Telegram",
+                  "Priority Cloudflare edge ingestion",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <Link
+              href="/dashboard"
+              className="w-full py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-center text-xs font-bold text-white transition"
+            >
+              Launch Team Workspace
+            </Link>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-zinc-400">
+          <div className="px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800">
+            Add-on: <span className="text-white font-semibold">Extra Custom Domain</span> (+$5/mo per domain)
+          </div>
+          <div className="px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800">
+            Add-on: <span className="text-white font-semibold">Extra R2 Storage</span> (+$3/mo per 25 GB)
           </div>
         </div>
       </section>

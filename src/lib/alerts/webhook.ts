@@ -25,6 +25,7 @@ export interface WebhookConfig {
   telegramBotToken?: string | null;
   telegramChatId?: string | null;
   genericWebhookUrl?: string | null;
+  pagerdutyRoutingKey?: string | null;
 }
 
 /**
@@ -50,6 +51,9 @@ export async function dispatchCrashAlerts(
   }
   if (config.genericWebhookUrl) {
     promises.push(sendGenericWebhookAlert(config.genericWebhookUrl, payload));
+  }
+  if (config.pagerdutyRoutingKey) {
+    promises.push(sendPagerDutyAlert(config.pagerdutyRoutingKey, payload));
   }
 
   return Promise.allSettled(promises);
@@ -233,6 +237,48 @@ export async function sendGenericWebhookAlert(webhookUrl: string, data: AlertPay
     return res.ok;
   } catch (err) {
     console.error("Failed to send Generic Webhook alert:", err);
+    return false;
+  }
+}
+
+/**
+ * Send PagerDuty Events API v2 Trigger Incident
+ */
+export async function sendPagerDutyAlert(routingKey: string, data: AlertPayload) {
+  const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
+
+  const body = {
+    routing_key: routingKey,
+    event_action: "trigger",
+    dedup_key: data.eventId || `${data.projectSlug}-${data.errorName}`,
+    payload: {
+      summary: `[${data.projectName}] ${data.errorName}: ${data.message.slice(0, 200)}`,
+      severity: "error",
+      source: data.projectSlug,
+      component: data.runtime,
+      custom_details: {
+        errorName: data.errorName,
+        message: data.message,
+        runtime: data.runtime,
+        version: data.version || "N/A",
+        os: data.os || "Unknown",
+        environment: data.environment || "production",
+        r2ObjectKey: data.r2ObjectKey || null,
+      },
+    },
+    links: [{ href: url, text: "Open DevPulse Command Center" }],
+  };
+
+  try {
+    const res = await fetch("https://events.pagerduty.com/v2/enqueue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(3000),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to send PagerDuty alert:", err);
     return false;
   }
 }

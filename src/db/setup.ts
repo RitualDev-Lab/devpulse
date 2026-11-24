@@ -75,6 +75,14 @@ export async function initDb() {
     "ALTER TABLE users ADD COLUMN brand_favicon_url TEXT;",
     "ALTER TABLE users ADD COLUMN brand_og_image_url TEXT;",
     "ALTER TABLE users ADD COLUMN hide_powered_by INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE users ADD COLUMN extra_custom_domains INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE users ADD COLUMN extra_storage_gb INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE users ADD COLUMN dodo_customer_id TEXT;",
+    "ALTER TABLE users ADD COLUMN dodo_subscription_id TEXT;",
+    "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT;",
+    "ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'active' NOT NULL;",
+    "ALTER TABLE users ADD COLUMN current_period_end TEXT;",
+    "ALTER TABLE projects ADD COLUMN pagerduty_routing_key TEXT;",
   ];
 
   for (const query of optionalColumns) {
@@ -159,6 +167,39 @@ export async function initDb() {
       country TEXT DEFAULT 'Global' NOT NULL,
       device TEXT DEFAULT 'desktop' NOT NULL,
       browser TEXT DEFAULT 'other' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS user_custom_domains (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      domain TEXT NOT NULL UNIQUE,
+      custom_hostname_id TEXT,
+      ssl_status TEXT DEFAULT 'pending' NOT NULL,
+      verified INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS billing_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider TEXT DEFAULT 'dodo' NOT NULL,
+      external_event_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      payment_id TEXT,
+      subscription_id TEXT,
+      product_id TEXT,
+      item_key TEXT,
+      amount_cents INTEGER DEFAULT 0 NOT NULL,
+      currency TEXT DEFAULT 'USD' NOT NULL,
+      status TEXT DEFAULT 'succeeded' NOT NULL,
+      invoice_url TEXT,
+      raw_payload_json TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);

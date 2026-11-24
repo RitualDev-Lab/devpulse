@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, userCustomDomains } from "@/db/schema";
 import { eq, ne, and } from "drizzle-orm";
 import {
   PRIMARY_PORTAL_DOMAIN,
   CUSTOM_DOMAIN_CNAME_TARGET,
-  isPaidDomainTier,
   normalizeAndValidateSubdomain,
   normalizeAndValidateCustomDomain,
   createCloudflareCustomHostname,
   deleteCloudflareCustomHostname,
 } from "@/lib/domains/cloudflare-saas";
+import { getEffectiveEntitlements } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,16 @@ export async function GET() {
 
     const subdomain = row?.subdomain || user.subdomain || user.githubUsername.toLowerCase();
     const tier = row?.storageTier || user.storageTier || "free";
+    const entitlements = getEffectiveEntitlements({
+      storageTier: tier,
+      extraCustomDomains: row?.extraCustomDomains,
+      extraStorageGb: row?.extraStorageGb,
+    });
+
+    const extraDomainsList = await db
+      .select()
+      .from(userCustomDomains)
+      .where(eq(userCustomDomains.userId, user.id));
 
     return NextResponse.json({
       subdomain,
@@ -38,8 +48,11 @@ export async function GET() {
       primaryDomain: PRIMARY_PORTAL_DOMAIN,
       cnameTarget: CUSTOM_DOMAIN_CNAME_TARGET,
       tier,
-      isPaidTier: isPaidDomainTier(tier),
-      customDomain: row?.customDomain || null,
+      isPaidTier: entitlements.maxCustomDomains > 0,
+      maxCustomDomains: entitlements.maxCustomDomains,
+      extraCustomDomains: entitlements.extraCustomDomains,
+      customDomains: extraDomainsList,
+      customDomain: row?.customDomain || extraDomainsList[0]?.domain || null,
       customDomainVerified: row?.customDomainVerified || false,
       customHostnameId: row?.customHostnameId || null,
       customDomainSslStatus: row?.customDomainSslStatus || "pending",
@@ -85,7 +98,12 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     const tier = existingUser?.storageTier || user.storageTier || "free";
-    const paidEligible = isPaidDomainTier(tier);
+    const entitlements = getEffectiveEntitlements({
+      storageTier: tier,
+      extraCustomDomains: existingUser?.extraCustomDomains,
+      extraStorageGb: existingUser?.extraStorageGb,
+    });
+    const paidEligible = entitlements.maxCustomDomains > 0;
 
     const updates: Record<string, any> = {
       updatedAt: new Date().toISOString(),
@@ -154,7 +172,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json(
             {
               error:
-                "Custom Domains with automatic Cloudflare SSL require a Pro, Team, or Enterprise plan. Use your free *.devpulse.ritualdev.in subdomain or upgrade in R2 Storage settings.",
+                "Custom Domains with automatic Cloudflare SSL require Developer Pro ($14/mo, 1 domain), Team ($49/mo, 5 domains), or an Extra Custom Domain add-on (+$5/mo).",
               code: "PAYMENT_REQUIRED",
             },
             { status: 402 }
@@ -172,24 +190,71 @@ export async function POST(req: NextRequest) {
           .where(and(eq(users.customDomain, checkDomain.domain), ne(users.id, user.id)))
           .limit(1);
 
-        if (domainConflict) {
+        const [extraConflict] = await db
+          .select({ id: userCustomDomains.id, userId: userCustomDomains.userId })
+          .from(userCustomDomains)
+          .where(eq(userCustomDomains.domain, checkDomain.domain))
+          .limit(1);
+
+        if (domainConflict || (extraConflict && extraConflict.userId !== user.id)) {
           return NextResponse.json(
             { error: `Domain "${checkDomain.domain}" is already connected to another workspace.` },
             { status: 409 }
           );
         }
 
-        // Only call Cloudflare Custom Hostnames API if domain changed or no hostname ID yet
-        if (checkDomain.domain !== existingUser?.customDomain || !existingUser?.customHostnameId) {
-          if (existingUser?.customHostnameId && checkDomain.domain !== existingUser.customDomain) {
-            await deleteCloudflareCustomHostname(existingUser.customHostnameId);
-          }
+        const userDomains = await db
+          .select()
+          .from(userCustomDomains)
+          .where(eq(userCustomDomains.userId, user.id));
 
+        const alreadyOwnedHere =
+          checkDomain.domain === existingUser?.customDomain ||
+          userDomains.some((d) => d.domain === checkDomain.domain);
+
+        // Enforce multi-domain quota (Pro: 1, Team: 5, + Extra Custom Domain add-ons)
+        const currentCount = new Set(
+          [existingUser?.customDomain, ...userDomains.map((d) => d.domain)].filter(Boolean)
+        ).size;
+
+        if (!alreadyOwnedHere && currentCount >= entitlements.maxCustomDomains) {
+          return NextResponse.json(
+            {
+              error: `Custom domain limit reached (${currentCount}/${entitlements.maxCustomDomains}). Upgrade to Team ($49/mo for 5 domains) or purchase an Extra Custom Domain (+$5/mo) add-on.`,
+              code: "DOMAIN_LIMIT_REACHED",
+            },
+            { status: 402 }
+          );
+        }
+
+        // Provision in Cloudflare for SaaS if new domain
+        if (!alreadyOwnedHere || !existingUser?.customHostnameId) {
           const cfRes = await createCloudflareCustomHostname(checkDomain.domain);
-          updates.customDomain = checkDomain.domain;
-          updates.customDomainVerified = cfRes.sslStatus === "active";
-          updates.customHostnameId = cfRes.customHostnameId;
-          updates.customDomainSslStatus = cfRes.sslStatus;
+          if (!existingUser?.customDomain) {
+            updates.customDomain = checkDomain.domain;
+            updates.customDomainVerified = cfRes.sslStatus === "active";
+            updates.customHostnameId = cfRes.customHostnameId;
+            updates.customDomainSslStatus = cfRes.sslStatus;
+          }
+          await db
+            .insert(userCustomDomains)
+            .values({
+              id: `dom_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+              userId: user.id,
+              domain: checkDomain.domain,
+              customHostnameId: cfRes.customHostnameId,
+              sslStatus: cfRes.sslStatus,
+              verified: cfRes.sslStatus === "active",
+            })
+            .onConflictDoUpdate({
+              target: userCustomDomains.domain,
+              set: {
+                customHostnameId: cfRes.customHostnameId,
+                sslStatus: cfRes.sslStatus,
+                verified: cfRes.sslStatus === "active",
+                updatedAt: new Date().toISOString(),
+              },
+            });
           provisionNote = cfRes.note;
         }
       }
@@ -205,10 +270,17 @@ export async function POST(req: NextRequest) {
 
     const activeSub = updated?.subdomain || user.githubUsername.toLowerCase();
 
+    const userDomains = await db
+      .select()
+      .from(userCustomDomains)
+      .where(eq(userCustomDomains.userId, user.id));
+
     return NextResponse.json({
       success: true,
       subdomain: activeSub,
       subdomainUrl: `https://${activeSub}.${PRIMARY_PORTAL_DOMAIN}`,
+      maxCustomDomains: entitlements.maxCustomDomains,
+      customDomains: userDomains,
       customDomain: updated?.customDomain || null,
       customDomainVerified: updated?.customDomainVerified || false,
       customHostnameId: updated?.customHostnameId || null,
@@ -232,33 +304,58 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const domainParam = req.nextUrl.searchParams.get("domain");
+
+    if (domainParam) {
+      const [row] = await db
+        .select()
+        .from(userCustomDomains)
+        .where(and(eq(userCustomDomains.userId, user.id), eq(userCustomDomains.domain, domainParam)))
+        .limit(1);
+
+      if (row?.customHostnameId) {
+        await deleteCloudflareCustomHostname(row.customHostnameId);
+      }
+      await db
+        .delete(userCustomDomains)
+        .where(and(eq(userCustomDomains.userId, user.id), eq(userCustomDomains.domain, domainParam)));
+    }
+
     const [existing] = await db
-      .select({ customHostnameId: users.customHostnameId })
+      .select({ customDomain: users.customDomain, customHostnameId: users.customHostnameId })
       .from(users)
       .where(eq(users.id, user.id))
       .limit(1);
 
-    if (existing?.customHostnameId) {
-      await deleteCloudflareCustomHostname(existing.customHostnameId);
-    }
+    if (!domainParam || existing?.customDomain === domainParam) {
+      if (existing?.customHostnameId) {
+        await deleteCloudflareCustomHostname(existing.customHostnameId);
+      }
 
-    await db
-      .update(users)
-      .set({
-        customDomain: null,
-        customDomainVerified: false,
-        customHostnameId: null,
-        customDomainSslStatus: "pending",
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(users.id, user.id));
+      const [nextFallback] = await db
+        .select()
+        .from(userCustomDomains)
+        .where(eq(userCustomDomains.userId, user.id))
+        .limit(1);
+
+      await db
+        .update(users)
+        .set({
+          customDomain: nextFallback?.domain || null,
+          customDomainVerified: nextFallback?.verified || false,
+          customHostnameId: nextFallback?.customHostnameId || null,
+          customDomainSslStatus: nextFallback?.sslStatus || "pending",
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(users.id, user.id));
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

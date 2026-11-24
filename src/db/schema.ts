@@ -22,6 +22,13 @@ export const users = sqliteTable("users", {
   brandFaviconUrl: text("brand_favicon_url"),
   brandOgImageUrl: text("brand_og_image_url"),
   hidePoweredBy: integer("hide_powered_by", { mode: "boolean" }).default(false).notNull(),
+  extraCustomDomains: integer("extra_custom_domains").default(0).notNull(),
+  extraStorageGb: integer("extra_storage_gb").default(0).notNull(),
+  dodoCustomerId: text("dodo_customer_id"),
+  dodoSubscriptionId: text("dodo_subscription_id"),
+  stripeCustomerId: text("stripe_customer_id"),
+  subscriptionStatus: text("subscription_status").default("active").notNull(),
+  currentPeriodEnd: text("current_period_end"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
@@ -59,6 +66,7 @@ export const projects = sqliteTable("projects", {
   telegramBotToken: text("telegram_bot_token"),
   telegramChatId: text("telegram_chat_id"),
   genericWebhookUrl: text("generic_webhook_url"),
+  pagerdutyRoutingKey: text("pagerduty_routing_key"),
 
   // Developer Revenue & Monetization (Stripe, Dodo Payments, Sponsors)
   stripeApiKey: text("stripe_api_key"),
@@ -157,6 +165,43 @@ export const pageviews = sqliteTable("pageviews", {
   country: text("country").default("Global").notNull(),
   device: text("device").default("desktop").notNull(),
   browser: text("browser").default("other").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Custom Domains Table
+ * Supports multiple SSL-provisioned custom domains for Team (5) + Extra Domain add-ons
+ */
+export const userCustomDomains = sqliteTable("user_custom_domains", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  domain: text("domain").notNull().unique(),
+  customHostnameId: text("custom_hostname_id"),
+  sslStatus: text("ssl_status").default("pending").notNull(),
+  verified: integer("verified", { mode: "boolean" }).default(false).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Billing Events & Invoices Table
+ * Stores idempotent Dodo Payments / Stripe webhook receipts & invoice links
+ */
+export const billingEvents = sqliteTable("billing_events", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  provider: text("provider", { enum: ["dodo", "stripe"] }).default("dodo").notNull(),
+  externalEventId: text("external_event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  paymentId: text("payment_id"),
+  subscriptionId: text("subscription_id"),
+  productId: text("product_id"),
+  itemKey: text("item_key"), // 'pro' | 'team' | 'extra_domain' | 'extra_storage'
+  amountCents: integer("amount_cents").default(0).notNull(),
+  currency: text("currency").default("USD").notNull(),
+  status: text("status").default("succeeded").notNull(),
+  invoiceUrl: text("invoice_url"),
+  rawPayloadJson: text("raw_payload_json"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

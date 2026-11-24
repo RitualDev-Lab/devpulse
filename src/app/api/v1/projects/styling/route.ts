@@ -4,6 +4,7 @@ import { projects } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { normalizeThemeId } from "@/lib/layout/css-scoper";
+import { getEffectiveEntitlements } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,19 @@ export async function POST(req: NextRequest) {
 
     const normalizedTheme = normalizeThemeId(theme);
     const cleanCss = typeof customCss === "string" ? customCss.slice(0, 20000) : "";
+
+    if (cleanCss.trim().length > 0) {
+      const entitlements = getEffectiveEntitlements({ storageTier: user.storageTier });
+      if (!entitlements.allowCustomCss) {
+        return NextResponse.json(
+          {
+            error: "Custom CSS injection is a Developer Pro ($14/mo) & Team ($49/mo) feature. Preset themes remain free on all plans.",
+            code: "CUSTOM_CSS_UPGRADE_REQUIRED",
+          },
+          { status: 402 }
+        );
+      }
+    }
 
     await db
       .update(projects)

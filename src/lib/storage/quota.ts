@@ -63,7 +63,11 @@ export function getTierMeta(tier?: string | null) {
  */
 export async function resolveUserStorageContext(userId: string): Promise<ResolvedStorageContext> {
   const [userRow] = await db
-    .select({ id: users.id, storageTier: users.storageTier })
+    .select({
+      id: users.id,
+      storageTier: users.storageTier,
+      extraStorageGb: users.extraStorageGb,
+    })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
@@ -72,6 +76,8 @@ export async function resolveUserStorageContext(userId: string): Promise<Resolve
     ? (userRow?.storageTier as StorageTier)
     : "free";
   const tierMeta = getTierMeta(tier);
+  const extraBytes = Math.max(0, Number(userRow?.extraStorageGb || 0)) * 1024 * 1024 * 1024;
+  const computedLimitBytes = tierMeta.limitBytes + extraBytes;
 
   let [config] = await db
     .select()
@@ -87,7 +93,7 @@ export async function resolveUserStorageContext(userId: string): Promise<Resolve
         userId,
         provider: "devpulse_r2",
         storageUsedBytes: 0,
-        storageLimitBytes: tierMeta.limitBytes,
+        storageLimitBytes: computedLimitBytes,
       });
       [config] = await db
         .select()
@@ -124,9 +130,7 @@ export async function resolveUserStorageContext(userId: string): Promise<Resolve
     credentials = getHostedR2Credentials();
   }
 
-  const effectiveLimit = config?.storageLimitBytes
-    ? Math.max(config.storageLimitBytes, tierMeta.limitBytes)
-    : tierMeta.limitBytes;
+  const effectiveLimit = Math.max(config?.storageLimitBytes || 0, computedLimitBytes);
 
   return {
     userId,

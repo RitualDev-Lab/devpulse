@@ -8,6 +8,7 @@ import { AlertSettingsModal } from "./AlertSettingsModal";
 import { IntegrationsModal } from "./IntegrationsModal";
 import { StorageSettingsModal } from "./StorageSettingsModal";
 import { DomainSettingsModal } from "./DomainSettingsModal";
+import { BillingModal } from "./BillingModal";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
 import {
   normalizeThemeId,
@@ -37,10 +38,23 @@ export function DashboardClientView({
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [isStorageOpen, setIsStorageOpen] = useState(false);
   const [isDomainsOpen, setIsDomainsOpen] = useState(false);
+  const [isBillingOpen, setIsBillingOpen] = useState(false);
+  const [billingSuccessBanner, setBillingSuccessBanner] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(() =>
     normalizeThemeId(initialData.project.theme)
   );
   const [customCss, setCustomCss] = useState(() => initialData.project.customCss || "");
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("billing") === "success") {
+        setBillingSuccessBanner(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // In demo mode, restore persisted theme/CSS from localStorage if customized locally
   useEffect(() => {
@@ -111,6 +125,7 @@ export function DashboardClientView({
         onOpenIntegrations={() => setIsIntegrationsOpen(true)}
         onOpenStorage={() => setIsStorageOpen(true)}
         onOpenDomains={() => setIsDomainsOpen(true)}
+        onOpenBilling={() => setIsBillingOpen(true)}
         customDomain={customDomain}
         storageTier={storageTier}
         onResetLayout={handleResetLayout}
@@ -119,6 +134,19 @@ export function DashboardClientView({
 
       {/* Scoped Workspace Canvas */}
       <main className="devpulse-workspace flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        {billingSuccessBanner && (
+          <div className="p-4 rounded-2xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between gap-2 shadow-lg">
+            <span>
+              Dodo Payments checkout completed! Your DevPulse subscription quotas and custom domain entitlements sync automatically.
+            </span>
+            <button
+              onClick={() => setBillingSuccessBanner(false)}
+              className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {/* Customization Alert Banner */}
         {isCustomizing && (
           <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/40 text-indigo-200 text-xs flex flex-wrap items-center justify-between gap-2 shadow-lg shadow-indigo-950/40">
@@ -187,6 +215,15 @@ export function DashboardClientView({
         initialTelegramToken={data.project.telegramBotToken}
         initialTelegramChatId={data.project.telegramChatId}
         initialGenericWebhook={data.project.genericWebhookUrl}
+        initialPagerDuty={data.project.pagerdutyRoutingKey}
+      />
+
+      {/* Billing, Quotas, Add-Ons & Invoices Modal */}
+      <BillingModal
+        isOpen={isBillingOpen}
+        onClose={() => setIsBillingOpen(false)}
+        storageTier={storageTier}
+        isDemo={isDemo}
       />
 
       {/* Cloudflare R2 & BYOS Storage Settings Modal */}

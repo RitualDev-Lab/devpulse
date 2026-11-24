@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
         telegramBotToken: projects.telegramBotToken,
         telegramChatId: projects.telegramChatId,
         genericWebhookUrl: projects.genericWebhookUrl,
+        pagerdutyRoutingKey: projects.pagerdutyRoutingKey,
       })
       .from(projects)
       .where(eq(projects.telemetryApiKey, String(apiKey)))
@@ -132,7 +133,8 @@ export async function POST(req: NextRequest) {
       project.discordWebhookUrl ||
       project.slackWebhookUrl ||
       (project.telegramBotToken && project.telegramChatId) ||
-      project.genericWebhookUrl
+      project.genericWebhookUrl ||
+      project.pagerdutyRoutingKey
     );
 
     if (hasWebhooks) {
@@ -143,6 +145,7 @@ export async function POST(req: NextRequest) {
           telegramBotToken: project.telegramBotToken,
           telegramChatId: project.telegramChatId,
           genericWebhookUrl: project.genericWebhookUrl,
+          pagerdutyRoutingKey: project.pagerdutyRoutingKey,
         },
         {
           eventId,

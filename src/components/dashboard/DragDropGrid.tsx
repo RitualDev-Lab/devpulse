@@ -59,6 +59,7 @@ export interface DashboardData {
     telegramBotToken?: string | null;
     telegramChatId?: string | null;
     genericWebhookUrl?: string | null;
+    pagerdutyRoutingKey?: string | null;
     stripeApiKey?: string | null;
     dodoPaymentsApiKey?: string | null;
     theme?: string | null;

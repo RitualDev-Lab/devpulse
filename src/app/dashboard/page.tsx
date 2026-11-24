@@ -1,8 +1,9 @@
 import { db } from "@/db";
 import { projects, errorEvents, users, pageviews, dashboardWidgets } from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gte } from "drizzle-orm";
 import { initDb } from "@/db/setup";
 import { getCurrentUser } from "@/lib/auth";
+import { getPlanDefinition } from "@/lib/billing/plans";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
@@ -97,6 +98,12 @@ export default async function DashboardPage(props: DashboardPageProps) {
     }
   }
 
+  // Enforce tier-based analytics & telemetry retention window (Free: 7d, Pro: 90d, Team: 365d)
+  const planDef = getPlanDefinition(user?.storageTier || "free");
+  const retentionCutoffIso = new Date(
+    Date.now() - planDef.historyDays * 24 * 60 * 60 * 1000
+  ).toISOString();
+
   // 6. Fetch live registry metrics & genuine revenue data for the active project
   const [
     githubStats,
@@ -140,7 +147,12 @@ export default async function DashboardPage(props: DashboardPageProps) {
     db
       .select()
       .from(errorEvents)
-      .where(eq(errorEvents.projectId, activeProject.id))
+      .where(
+        and(
+          eq(errorEvents.projectId, activeProject.id),
+          gte(errorEvents.createdAt, retentionCutoffIso)
+        )
+      )
       .orderBy(desc(errorEvents.createdAt))
       .limit(20)
       .catch(() => []),
@@ -179,13 +191,18 @@ export default async function DashboardPage(props: DashboardPageProps) {
     createdAt: err.createdAt,
   }));
 
-  // 7. Fetch genuine pageviews strictly scoped to active project
+  // 7. Fetch genuine pageviews strictly scoped to active project & tier retention window
   let rawPageviews: any[] = [];
   try {
     rawPageviews = await db
       .select()
       .from(pageviews)
-      .where(eq(pageviews.projectId, activeProject.id))
+      .where(
+        and(
+          eq(pageviews.projectId, activeProject.id),
+          gte(pageviews.createdAt, retentionCutoffIso)
+        )
+      )
       .limit(500);
   } catch {
     rawPageviews = [];
@@ -234,6 +251,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
       telegramBotToken: activeProject.telegramBotToken,
       telegramChatId: activeProject.telegramChatId,
       genericWebhookUrl: activeProject.genericWebhookUrl,
+      pagerdutyRoutingKey: activeProject.pagerdutyRoutingKey,
       stripeApiKey: activeProject.stripeApiKey,
       dodoPaymentsApiKey: activeProject.dodoPaymentsApiKey,
       theme: activeProject.theme,

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import crypto from "crypto";
+import { getEffectiveEntitlements } from "@/lib/billing/plans";
 
 export async function GET() {
   try {
@@ -48,6 +49,26 @@ export async function POST(request: Request) {
 
     if (!name || typeof name !== "string") {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
+    }
+
+    const entitlements = getEffectiveEntitlements({ storageTier: user.storageTier });
+    if (entitlements.maxProjects !== null) {
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(projects)
+        .where(eq(projects.userId, user.id));
+
+      if (Number(count) >= entitlements.maxProjects) {
+        return NextResponse.json(
+          {
+            error: `Project limit reached (${entitlements.maxProjects} on ${entitlements.plan.name}). Upgrade to Developer Pro ($14/mo for 5 projects) or Team ($49/mo for unlimited projects).`,
+            code: "PROJECT_LIMIT_REACHED",
+            limit: entitlements.maxProjects,
+            plan: entitlements.plan.id,
+          },
+          { status: 402 }
+        );
+      }
     }
 
     const baseSlug = name

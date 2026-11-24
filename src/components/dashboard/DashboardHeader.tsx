@@ -11,6 +11,7 @@ import {
   Bell,
   Plug,
   Plus,
+  CreditCard,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 import {
@@ -29,6 +30,7 @@ interface DashboardHeaderProps {
   onOpenIntegrations: () => void;
   onOpenStorage?: () => void;
   onOpenDomains?: () => void;
+  onOpenBilling?: () => void;
   customDomain?: string | null;
   storageTier: string;
   onResetLayout: () => void;
@@ -45,6 +47,7 @@ export function DashboardHeader({
   onOpenIntegrations,
   onOpenStorage,
   onOpenDomains,
+  onOpenBilling,
   customDomain,
   storageTier,
   onResetLayout,
@@ -101,6 +104,18 @@ export function DashboardHeader({
                 {customDomain || "Portal / Domain"}
               </span>
               <span className="lg:hidden">Portal</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenBilling}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/30 text-emerald-300 hover:text-white transition shadow-sm"
+              title="Subscription Plans, Quotas, Add-ons & Invoices"
+            >
+              <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="uppercase font-semibold text-[10px]">
+                {storageTier === "free" ? "Upgrade" : storageTier}
+              </span>
             </button>
 
             <button

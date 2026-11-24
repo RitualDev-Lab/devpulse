@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { users, projects, dashboardWidgets, pageviews } from "@/db/schema";
+import { users, projects, dashboardWidgets, pageviews, userCustomDomains } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { PRIMARY_PORTAL_DOMAIN, isPaidDomainTier } from "@/lib/domains/cloudflare-saas";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
@@ -55,6 +55,22 @@ export async function resolvePortalUserByHostKey(rawHostKey: string) {
       .where(sql`lower(${users.customDomain}) = ${key}`)
       .limit(1);
     userRow = byCustomDomain || null;
+
+    if (!userRow) {
+      const [extraDomainRow] = await db
+        .select({ userId: userCustomDomains.userId })
+        .from(userCustomDomains)
+        .where(sql`lower(${userCustomDomains.domain}) = ${key}`)
+        .limit(1);
+      if (extraDomainRow) {
+        const [owner] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, extraDomainRow.userId))
+          .limit(1);
+        userRow = owner || null;
+      }
+    }
   } else {
     const [bySubdomain] = await db
       .select()
