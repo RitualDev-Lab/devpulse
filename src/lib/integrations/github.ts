@@ -46,6 +46,13 @@ export async function fetchGitHubRepoStats(
 
     if (userToken) {
       headers.Authorization = `Bearer ${userToken}`;
+    } else if (process.env.GITHUB_TOKEN) {
+      headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    } else if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+      const basic = Buffer.from(
+        `${process.env.GITHUB_CLIENT_ID}:${process.env.GITHUB_CLIENT_SECRET}`
+      ).toString("base64");
+      headers.Authorization = `Basic ${basic}`;
     }
 
     // 1. Fetch Repo Info
