@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, errorEvents, users, pageviews } from "@/db/schema";
+import { projects, errorEvents, users, pageviews, dashboardWidgets } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { initDb } from "@/db/setup";
 import { getCurrentUser } from "@/lib/auth";
@@ -108,6 +108,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
     mcpStats,
     revenueStats,
     rawErrors,
+    rawWidgets,
   ] = await Promise.all([
     activeProject.githubRepo
       ? fetchGitHubRepoStats(activeProject.githubRepo).catch(() => null)
@@ -143,7 +144,22 @@ export default async function DashboardPage(props: DashboardPageProps) {
       .orderBy(desc(errorEvents.createdAt))
       .limit(20)
       .catch(() => []),
+    db
+      .select()
+      .from(dashboardWidgets)
+      .where(eq(dashboardWidgets.projectId, activeProject.id))
+      .catch(() => []),
   ]);
+
+  const initialLayout = (rawWidgets || []).map((w) => ({
+    id: w.widgetType,
+    title: w.title,
+    x: w.positionX,
+    y: w.positionY,
+    w: w.width,
+    h: w.height,
+    isVisible: w.isVisible,
+  }));
 
   const errors = (rawErrors || []).map((err) => ({
     id: err.id,
@@ -220,6 +236,8 @@ export default async function DashboardPage(props: DashboardPageProps) {
       genericWebhookUrl: activeProject.genericWebhookUrl,
       stripeApiKey: activeProject.stripeApiKey,
       dodoPaymentsApiKey: activeProject.dodoPaymentsApiKey,
+      theme: activeProject.theme,
+      customCss: activeProject.customCss,
     },
     githubStats,
     npmStats,
@@ -231,6 +249,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
     revenueStats,
     analyticsSummary,
     errors,
+    initialLayout,
   };
 
   const projectSummaries: ProjectSummary[] = userProjects.map((p) => ({

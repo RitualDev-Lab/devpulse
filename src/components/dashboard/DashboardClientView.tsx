@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { DashboardHeader } from "./DashboardHeader";
 import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { CustomCssModal } from "./CustomCssModal";
@@ -8,6 +8,11 @@ import { AlertSettingsModal } from "./AlertSettingsModal";
 import { IntegrationsModal } from "./IntegrationsModal";
 import { StorageSettingsModal } from "./StorageSettingsModal";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
+import {
+  normalizeThemeId,
+  getPresetThemeCss,
+  scopeCustomCss,
+} from "@/lib/layout/css-scoper";
 
 interface DashboardClientViewProps {
   initialData: DashboardData;
@@ -24,21 +29,43 @@ export function DashboardClientView({
   storageTier,
   isDemo = false,
 }: DashboardClientViewProps) {
-  const [data, setData] = useState<DashboardData>(initialData);
+  const [data] = useState<DashboardData>(initialData);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isStylingOpen, setIsStylingOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [isStorageOpen, setIsStorageOpen] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState("dark");
-  const [customCss, setCustomCss] = useState("");
+  const [currentTheme, setCurrentTheme] = useState(() =>
+    normalizeThemeId(initialData.project.theme)
+  );
+  const [customCss, setCustomCss] = useState(() => initialData.project.customCss || "");
 
-  const handleResetLayout = () => {
+  // In demo mode, restore persisted theme/CSS from localStorage if customized locally
+  useEffect(() => {
+    if (!isDemo) return;
     try {
-      localStorage.removeItem(`devpulse_layout_${data.project.id}`);
-      window.location.reload();
+      const savedTheme = localStorage.getItem(`devpulse_theme_${data.project.id}`);
+      const savedCss = localStorage.getItem(`devpulse_css_${data.project.id}`);
+      if (savedTheme) setCurrentTheme(normalizeThemeId(savedTheme));
+      if (savedCss !== null) setCustomCss(savedCss);
     } catch {
       // ignore
+    }
+  }, [data.project.id, isDemo]);
+
+  const handleResetLayout = async () => {
+    try {
+      localStorage.removeItem(`devpulse_layout_${data.project.id}`);
+      localStorage.removeItem(`devpulse_colspans_${data.project.id}`);
+      localStorage.removeItem(`devpulse_2d_layout_${data.project.id}`);
+      if (!isDemo) {
+        await fetch(`/api/v1/projects/layout?projectId=${encodeURIComponent(data.project.id)}`, {
+          method: "DELETE",
+        });
+      }
+      window.location.reload();
+    } catch {
+      window.location.reload();
     }
   };
 
@@ -55,12 +82,23 @@ export function DashboardClientView({
     telemetryApiKey: data.project.telemetryApiKey,
   };
 
-  return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-indigo-500/30 selection:text-white">
-      {/* Dynamic Custom CSS injection */}
-      {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+  const activeThemeId = normalizeThemeId(currentTheme);
+  const combinedDynamicCss = [
+    getPresetThemeCss(activeThemeId),
+    scopeCustomCss(customCss, ".devpulse-workspace"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-      {/* Top Navbar */}
+  return (
+    <div
+      data-theme={activeThemeId}
+      className="devpulse-shell min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-indigo-500/30 selection:text-white transition-colors duration-300"
+    >
+      {/* Dynamic Preset Theme + Scoped Custom CSS injection */}
+      {combinedDynamicCss && <style dangerouslySetInnerHTML={{ __html: combinedDynamicCss }} />}
+
+      {/* Top Navbar (protected outside .devpulse-workspace) */}
       <DashboardHeader
         currentProject={currentProjectSummary}
         projects={projects.length > 0 ? projects : [currentProjectSummary]}
@@ -76,15 +114,17 @@ export function DashboardClientView({
         isDemo={isDemo}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      {/* Scoped Workspace Canvas */}
+      <main className="devpulse-workspace flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         {/* Customization Alert Banner */}
         {isCustomizing && (
           <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/40 text-indigo-200 text-xs flex flex-wrap items-center justify-between gap-2 shadow-lg shadow-indigo-950/40">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-              <span className="font-semibold text-white">Customization Mode Active:</span>
-              <span>Drag cards by the handle in the top-right corner to reorder. Click the eye icon to hide.</span>
+              <span className="font-semibold text-white">2D Grid Customization Active:</span>
+              <span>
+                Drag cards anywhere on the 12-column matrix, use corner resize handles or size pills (1x1..4x2), or hide widgets.
+              </span>
             </div>
             <button
               onClick={() => setIsCustomizing(false)}
@@ -95,8 +135,8 @@ export function DashboardClientView({
           </div>
         )}
 
-        {/* Drag & Drop Card Grid */}
-        <DragDropGrid data={data} isCustomizing={isCustomizing} />
+        {/* True 2D Drag & Drop + Resizable Card Matrix */}
+        <DragDropGrid data={data} isCustomizing={isCustomizing} isDemo={isDemo} />
       </main>
 
       {/* Footer */}
@@ -122,14 +162,16 @@ export function DashboardClientView({
         </div>
       </footer>
 
-      {/* Custom Theme & CSS Modal */}
+      {/* Preset Theme Switcher & Live Scoped Custom CSS Modal */}
       <CustomCssModal
         isOpen={isStylingOpen}
         onClose={() => setIsStylingOpen(false)}
-        currentTheme={currentTheme}
+        projectId={data.project.id}
+        currentTheme={activeThemeId}
         onApplyTheme={(theme) => setCurrentTheme(theme)}
         customCss={customCss}
         onSaveCustomCss={(css) => setCustomCss(css)}
+        isDemo={isDemo}
       />
 
       {/* Webhook & Instant Crash Alerts Modal */}
