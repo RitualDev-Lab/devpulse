@@ -22,6 +22,7 @@ import { NpmDownloadsCard } from "./widgets/NpmDownloadsCard";
 import { PyPiDownloadsCard } from "./widgets/PyPiDownloadsCard";
 import { VsCodeStatsCard } from "./widgets/VsCodeStatsCard";
 import { McpStatsCard } from "./widgets/McpStatsCard";
+import { WebAnalyticsCard, type AnalyticsSummary } from "./widgets/WebAnalyticsCard";
 import { ErrorStreamCard, type ErrorEventItem } from "./widgets/ErrorStreamCard";
 import { TelemetrySetupCard } from "./widgets/TelemetrySetupCard";
 import { BugReportBadgeCard } from "./widgets/BugReportBadgeCard";
@@ -53,6 +54,7 @@ export interface DashboardData {
   pypiStats: PyPiStats | null;
   vscodeStats: VsCodeStats | null;
   mcpStats: McpServerStats | null;
+  analyticsSummary?: AnalyticsSummary | null;
   errors: ErrorEventItem[];
 }
 
@@ -69,6 +71,7 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
     ...(data.project.pypiPackage ? [{ id: "pypi_downloads", title: "PyPI Downloads", colSpan: 1 as const }] : []),
     ...(data.project.vscodeExtension ? [{ id: "vscode_stats", title: "VS Code Extension", colSpan: 1 as const }] : []),
     ...(data.project.mcpServerName ? [{ id: "mcp_stats", title: "MCP Server", colSpan: 1 as const }] : []),
+    { id: "web_analytics", title: "Cookie-Free Web Traffic", colSpan: 1 as const },
     { id: "error_stream", title: "Runtime Crashes & Bugs", colSpan: 2 as const },
     { id: "telemetry_setup", title: "Package Crash SDK", colSpan: 1 as const },
     { id: "bug_report_badge", title: "Public Bug Report Hub", colSpan: 1 as const },
@@ -171,6 +174,13 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
           <McpStatsCard
             stats={data.mcpStats}
             serverName={data.project.mcpServerName || "MCP Server"}
+          />
+        );
+      case "web_analytics":
+        return (
+          <WebAnalyticsCard
+            summary={data.analyticsSummary || null}
+            projectSlug={data.project.slug}
           />
         );
       case "error_stream":

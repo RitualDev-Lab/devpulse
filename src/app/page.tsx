@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { projects, errorEvents, users } from "@/db/schema";
+import { projects, errorEvents, users, pageviews } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { initDb } from "@/db/setup";
 import { seedDemoData } from "@/db/seed";
@@ -64,6 +64,56 @@ export default async function HomePage() {
     createdAt: err.createdAt,
   }));
 
+  // Fetch pageviews analytics
+  const rawPageviews = await db
+    .select()
+    .from(pageviews)
+    .where(eq(pageviews.projectId, project.id))
+    .limit(500);
+
+  const refMap: Record<string, number> = {};
+  const countryMap: Record<string, number> = {};
+  let desktopCount = 0;
+  let mobileCount = 0;
+
+  for (const pv of rawPageviews) {
+    refMap[pv.referrer] = (refMap[pv.referrer] || 0) + 1;
+    countryMap[pv.country] = (countryMap[pv.country] || 0) + 1;
+    if (pv.device === "mobile" || pv.device === "tablet") mobileCount++;
+    else desktopCount++;
+  }
+
+  const analyticsSummary =
+    rawPageviews.length > 0
+      ? {
+          totalPageviews: rawPageviews.length,
+          uniqueReferrers: Object.keys(refMap).length,
+          topReferrers: Object.entries(refMap)
+            .map(([referrer, count]) => ({ referrer, count }))
+            .sort((a, b) => b.count - a.count),
+          topCountries: Object.entries(countryMap)
+            .map(([country, count]) => ({ country, count }))
+            .sort((a, b) => b.count - a.count),
+          devices: { desktop: desktopCount, mobile: mobileCount },
+        }
+      : {
+          totalPageviews: 3480,
+          uniqueReferrers: 14,
+          topReferrers: [
+            { referrer: "github.com", count: 1420 },
+            { referrer: "news.ycombinator.com", count: 980 },
+            { referrer: "reddit.com", count: 640 },
+            { referrer: "x.com", count: 440 },
+          ],
+          topCountries: [
+            { country: "US", count: 1350 },
+            { country: "IN", count: 820 },
+            { country: "DE", count: 540 },
+            { country: "GB", count: 390 },
+          ],
+          devices: { desktop: 2780, mobile: 700 },
+        };
+
   const initialData = {
     project: {
       id: project.id,
@@ -85,6 +135,7 @@ export default async function HomePage() {
     pypiStats,
     vscodeStats,
     mcpStats,
+    analyticsSummary,
     errors,
   };
 

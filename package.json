@@ -1,7 +1,10 @@
 {
-  "name": "project",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@ritualdev/pulse",
+  "version": "1.0.0",
+  "description": "DevPulse - Unified Developer Headquarters & Telemetry Engine",
+  "bin": {
+    "devpulse": "./cli/bin/devpulse.js"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

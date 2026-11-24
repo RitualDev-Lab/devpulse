@@ -124,3 +124,19 @@ export const userStorageConfigs = sqliteTable("user_storage_configs", {
   storageLimitBytes: integer("storage_limit_bytes").default(104857600).notNull(), // Default 100MB for Free
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
+
+/**
+ * Cookie-Free Web Analytics (Google Analytics Alternative)
+ * 100% GDPR compliant, zero cookies, lightweight beacon tracking
+ */
+export const pageviews = sqliteTable("pageviews", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  path: text("path").default("/").notNull(),
+  referrer: text("referrer").default("direct").notNull(),
+  country: text("country").default("Global").notNull(),
+  device: text("device").default("desktop").notNull(),
+  browser: text("browser").default("other").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+

@@ -120,5 +120,18 @@ export async function initDb() {
     );
   `);
 
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS pageviews (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      path TEXT DEFAULT '/' NOT NULL,
+      referrer TEXT DEFAULT 'direct' NOT NULL,
+      country TEXT DEFAULT 'Global' NOT NULL,
+      device TEXT DEFAULT 'desktop' NOT NULL,
+      browser TEXT DEFAULT 'other' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
   console.log("DevPulse Database tables verified successfully.");
 }
