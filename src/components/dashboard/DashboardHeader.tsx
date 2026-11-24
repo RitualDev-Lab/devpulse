@@ -8,6 +8,7 @@ import {
   Globe,
   HardDrive,
   RefreshCw,
+  Bell,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 
@@ -17,6 +18,7 @@ interface DashboardHeaderProps {
   isCustomizing: boolean;
   onToggleCustomizing: () => void;
   onOpenStyling: () => void;
+  onOpenAlerts: () => void;
   customDomain?: string | null;
   storageTier: string;
   onResetLayout: () => void;
@@ -28,6 +30,7 @@ export function DashboardHeader({
   isCustomizing,
   onToggleCustomizing,
   onOpenStyling,
+  onOpenAlerts,
   customDomain,
   storageTier,
   onResetLayout,
@@ -79,6 +82,15 @@ export function DashboardHeader({
           </div>
 
           {/* Action Buttons */}
+          <button
+            onClick={onOpenAlerts}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"
+            title="Configure Discord / Slack / Telegram webhooks"
+          >
+            <Bell className="w-3.5 h-3.5 text-red-400" />
+            <span>Alerts</span>
+          </button>
+
           <button
             onClick={onOpenStyling}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"

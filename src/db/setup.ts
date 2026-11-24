@@ -33,10 +33,30 @@ export async function initDb() {
       is_public INTEGER DEFAULT 1 NOT NULL,
       custom_css TEXT,
       theme TEXT DEFAULT 'dark' NOT NULL,
+      discord_webhook_url TEXT,
+      slack_webhook_url TEXT,
+      telegram_bot_token TEXT,
+      telegram_chat_id TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
+
+  // Migrate existing tables to add new webhook columns if missing
+  const optionalColumns = [
+    "ALTER TABLE projects ADD COLUMN discord_webhook_url TEXT;",
+    "ALTER TABLE projects ADD COLUMN slack_webhook_url TEXT;",
+    "ALTER TABLE projects ADD COLUMN telegram_bot_token TEXT;",
+    "ALTER TABLE projects ADD COLUMN telegram_chat_id TEXT;",
+  ];
+
+  for (const query of optionalColumns) {
+    try {
+      await client.execute(query);
+    } catch {
+      // Column already exists, safe to ignore
+    }
+  }
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS dashboard_widgets (

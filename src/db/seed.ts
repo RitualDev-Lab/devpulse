@@ -31,6 +31,7 @@ export async function seedDemoData() {
     npmPackage: "ritual-core",
     pypiPackage: "ritual-core",
     vscodeExtension: "ritualdev.ritual-vscode",
+    mcpServerName: "ritualdev/ritual-mcp",
     telemetryApiKey: "dp_live_8f93e1b74a9c82",
     isPublic: true,
     theme: "dark",

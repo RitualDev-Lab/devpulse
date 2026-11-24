@@ -20,6 +20,8 @@ import { SortableCard } from "./SortableCard";
 import { GitHubStatsCard } from "./widgets/GitHubStatsCard";
 import { NpmDownloadsCard } from "./widgets/NpmDownloadsCard";
 import { PyPiDownloadsCard } from "./widgets/PyPiDownloadsCard";
+import { VsCodeStatsCard } from "./widgets/VsCodeStatsCard";
+import { McpStatsCard } from "./widgets/McpStatsCard";
 import { ErrorStreamCard, type ErrorEventItem } from "./widgets/ErrorStreamCard";
 import { TelemetrySetupCard } from "./widgets/TelemetrySetupCard";
 import { BugReportBadgeCard } from "./widgets/BugReportBadgeCard";
@@ -27,6 +29,8 @@ import { Plus, Eye } from "lucide-react";
 import type { GitHubRepoStats } from "@/lib/integrations/github";
 import type { NpmStats } from "@/lib/integrations/npm";
 import type { PyPiStats } from "@/lib/integrations/pypi";
+import type { VsCodeStats } from "@/lib/integrations/vscode";
+import type { McpServerStats } from "@/lib/integrations/mcp";
 
 export interface DashboardData {
   project: {
@@ -36,11 +40,19 @@ export interface DashboardData {
     githubRepo?: string | null;
     npmPackage?: string | null;
     pypiPackage?: string | null;
+    vscodeExtension?: string | null;
+    mcpServerName?: string | null;
     telemetryApiKey: string;
+    discordWebhookUrl?: string | null;
+    slackWebhookUrl?: string | null;
+    telegramBotToken?: string | null;
+    telegramChatId?: string | null;
   };
   githubStats: GitHubRepoStats | null;
   npmStats: NpmStats | null;
   pypiStats: PyPiStats | null;
+  vscodeStats: VsCodeStats | null;
+  mcpStats: McpServerStats | null;
   errors: ErrorEventItem[];
 }
 
@@ -55,6 +67,8 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
     ...(data.project.githubRepo ? [{ id: "github_stats", title: "GitHub Stats", colSpan: 1 as const }] : []),
     ...(data.project.npmPackage ? [{ id: "npm_downloads", title: "npm Downloads", colSpan: 1 as const }] : []),
     ...(data.project.pypiPackage ? [{ id: "pypi_downloads", title: "PyPI Downloads", colSpan: 1 as const }] : []),
+    ...(data.project.vscodeExtension ? [{ id: "vscode_stats", title: "VS Code Extension", colSpan: 1 as const }] : []),
+    ...(data.project.mcpServerName ? [{ id: "mcp_stats", title: "MCP Server", colSpan: 1 as const }] : []),
     { id: "error_stream", title: "Runtime Crashes & Bugs", colSpan: 2 as const },
     { id: "telemetry_setup", title: "Package Crash SDK", colSpan: 1 as const },
     { id: "bug_report_badge", title: "Public Bug Report Hub", colSpan: 1 as const },
@@ -143,6 +157,20 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
           <PyPiDownloadsCard
             stats={data.pypiStats}
             packageName={data.project.pypiPackage || "PyPI package"}
+          />
+        );
+      case "vscode_stats":
+        return (
+          <VsCodeStatsCard
+            stats={data.vscodeStats}
+            extensionId={data.project.vscodeExtension || "Extension"}
+          />
+        );
+      case "mcp_stats":
+        return (
+          <McpStatsCard
+            stats={data.mcpStats}
+            serverName={data.project.mcpServerName || "MCP Server"}
           />
         );
       case "error_stream":

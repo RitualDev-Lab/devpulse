@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects, errorEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
 
 // Enable CORS for telemetry beacons from any client
 export async function OPTIONS() {
@@ -33,7 +34,15 @@ export async function POST(req: NextRequest) {
 
     // Verify project exists
     const [project] = await db
-      .select({ id: projects.id, name: projects.name })
+      .select({
+        id: projects.id,
+        name: projects.name,
+        slug: projects.slug,
+        discordWebhookUrl: projects.discordWebhookUrl,
+        slackWebhookUrl: projects.slackWebhookUrl,
+        telegramBotToken: projects.telegramBotToken,
+        telegramChatId: projects.telegramChatId,
+      })
       .from(projects)
       .where(eq(projects.telemetryApiKey, apiKey))
       .limit(1);
@@ -65,6 +74,28 @@ export async function POST(req: NextRequest) {
       status: "unresolved",
       reporterEmail,
     });
+
+    // Fire instant crash alerts to Discord / Slack / Telegram (isolated async)
+    dispatchCrashAlerts(
+      {
+        discordWebhookUrl: project.discordWebhookUrl,
+        slackWebhookUrl: project.slackWebhookUrl,
+        telegramBotToken: project.telegramBotToken,
+        telegramChatId: project.telegramChatId,
+      },
+      {
+        projectName: project.name,
+        projectSlug: project.slug,
+        errorName,
+        message,
+        runtime,
+        version,
+        os,
+        environment,
+        reporterEmail,
+        dashboardUrl: `https://devpulse.rolenest.in`,
+      }
+    ).catch((err) => console.error("Webhook alert error:", err));
 
     return NextResponse.json(
       {

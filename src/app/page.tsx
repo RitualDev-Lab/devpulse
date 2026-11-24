@@ -6,6 +6,8 @@ import { seedDemoData } from "@/db/seed";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
+import { fetchVsCodeStats } from "@/lib/integrations/vscode";
+import { fetchMcpStats } from "@/lib/integrations/mcp";
 import { DashboardClientView } from "@/components/dashboard/DashboardClientView";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +36,12 @@ export default async function HomePage() {
     .limit(1);
 
   // Fetch live registry metrics in parallel
-  const [githubStats, npmStats, pypiStats, rawErrors] = await Promise.all([
+  const [githubStats, npmStats, pypiStats, vscodeStats, mcpStats, rawErrors] = await Promise.all([
     project.githubRepo ? fetchGitHubRepoStats(project.githubRepo) : Promise.resolve(null),
     project.npmPackage ? fetchNpmStats(project.npmPackage) : Promise.resolve(null),
     project.pypiPackage ? fetchPyPiStats(project.pypiPackage) : Promise.resolve(null),
+    project.vscodeExtension ? fetchVsCodeStats(project.vscodeExtension) : Promise.resolve(null),
+    project.mcpServerName ? fetchMcpStats(project.mcpServerName) : Promise.resolve(null),
     db
       .select()
       .from(errorEvents)
@@ -68,11 +72,19 @@ export default async function HomePage() {
       githubRepo: project.githubRepo,
       npmPackage: project.npmPackage,
       pypiPackage: project.pypiPackage,
+      vscodeExtension: project.vscodeExtension,
+      mcpServerName: project.mcpServerName,
       telemetryApiKey: project.telemetryApiKey,
+      discordWebhookUrl: project.discordWebhookUrl,
+      slackWebhookUrl: project.slackWebhookUrl,
+      telegramBotToken: project.telegramBotToken,
+      telegramChatId: project.telegramChatId,
     },
     githubStats,
     npmStats,
     pypiStats,
+    vscodeStats,
+    mcpStats,
     errors,
   };
 

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { DashboardHeader } from "./DashboardHeader";
 import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { CustomCssModal } from "./CustomCssModal";
+import { AlertSettingsModal } from "./AlertSettingsModal";
 
 interface DashboardClientViewProps {
   initialData: DashboardData;
@@ -19,6 +20,7 @@ export function DashboardClientView({
   const [data, setData] = useState<DashboardData>(initialData);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isStylingOpen, setIsStylingOpen] = useState(false);
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [currentTheme, setCurrentTheme] = useState("dark");
   const [customCss, setCustomCss] = useState("");
 
@@ -43,6 +45,7 @@ export function DashboardClientView({
         isCustomizing={isCustomizing}
         onToggleCustomizing={() => setIsCustomizing((prev) => !prev)}
         onOpenStyling={() => setIsStylingOpen(true)}
+        onOpenAlerts={() => setIsAlertsOpen(true)}
         customDomain={customDomain}
         storageTier={storageTier}
         onResetLayout={handleResetLayout}
@@ -102,6 +105,17 @@ export function DashboardClientView({
         onApplyTheme={(theme) => setCurrentTheme(theme)}
         customCss={customCss}
         onSaveCustomCss={(css) => setCustomCss(css)}
+      />
+
+      {/* Webhook & Instant Crash Alerts Modal */}
+      <AlertSettingsModal
+        isOpen={isAlertsOpen}
+        onClose={() => setIsAlertsOpen(false)}
+        projectId={data.project.id}
+        initialDiscord={data.project.discordWebhookUrl}
+        initialSlack={data.project.slackWebhookUrl}
+        initialTelegramToken={data.project.telegramBotToken}
+        initialTelegramChatId={data.project.telegramChatId}
       />
     </div>
   );

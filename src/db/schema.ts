@@ -42,6 +42,12 @@ export const projects = sqliteTable("projects", {
   isPublic: integer("is_public", { mode: "boolean" }).default(true).notNull(),
   customCss: text("custom_css"), // User custom CSS injection for public view
   theme: text("theme").default("dark").notNull(),
+
+  // Instant Crash Alerts & Webhooks
+  discordWebhookUrl: text("discord_webhook_url"),
+  slackWebhookUrl: text("slack_webhook_url"),
+  telegramBotToken: text("telegram_bot_token"),
+  telegramChatId: text("telegram_chat_id"),
   
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
