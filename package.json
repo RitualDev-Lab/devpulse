@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:cf": "opennextjs-cloudflare build && node -e \"const fs=require('fs'); fs.copyFileSync('.open-next/worker.js', '.open-next/assets/_worker.js');\"",
     "start": "next start",
     "lint": "eslint"
   },
@@ -39,6 +40,7 @@
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.167.0"
   }
 }

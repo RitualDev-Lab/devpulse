@@ -37,8 +37,11 @@ yarn-error.log*
 # local sqlite
 local.db*
 
-# vercel
+# vercel & opennext
 .vercel
+.open-next/
+.worker-next/
+.wrangler/
 
 # typescript
 *.tsbuildinfo
