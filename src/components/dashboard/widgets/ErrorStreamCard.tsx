@@ -1,7 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
-import { AlertOctagon, CheckCircle2, ChevronRight, X, Terminal, Clock, ShieldAlert } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  AlertOctagon,
+  CheckCircle2,
+  ChevronRight,
+  X,
+  Terminal,
+  Clock,
+  ShieldAlert,
+  HardDrive,
+  Paperclip,
+  Download,
+  Loader2,
+} from "lucide-react";
 import { formatDate, formatTime } from "@/lib/utils/format";
 
 export interface ErrorEventItem {
@@ -14,6 +26,10 @@ export interface ErrorEventItem {
   os?: string | null;
   environment?: string | null;
   status: "unresolved" | "resolved" | "ignored";
+  attachmentUrl?: string | null;
+  r2ObjectKey?: string | null;
+  payloadSizeBytes?: number;
+  storageProvider?: string | null;
   reporterEmail?: string | null;
   createdAt: string;
 }
@@ -24,21 +40,95 @@ interface ErrorStreamCardProps {
   telemetryApiKey?: string;
 }
 
+function formatBytesShort(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
 export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: ErrorStreamCardProps) {
   const [errors, setErrors] = useState<ErrorEventItem[]>(initialErrors);
   const [selectedError, setSelectedError] = useState<ErrorEventItem | null>(null);
   const [copiedBeacon, setCopiedBeacon] = useState(false);
 
+  const [fullPayload, setFullPayload] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [attachmentSignedUrl, setAttachmentSignedUrl] = useState<string | null>(null);
+  const [loadingR2, setLoadingR2] = useState(false);
+
+  useEffect(() => {
+    setErrors(initialErrors);
+  }, [initialErrors]);
+
+  useEffect(() => {
+    if (!selectedError) {
+      setFullPayload(null);
+      setDownloadUrl(null);
+      setAttachmentSignedUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadR2Assets(errItem: ErrorEventItem) {
+      if (!errItem.r2ObjectKey && !errItem.attachmentUrl) return;
+      setLoadingR2(true);
+
+      try {
+        if (errItem.r2ObjectKey) {
+          const res = await fetch(
+            `/api/v1/storage/attachment?eventId=${encodeURIComponent(errItem.id)}&kind=payload`
+          );
+          if (res.ok && !cancelled) {
+            const data = await res.json();
+            setFullPayload(data.content || errItem.stackTrace || null);
+            setDownloadUrl(data.downloadUrl || null);
+          }
+        }
+
+        if (errItem.attachmentUrl) {
+          const res = await fetch(
+            `/api/v1/storage/attachment?eventId=${encodeURIComponent(errItem.id)}&kind=attachment`
+          );
+          if (res.ok && !cancelled) {
+            const data = await res.json();
+            setAttachmentSignedUrl(data.url || null);
+          }
+        }
+      } catch {
+        // fallback cleanly to inline preview
+      } finally {
+        if (!cancelled) setLoadingR2(false);
+      }
+    }
+
+    loadR2Assets(selectedError);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedError]);
+
   const unresolvedCount = errors.filter((e) => e.status === "unresolved").length;
 
-  const markResolved = (id: string, e: React.MouseEvent) => {
+  const markResolved = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setErrors((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: "resolved" } : item))
     );
+
+    try {
+      await fetch("/api/v1/event", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: id, projectId, status: "resolved" }),
+      });
+    } catch {
+      // Optimistic update remains for demo preview
+    }
   };
 
-  const testBeaconCommand = `curl -X POST https://devpulse.ritualdev.in/api/v1/event -H "Content-Type: application/json" -d '{"api_key":"${telemetryApiKey || "YOUR_KEY"}","error_name":"FirstTestError","message":"Verifying DevPulse crash telemetry ingest"}'`;
+  const testBeaconCommand = `curl -X POST https://devpulse.ritualdev.in/api/v1/event -H "Content-Type: application/json" -d '{"api_key":"${telemetryApiKey || "YOUR_KEY"}","error_name":"FirstTestError","runtime":"node","message":"Verifying DevPulse crash telemetry ingest"}'`;
 
   const copyTestBeacon = () => {
     if (navigator.clipboard) {
@@ -60,7 +150,9 @@ export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: E
               <h3 className="font-semibold text-white text-base leading-tight">
                 Crash Telemetry & Bug Reports
               </h3>
-              <p className="text-xs text-zinc-400">Live package runtime diagnostics</p>
+              <p className="text-xs text-zinc-400">
+                Turso index + Cloudflare R2 heavy trace offload
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -108,7 +200,7 @@ export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: E
                 }`}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
                     <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-amber-400 font-semibold truncate max-w-[200px]">
                       {err.errorName.split(":")[0]}
                     </span>
@@ -117,6 +209,23 @@ export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: E
                     </span>
                     {err.version && (
                       <span className="text-[10px] text-zinc-400 font-mono">{err.version}</span>
+                    )}
+                    {err.r2ObjectKey && (
+                      <span
+                        className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono"
+                        title="Full crash log stored in Cloudflare R2"
+                      >
+                        <HardDrive className="w-2.5 h-2.5" />
+                        <span>{formatBytesShort(err.payloadSizeBytes) || "R2"}</span>
+                      </span>
+                    )}
+                    {err.attachmentUrl && (
+                      <span
+                        className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20"
+                        title="Crash attachment included"
+                      >
+                        <Paperclip className="w-2.5 h-2.5" />
+                      </span>
                     )}
                   </div>
                   <p className="text-xs text-zinc-200 font-medium truncate">{err.message}</p>
@@ -152,10 +261,10 @@ export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: E
         <span className="text-zinc-400 font-mono text-[10px]">Endpoint: /api/v1/event</span>
       </div>
 
-      {/* Stack Trace Modal */}
+      {/* Stack Trace & R2 Payload Modal */}
       {selectedError && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[85vh] flex flex-col">
+          <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[88vh] flex flex-col">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-red-950 border border-red-800 flex items-center justify-center text-red-400">
@@ -191,20 +300,75 @@ export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: E
               </div>
             </div>
 
-            <div className="mb-2">
+            <div className="mb-3">
               <span className="text-xs text-zinc-400 font-medium">Error Message:</span>
               <p className="text-sm text-red-300 font-mono bg-red-950/30 p-2.5 rounded-lg border border-red-900/40 mt-1">
                 {selectedError.message}
               </p>
             </div>
 
-            <div className="flex-1 overflow-y-auto mt-2">
-              <span className="text-xs text-zinc-400 font-medium flex items-center gap-1.5 mb-1">
-                <Terminal className="w-3.5 h-3.5 text-zinc-400" /> Stack Trace
-              </span>
-              <pre className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 font-mono text-[11px] overflow-x-auto whitespace-pre leading-relaxed select-text">
-                {selectedError.stackTrace || "No stack trace provided by reporter."}
-              </pre>
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-zinc-400 font-medium flex items-center gap-1.5">
+                    <Terminal className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Stack Trace & Diagnostics</span>
+                    {selectedError.r2ObjectKey && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 font-mono">
+                        {formatBytesShort(selectedError.payloadSizeBytes)} via {selectedError.storageProvider || "R2"}
+                      </span>
+                    )}
+                  </span>
+                  {downloadUrl && (
+                    <a
+                      href={downloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-[11px] text-purple-300 hover:text-purple-200 transition"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Download Raw Log</span>
+                    </a>
+                  )}
+                </div>
+
+                {loadingR2 ? (
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center gap-2 text-xs text-zinc-400">
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                    <span>Fetching full payload from Cloudflare R2 object storage...</span>
+                  </div>
+                ) : (
+                  <pre className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 font-mono text-[11px] overflow-x-auto max-h-60 whitespace-pre-wrap break-words leading-relaxed select-text">
+                    {fullPayload ?? selectedError.stackTrace ?? "No stack trace provided by reporter."}
+                  </pre>
+                )}
+              </div>
+
+              {attachmentSignedUrl && (
+                <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-300 font-medium flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Attached Diagnostics / Screenshot</span>
+                    </span>
+                    <a
+                      href={attachmentSignedUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-cyan-400 hover:text-cyan-300 underline text-[11px]"
+                    >
+                      Open Presigned URL
+                    </a>
+                  </div>
+                  {/\.(png|jpe?g|gif|webp)(\?|$)/i.test(selectedError.attachmentUrl || "") && (
+                    <img
+                      src={attachmentSignedUrl}
+                      alt="Crash report attachment"
+                      className="max-h-48 rounded-lg border border-zinc-800 object-contain"
+                    />
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-end gap-2">

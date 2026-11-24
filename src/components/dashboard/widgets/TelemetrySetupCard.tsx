@@ -2,20 +2,25 @@
 
 import React, { useState } from "react";
 import { Copy, Check, Code2, Terminal, Key } from "lucide-react";
-import { getPythonSnippet, getNodeSnippet } from "@/lib/sdk-generator";
+import { getPythonSnippet, getNodeSnippet, getRustSnippet, getCliSnippet } from "@/lib/sdk-generator";
 
 interface TelemetrySetupCardProps {
   apiKey: string;
 }
 
 export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
-  const [tab, setTab] = useState<"python" | "node">("python");
+  const [tab, setTab] = useState<"python" | "node" | "rust" | "cli">("python");
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  const pythonCode = getPythonSnippet(apiKey);
-  const nodeCode = getNodeSnippet(apiKey);
-  const currentSnippet = tab === "python" ? pythonCode : nodeCode;
+  const snippets: Record<"python" | "node" | "rust" | "cli", { file: string; code: string }> = {
+    python: { file: "tracker.py", code: getPythonSnippet(apiKey) },
+    node: { file: "tracker.js", code: getNodeSnippet(apiKey) },
+    rust: { file: "panic_hook.rs", code: getRustSnippet(apiKey) },
+    cli: { file: "beacon.sh", code: getCliSnippet(apiKey) },
+  };
+
+  const current = snippets[tab];
 
   const copyKey = () => {
     navigator.clipboard.writeText(apiKey);
@@ -24,7 +29,7 @@ export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
   };
 
   const copySnippet = () => {
-    navigator.clipboard.writeText(currentSnippet);
+    navigator.clipboard.writeText(current.code);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
@@ -32,7 +37,7 @@ export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
   return (
     <div className="flex flex-col h-full justify-between p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg shadow-black/40 hover:border-zinc-700 transition">
       <div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-800/60 flex items-center justify-center text-emerald-400">
               <Code2 className="w-4 h-4" />
@@ -41,30 +46,28 @@ export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
               <h3 className="font-semibold text-white text-base leading-tight">
                 Package Crash SDK
               </h3>
-              <p className="text-xs text-zinc-400">Zero dependencies &bull; Opt-in error reporter</p>
+              <p className="text-xs text-zinc-400">Zero dependencies &bull; Auto R2 trace offload</p>
             </div>
           </div>
-          <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs">
-            <button
-              onClick={() => setTab("python")}
-              className={`px-2.5 py-1 rounded-lg transition font-medium ${
-                tab === "python"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              Python
-            </button>
-            <button
-              onClick={() => setTab("node")}
-              className={`px-2.5 py-1 rounded-lg transition font-medium ${
-                tab === "node"
-                  ? "bg-red-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              Node.js
-            </button>
+          <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-[11px]">
+            {(
+              [
+                { id: "python", label: "Python", active: "bg-blue-600 text-white" },
+                { id: "node", label: "Node", active: "bg-red-600 text-white" },
+                { id: "rust", label: "Rust", active: "bg-orange-600 text-white" },
+                { id: "cli", label: "CLI", active: "bg-zinc-700 text-white" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`px-2 py-1 rounded-lg transition font-medium ${
+                  tab === t.id ? `${t.active} shadow-sm` : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -88,7 +91,7 @@ export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
           <div className="flex items-center justify-between mb-1.5 text-[11px] text-zinc-400">
             <span className="flex items-center gap-1 font-mono text-zinc-300">
               <Terminal className="w-3.5 h-3.5 text-zinc-500" />
-              {tab === "python" ? "tracker.py" : "tracker.js"}
+              {current.file}
             </span>
             <button
               onClick={copySnippet}
@@ -99,13 +102,13 @@ export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
             </button>
           </div>
           <pre className="text-[11px] font-mono text-zinc-300 overflow-x-auto max-h-36 leading-relaxed select-text">
-            {currentSnippet}
+            {current.code}
           </pre>
         </div>
       </div>
 
       <div className="mt-3 pt-2 text-[11px] text-zinc-500 border-t border-zinc-800/40">
-        Captures unhandled exceptions, operating system, and package versions automatically.
+        Captures unhandled exceptions, OS, and offloads 100 KB+ logs to Cloudflare R2 automatically.
       </div>
     </div>
   );

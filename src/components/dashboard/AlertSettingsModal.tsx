@@ -11,6 +11,7 @@ interface AlertSettingsModalProps {
   initialSlack?: string | null;
   initialTelegramToken?: string | null;
   initialTelegramChatId?: string | null;
+  initialGenericWebhook?: string | null;
 }
 
 export function AlertSettingsModal({
@@ -21,11 +22,13 @@ export function AlertSettingsModal({
   initialSlack,
   initialTelegramToken,
   initialTelegramChatId,
+  initialGenericWebhook,
 }: AlertSettingsModalProps) {
   const [discordUrl, setDiscordUrl] = useState(initialDiscord || "");
   const [slackUrl, setSlackUrl] = useState(initialSlack || "");
   const [telegramToken, setTelegramToken] = useState(initialTelegramToken || "");
   const [telegramChatId, setTelegramChatId] = useState(initialTelegramChatId || "");
+  const [genericWebhookUrl, setGenericWebhookUrl] = useState(initialGenericWebhook || "");
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [testingPing, setTestingPing] = useState(false);
@@ -48,6 +51,7 @@ export function AlertSettingsModal({
           slackWebhookUrl: slackUrl,
           telegramBotToken: telegramToken,
           telegramChatId,
+          genericWebhookUrl,
           testPing: test,
         }),
       });
@@ -160,12 +164,29 @@ export function AlertSettingsModal({
               />
             </div>
           </div>
+
+          {/* Generic Webhook */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+              Generic JSON Webhook URL
+            </label>
+            <input
+              type="url"
+              value={genericWebhookUrl}
+              onChange={(e) => setGenericWebhookUrl(e.target.value)}
+              placeholder="https://api.yourapp.com/webhooks/devpulse"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-red-500 font-mono transition"
+            />
+            <span className="text-[10px] text-zinc-500 mt-0.5 block">
+              Receives HTTP POST with header <code className="text-zinc-400">X-DevPulse-Event: crash.created</code>
+            </span>
+          </div>
         </div>
 
         <div className="mt-5 pt-3 border-t border-zinc-800 flex items-center justify-between gap-2">
           <button
             onClick={() => handleSave(true)}
-            disabled={testingPing || (!discordUrl && !slackUrl && !telegramToken)}
+            disabled={testingPing || (!discordUrl && !slackUrl && !telegramToken && !genericWebhookUrl)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition disabled:opacity-40"
           >
             <Send className="w-3.5 h-3.5" />

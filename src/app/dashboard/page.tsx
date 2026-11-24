@@ -155,6 +155,10 @@ export default async function DashboardPage(props: DashboardPageProps) {
     os: err.os,
     environment: err.environment,
     status: err.status,
+    attachmentUrl: err.attachmentUrl,
+    r2ObjectKey: err.r2ObjectKey,
+    payloadSizeBytes: err.payloadSizeBytes,
+    storageProvider: err.storageProvider,
     reporterEmail: err.reporterEmail,
     createdAt: err.createdAt,
   }));
@@ -213,6 +217,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
       slackWebhookUrl: activeProject.slackWebhookUrl,
       telegramBotToken: activeProject.telegramBotToken,
       telegramChatId: activeProject.telegramChatId,
+      genericWebhookUrl: activeProject.genericWebhookUrl,
       stripeApiKey: activeProject.stripeApiKey,
       dodoPaymentsApiKey: activeProject.dodoPaymentsApiKey,
     },

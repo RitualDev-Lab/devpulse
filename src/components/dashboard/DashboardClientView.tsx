@@ -6,6 +6,7 @@ import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
 import { IntegrationsModal } from "./IntegrationsModal";
+import { StorageSettingsModal } from "./StorageSettingsModal";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
 
 interface DashboardClientViewProps {
@@ -28,6 +29,7 @@ export function DashboardClientView({
   const [isStylingOpen, setIsStylingOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
+  const [isStorageOpen, setIsStorageOpen] = useState(false);
   const [currentTheme, setCurrentTheme] = useState("dark");
   const [customCss, setCustomCss] = useState("");
 
@@ -67,6 +69,7 @@ export function DashboardClientView({
         onOpenStyling={() => setIsStylingOpen(true)}
         onOpenAlerts={() => setIsAlertsOpen(true)}
         onOpenIntegrations={() => setIsIntegrationsOpen(true)}
+        onOpenStorage={() => setIsStorageOpen(true)}
         customDomain={customDomain}
         storageTier={storageTier}
         onResetLayout={handleResetLayout}
@@ -138,6 +141,15 @@ export function DashboardClientView({
         initialSlack={data.project.slackWebhookUrl}
         initialTelegramToken={data.project.telegramBotToken}
         initialTelegramChatId={data.project.telegramChatId}
+        initialGenericWebhook={data.project.genericWebhookUrl}
+      />
+
+      {/* Cloudflare R2 & BYOS Storage Settings Modal */}
+      <StorageSettingsModal
+        isOpen={isStorageOpen}
+        onClose={() => setIsStorageOpen(false)}
+        initialTier={storageTier}
+        isDemo={isDemo}
       />
 
       {/* Package Ecosystems & Connect Data Modal */}

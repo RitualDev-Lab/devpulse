@@ -4,6 +4,7 @@
  */
 
 export interface AlertPayload {
+  eventId?: string;
   projectName: string;
   projectSlug: string;
   errorName: string;
@@ -13,6 +14,8 @@ export interface AlertPayload {
   os?: string | null;
   environment?: string | null;
   reporterEmail?: string | null;
+  r2ObjectKey?: string | null;
+  payloadSizeBytes?: number;
   dashboardUrl?: string;
 }
 
@@ -21,6 +24,7 @@ export interface WebhookConfig {
   slackWebhookUrl?: string | null;
   telegramBotToken?: string | null;
   telegramChatId?: string | null;
+  genericWebhookUrl?: string | null;
 }
 
 /**
@@ -43,6 +47,9 @@ export async function dispatchCrashAlerts(
     promises.push(
       sendTelegramAlert(config.telegramBotToken, config.telegramChatId, payload)
     );
+  }
+  if (config.genericWebhookUrl) {
+    promises.push(sendGenericWebhookAlert(config.genericWebhookUrl, payload));
   }
 
   return Promise.allSettled(promises);
@@ -173,10 +180,59 @@ export async function sendTelegramAlert(
         parse_mode: "Markdown",
         disable_web_page_preview: false,
       }),
+      signal: AbortSignal.timeout(3000),
     });
     return res.ok;
   } catch (err) {
     console.error("Failed to send Telegram alert:", err);
+    return false;
+  }
+}
+
+/**
+ * Send standardized JSON payload to a Generic Webhook endpoint
+ */
+export async function sendGenericWebhookAlert(webhookUrl: string, data: AlertPayload) {
+  const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
+
+  const body = {
+    event: "crash.created",
+    timestamp: new Date().toISOString(),
+    eventId: data.eventId || null,
+    project: {
+      name: data.projectName,
+      slug: data.projectSlug,
+    },
+    error: {
+      name: data.errorName,
+      message: data.message,
+      runtime: data.runtime,
+      version: data.version || null,
+      os: data.os || null,
+      environment: data.environment || "production",
+      reporterEmail: data.reporterEmail || null,
+    },
+    storage: {
+      r2ObjectKey: data.r2ObjectKey || null,
+      payloadSizeBytes: data.payloadSizeBytes || 0,
+    },
+    dashboardUrl: url,
+  };
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "DevPulse-Alerts/1.0",
+        "X-DevPulse-Event": "crash.created",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(3000),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to send Generic Webhook alert:", err);
     return false;
   }
 }

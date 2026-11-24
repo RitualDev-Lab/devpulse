@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       projectId,
@@ -13,6 +19,7 @@ export async function POST(req: NextRequest) {
       slackWebhookUrl,
       telegramBotToken,
       telegramChatId,
+      genericWebhookUrl,
       testPing,
     } = body;
 
@@ -20,7 +27,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    // Update webhook settings in database
+    // Update webhook settings strictly scoped to authenticated user's project
     await db
       .update(projects)
       .set({
@@ -28,8 +35,9 @@ export async function POST(req: NextRequest) {
         slackWebhookUrl: slackWebhookUrl || null,
         telegramBotToken: telegramBotToken || null,
         telegramChatId: telegramChatId || null,
+        genericWebhookUrl: genericWebhookUrl || null,
       })
-      .where(eq(projects.id, projectId));
+      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)));
 
     // If testPing requested, dispatch a test notification
     if (testPing) {
@@ -39,8 +47,10 @@ export async function POST(req: NextRequest) {
           slackWebhookUrl,
           telegramBotToken,
           telegramChatId,
+          genericWebhookUrl,
         },
         {
+          eventId: "err_test_ping",
           projectName: "DevPulse Alert Test",
           projectSlug: "devpulse",
           errorName: "TestAlert: Webhook Connected",
@@ -49,7 +59,7 @@ export async function POST(req: NextRequest) {
           version: "v1.0.0",
           os: "Cloudflare Edge",
           environment: "production",
-          dashboardUrl: "https://devpulse.ritualdev.in",
+          dashboardUrl: "https://devpulse.ritualdev.in/dashboard",
         }
       );
     }

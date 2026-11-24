@@ -94,3 +94,39 @@ export function initDevPulse({
 // initDevPulse();
 `;
 }
+
+export function getRustSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
+  return `// DevPulse Rust Panic Hook (std::panic + ureq)
+use std::panic;
+
+pub fn init_devpulse() {
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        let payload = format!(
+            r#"{{"apiKey":"${apiKey}","errorName":"RustPanic","message":"{}","runtime":"rust","os":"{}"}}"#,
+            info.to_string().replace('"', "'"),
+            std::env::consts::OS
+        );
+        let _ = ureq::post("${hostUrl}/api/v1/event")
+            .set("Content-Type", "application/json")
+            .send_string(&payload);
+        default_hook(info);
+    }));
+}
+`;
+}
+
+export function getCliSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
+  return `# Send a runtime crash or heavy terminal dump from any CLI / CI script
+curl -X POST "${hostUrl}/api/v1/event" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "apiKey": "${apiKey}",
+    "errorName": "CLIFatalExit",
+    "message": "Command exited with non-zero status",
+    "runtime": "cli",
+    "os": "'$(uname -s)' '$(uname -m)'",
+    "stackTrace": "Full stderr/stack trace payload (>4KB auto-offloads to Cloudflare R2)"
+  }'
+`;
+}

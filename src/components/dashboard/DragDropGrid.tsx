@@ -57,6 +57,7 @@ export interface DashboardData {
     slackWebhookUrl?: string | null;
     telegramBotToken?: string | null;
     telegramChatId?: string | null;
+    genericWebhookUrl?: string | null;
     stripeApiKey?: string | null;
     dodoPaymentsApiKey?: string | null;
   };

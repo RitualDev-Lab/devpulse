@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects, errorEvents } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
+import { putR2Object } from "@/lib/storage/r2";
+
+const R2_OFFLOAD_THRESHOLD_BYTES = 4096; // Offload payloads > 4KB (e.g. 100KB+ traces & terminal dumps) to R2
+const MAX_TURSO_PREVIEW_CHARS = 2000;
 
 // Enable CORS for telemetry beacons from any client
 export async function OPTIONS() {
@@ -10,7 +16,7 @@ export async function OPTIONS() {
     status: 204,
     headers: {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Methods": "POST, PATCH, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
   });
@@ -32,19 +38,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing telemetry apiKey" }, { status: 401 });
     }
 
-    // Verify project exists
+    // Verify project exists & fetch owner + alert channels
     const [project] = await db
       .select({
         id: projects.id,
+        userId: projects.userId,
         name: projects.name,
         slug: projects.slug,
         discordWebhookUrl: projects.discordWebhookUrl,
         slackWebhookUrl: projects.slackWebhookUrl,
         telegramBotToken: projects.telegramBotToken,
         telegramChatId: projects.telegramChatId,
+        genericWebhookUrl: projects.genericWebhookUrl,
       })
       .from(projects)
-      .where(eq(projects.telemetryApiKey, apiKey))
+      .where(eq(projects.telemetryApiKey, String(apiKey)))
       .limit(1);
 
     if (!project) {
@@ -52,56 +60,119 @@ export async function POST(req: NextRequest) {
     }
 
     const eventId = `err_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const errorName = String(body.errorName || body.name || "RuntimeError").slice(0, 255);
+    const errorName = String(body.errorName || body.error_name || body.name || "RuntimeError").slice(0, 255);
     const message = String(body.message || "An unexpected error occurred").slice(0, 2000);
-    const stackTrace = body.stackTrace || body.stack ? String(body.stackTrace || body.stack).slice(0, 8000) : null;
+    const rawStack = body.stackTrace || body.stack_trace || body.stack ? String(body.stackTrace || body.stack_trace || body.stack) : "";
+    const rawLogs = body.terminalLogs || body.terminal_logs || body.logs ? String(body.terminalLogs || body.terminal_logs || body.logs) : "";
     const runtime = String(body.runtime || "node").slice(0, 50);
     const version = body.version ? String(body.version).slice(0, 50) : null;
     const os = body.os ? String(body.os).slice(0, 100) : null;
     const environment = String(body.environment || "production").slice(0, 50);
-    const reporterEmail = body.reporterEmail ? String(body.reporterEmail).slice(0, 255) : null;
+    const reporterEmail = body.reporterEmail || body.reporter_email ? String(body.reporterEmail || body.reporter_email).slice(0, 255) : null;
+    const attachmentUrl = body.attachmentKey || body.attachmentUrl || body.attachment_url
+      ? String(body.attachmentKey || body.attachmentUrl || body.attachment_url).slice(0, 512)
+      : null;
+
+    // Combine heavy diagnostic payload (stackTrace + terminal output logs)
+    const combinedPayload = rawLogs
+      ? `${rawStack ? rawStack + "\n\n" : ""}--- TERMINAL OUTPUT LOGS ---\n${rawLogs}`
+      : rawStack;
+
+    const payloadBytes = combinedPayload ? new TextEncoder().encode(combinedPayload).byteLength : 0;
+
+    let storedInlinePreview: string | null = combinedPayload ? combinedPayload.slice(0, MAX_TURSO_PREVIEW_CHARS) : null;
+    let r2ObjectKey: string | null = null;
+    let storageProvider: string = "turso";
+    let quotaExceeded = false;
+
+    // Tiered Storage Architecture: Offload heavy 4KB-100KB+ payloads to Cloudflare R2 / BYOS
+    if (payloadBytes > R2_OFFLOAD_THRESHOLD_BYTES || rawLogs.length > 0) {
+      const quota = await checkAndReserveStorageQuota(project.userId, payloadBytes);
+      if (quota.allowed && quota.context.credentials) {
+        const key = `${quota.context.prefix}/${project.userId}/${project.id}/crashes/${eventId}.log`;
+        const putRes = await putR2Object(
+          quota.context.credentials,
+          key,
+          combinedPayload,
+          "text/plain; charset=utf-8"
+        );
+
+        if (putRes.ok) {
+          r2ObjectKey = key;
+          storageProvider = quota.context.provider;
+          if (combinedPayload.length > MAX_TURSO_PREVIEW_CHARS) {
+            storedInlinePreview = `${combinedPayload.slice(0, MAX_TURSO_PREVIEW_CHARS)}\n\n... [Truncated preview — full ${Math.round(payloadBytes / 1024)} KB crash dump stored in R2]`;
+          }
+        }
+      } else if (!quota.allowed) {
+        quotaExceeded = true;
+      }
+    }
 
     await db.insert(errorEvents).values({
       id: eventId,
       projectId: project.id,
       errorName,
       message,
-      stackTrace,
+      stackTrace: storedInlinePreview,
       runtime,
       version,
       os,
       environment,
       status: "unresolved",
+      attachmentUrl,
+      r2ObjectKey,
+      payloadSizeBytes: payloadBytes,
+      storageProvider,
       reporterEmail,
     });
 
-    // Fire instant crash alerts to Discord / Slack / Telegram (isolated async)
-    dispatchCrashAlerts(
-      {
-        discordWebhookUrl: project.discordWebhookUrl,
-        slackWebhookUrl: project.slackWebhookUrl,
-        telegramBotToken: project.telegramBotToken,
-        telegramChatId: project.telegramChatId,
-      },
-      {
-        projectName: project.name,
-        projectSlug: project.slug,
-        errorName,
-        message,
-        runtime,
-        version,
-        os,
-        environment,
-        reporterEmail,
-        dashboardUrl: `https://devpulse.ritualdev.in`,
-      }
-    ).catch((err) => console.error("Webhook alert error:", err));
+    // Fire instant crash alerts to Discord / Slack / Telegram / Generic Webhook
+    const hasWebhooks = Boolean(
+      project.discordWebhookUrl ||
+      project.slackWebhookUrl ||
+      (project.telegramBotToken && project.telegramChatId) ||
+      project.genericWebhookUrl
+    );
+
+    if (hasWebhooks) {
+      await dispatchCrashAlerts(
+        {
+          discordWebhookUrl: project.discordWebhookUrl,
+          slackWebhookUrl: project.slackWebhookUrl,
+          telegramBotToken: project.telegramBotToken,
+          telegramChatId: project.telegramChatId,
+          genericWebhookUrl: project.genericWebhookUrl,
+        },
+        {
+          eventId,
+          projectName: project.name,
+          projectSlug: project.slug,
+          errorName,
+          message,
+          runtime,
+          version,
+          os,
+          environment,
+          reporterEmail,
+          r2ObjectKey,
+          payloadSizeBytes: payloadBytes,
+          dashboardUrl: `https://devpulse.ritualdev.in/dashboard?project=${project.slug}`,
+        }
+      ).catch((err) => console.error("Webhook alert error:", err));
+    }
 
     return NextResponse.json(
       {
         success: true,
         eventId,
         project: project.name,
+        storage: {
+          provider: storageProvider,
+          r2ObjectKey,
+          payloadSizeBytes: payloadBytes,
+          quotaExceeded,
+        },
       },
       {
         status: 201,
@@ -114,6 +185,49 @@ export async function POST(req: NextRequest) {
     console.error("Error ingesting telemetry event:", err);
     return NextResponse.json(
       { error: "Internal Server Error", details: err?.message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Update error event status (unresolved | resolved | ignored) scoped to project owner
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { eventId, projectId, status } = body;
+
+    if (!eventId || !projectId || !["unresolved", "resolved", "ignored"].includes(status)) {
+      return NextResponse.json({ error: "Invalid eventId, projectId, or status" }, { status: 400 });
+    }
+
+    // Verify project ownership before updating
+    const [proj] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
+      .limit(1);
+
+    if (!proj) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    await db
+      .update(errorEvents)
+      .set({ status })
+      .where(and(eq(errorEvents.id, eventId), eq(errorEvents.projectId, projectId)));
+
+    return NextResponse.json({ success: true, eventId, status });
+  } catch (err: any) {
+    console.error("PATCH /api/v1/event error:", err);
+    return NextResponse.json(
+      { error: "Failed to update event status", details: err?.message },
       { status: 500 }
     );
   }

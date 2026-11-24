@@ -11,7 +11,7 @@ export const users = sqliteTable("users", {
   name: text("name"),
   email: text("email"),
   avatarUrl: text("avatar_url"),
-  storageTier: text("storage_tier", { enum: ["free", "pro", "byos"] }).default("free").notNull(),
+  storageTier: text("storage_tier", { enum: ["free", "pro", "team", "enterprise", "byos"] }).default("free").notNull(),
   customDomain: text("custom_domain").unique(), // 1 custom domain per user
   customDomainVerified: integer("custom_domain_verified", { mode: "boolean" }).default(false).notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
@@ -50,6 +50,7 @@ export const projects = sqliteTable("projects", {
   slackWebhookUrl: text("slack_webhook_url"),
   telegramBotToken: text("telegram_bot_token"),
   telegramChatId: text("telegram_chat_id"),
+  genericWebhookUrl: text("generic_webhook_url"),
 
   // Developer Revenue & Monetization (Stripe, Dodo Payments, Sponsors)
   stripeApiKey: text("stripe_api_key"),
@@ -112,7 +113,10 @@ export const errorEvents = sqliteTable("error_events", {
   os: text("os"),
   environment: text("environment").default("production"), // 'production', 'development', etc.
   status: text("status", { enum: ["unresolved", "resolved", "ignored"] }).default("unresolved").notNull(),
-  attachmentUrl: text("attachment_url"), // Cloudflare R2 or BYOS S3 bucket link
+  attachmentUrl: text("attachment_url"), // Cloudflare R2 or BYOS S3 bucket link / object key
+  r2ObjectKey: text("r2_object_key"), // Key in R2 / BYOS for heavy 100KB+ stack traces & terminal logs
+  payloadSizeBytes: integer("payload_size_bytes").default(0).notNull(),
+  storageProvider: text("storage_provider").default("turso").notNull(), // 'turso' | 'devpulse_r2' | 'byos_r2' | 'byos_s3'
   reporterEmail: text("reporter_email"), // Optional, if user submitted via public bug form
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });

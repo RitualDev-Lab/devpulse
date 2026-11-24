@@ -27,6 +27,7 @@ interface DashboardHeaderProps {
   onOpenStyling: () => void;
   onOpenAlerts: () => void;
   onOpenIntegrations: () => void;
+  onOpenStorage?: () => void;
   customDomain?: string | null;
   storageTier: string;
   onResetLayout: () => void;
@@ -41,6 +42,7 @@ export function DashboardHeader({
   onOpenStyling,
   onOpenAlerts,
   onOpenIntegrations,
+  onOpenStorage,
   customDomain,
   storageTier,
   onResetLayout,
@@ -96,16 +98,18 @@ export function DashboardHeader({
               </div>
             )}
 
-            <div
-              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400"
-              title="Cloudflare R2 Storage Tier"
+            <button
+              type="button"
+              onClick={onOpenStorage}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition shadow-sm"
+              title="Cloudflare R2 Storage Quota & BYOS Settings"
             >
               <HardDrive className="w-3.5 h-3.5 text-purple-400" />
               <span>R2:</span>
               <span className="text-zinc-200 uppercase font-semibold text-[10px]">
                 {storageTier}
               </span>
-            </div>
+            </button>
 
             {/* 1-Click Import Button */}
             <button

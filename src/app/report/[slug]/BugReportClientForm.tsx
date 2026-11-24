@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Send, CheckCircle2, AlertOctagon, Terminal } from "lucide-react";
+import { Send, CheckCircle2, AlertOctagon, Terminal, Paperclip, X, Loader2 } from "lucide-react";
 
 interface BugReportClientFormProps {
   apiKey: string;
@@ -14,6 +14,8 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
   const [stackTrace, setStackTrace] = useState("");
   const [runtime, setRuntime] = useState("node");
   const [reporterEmail, setReporterEmail] = useState("");
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -24,6 +26,40 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
     setErrorMessage("");
 
     try {
+      let attachmentKey: string | null = null;
+
+      // Direct Cloudflare R2 presigned upload for bug report screenshot or heavy log file
+      if (attachmentFile) {
+        setUploadingAttachment(true);
+        const presignRes = await fetch("/api/v1/storage/presign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            apiKey,
+            filename: attachmentFile.name,
+            contentType: attachmentFile.type || "application/octet-stream",
+            sizeBytes: attachmentFile.size,
+          }),
+        });
+
+        const presignData = await presignRes.json();
+        if (!presignRes.ok) {
+          throw new Error(presignData.error || "Attachment upload rejected by storage quota guard.");
+        }
+
+        const uploadRes = await fetch(presignData.uploadUrl, {
+          method: "PUT",
+          body: attachmentFile,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error("Failed to upload attachment to Cloudflare R2.");
+        }
+
+        attachmentKey = presignData.objectKey;
+        setUploadingAttachment(false);
+      }
+
       const res = await fetch("/api/v1/event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -35,6 +71,7 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
           runtime,
           environment: "production",
           reporterEmail: reporterEmail || null,
+          attachmentKey,
         }),
       });
 
@@ -46,6 +83,7 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
     } catch (err: any) {
       setErrorMessage(err.message || "An unexpected error occurred.");
     } finally {
+      setUploadingAttachment(false);
       setSubmitting(false);
     }
   };
@@ -66,6 +104,7 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
             setMessage("");
             setStackTrace("");
             setErrorName("");
+            setAttachmentFile(null);
           }}
           className="mt-4 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition"
         >
@@ -110,6 +149,7 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
           >
             <option value="node">Node.js (npm)</option>
             <option value="python">Python (PyPI)</option>
+            <option value="rust">Rust (crates.io)</option>
             <option value="cli">CLI Tool</option>
             <option value="browser">Web Browser</option>
             <option value="vscode">VS Code Extension</option>
@@ -147,7 +187,7 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
       <div>
         <label className="block text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
           <Terminal className="w-3.5 h-3.5 text-zinc-400" />
-          <span>Error Log / Stack Trace (Optional)</span>
+          <span>Error Log / Stack Trace (Optional — heavy 100 KB+ logs offload to R2)</span>
         </label>
         <textarea
           rows={4}
@@ -158,13 +198,54 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
         />
       </div>
 
+      {/* Screenshot / Log Attachment via Cloudflare R2 Presigned URL */}
+      <div>
+        <label className="block text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
+          <Paperclip className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Screenshot or Log Attachment (Optional &bull; Direct Cloudflare R2 Upload)</span>
+        </label>
+        {attachmentFile ? (
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-950 border border-cyan-500/40 text-xs text-zinc-200">
+            <span className="truncate font-mono">
+              {attachmentFile.name} ({Math.max(1, Math.round(attachmentFile.size / 1024))} KB)
+            </span>
+            <button
+              type="button"
+              onClick={() => setAttachmentFile(null)}
+              className="text-zinc-400 hover:text-white p-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,.txt,.log,.json"
+            onChange={(e) => {
+              const f = e.target.files?.[0] || null;
+              setAttachmentFile(f);
+            }}
+            className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200 hover:file:bg-zinc-700 cursor-pointer"
+          />
+        )}
+      </div>
+
       <button
         type="submit"
         disabled={submitting}
         className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition disabled:opacity-50"
       >
-        <Send className="w-4 h-4" />
-        <span>{submitting ? "Delivering Report..." : "Submit Bug Report"}</span>
+        {uploadingAttachment ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Uploading Attachment to R2...</span>
+          </>
+        ) : (
+          <>
+            <Send className="w-4 h-4" />
+            <span>{submitting ? "Delivering Report..." : "Submit Bug Report"}</span>
+          </>
+        )}
       </button>
     </form>
   );

@@ -55,6 +55,10 @@ export async function initDb() {
     "ALTER TABLE projects ADD COLUMN rust_crate TEXT;",
     "ALTER TABLE projects ADD COLUMN go_module TEXT;",
     "ALTER TABLE projects ADD COLUMN docker_image TEXT;",
+    "ALTER TABLE projects ADD COLUMN generic_webhook_url TEXT;",
+    "ALTER TABLE error_events ADD COLUMN r2_object_key TEXT;",
+    "ALTER TABLE error_events ADD COLUMN payload_size_bytes INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE error_events ADD COLUMN storage_provider TEXT DEFAULT 'turso' NOT NULL;",
   ];
 
   for (const query of optionalColumns) {
@@ -107,6 +111,9 @@ export async function initDb() {
       environment TEXT DEFAULT 'production',
       status TEXT DEFAULT 'unresolved' NOT NULL,
       attachment_url TEXT,
+      r2_object_key TEXT,
+      payload_size_bytes INTEGER DEFAULT 0 NOT NULL,
+      storage_provider TEXT DEFAULT 'turso' NOT NULL,
       reporter_email TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
