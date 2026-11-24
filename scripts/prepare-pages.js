@@ -9,7 +9,19 @@ if (!fs.existsSync(openNextDir)) {
   process.exit(1);
 }
 
-// 1. Create a Pages-compatible _worker.js that checks env.ASSETS first and reports clear error traces
+// 1. Patch handler.mjs to output detailed error trace on 500
+const handlerFile = path.join(openNextDir, 'server-functions/default/handler.mjs');
+if (fs.existsSync(handlerFile)) {
+  let content = fs.readFileSync(handlerFile, 'utf-8');
+  content = content.replace(
+    'res.end("Internal Server Error")',
+    'res.end("Internal Server Error: " + (e?.stack || e?.message || e))'
+  );
+  fs.writeFileSync(handlerFile, content, 'utf-8');
+  console.log('Patched handler.mjs with detailed error output.');
+}
+
+// 2. Create a Pages-compatible _worker.js that checks env.ASSETS first
 const workerContent = `// @ts-expect-error
 import { handleCdnCgiImageRequest, handleImageRequest, isCdnCgiImageRequest } from "./cloudflare/images.js";
 // @ts-expect-error
@@ -73,7 +85,7 @@ export default {
 fs.writeFileSync(path.join(assetsDir, '_worker.js'), workerContent, 'utf-8');
 console.log('Created enhanced Pages _worker.js with ASSETS binding and debug fallback.');
 
-// 2. Copy ALL directories and files from .open-next into assets with dereference: true
+// 3. Copy ALL directories and files from .open-next into assets with dereference: true
 for (const item of fs.readdirSync(openNextDir)) {
   if (item === 'assets') continue;
   const src = path.join(openNextDir, item);
@@ -86,7 +98,7 @@ for (const item of fs.readdirSync(openNextDir)) {
   }
 }
 
-// 3. Remove any remaining symlinks inside assets directory
+// 4. Remove any remaining symlinks inside assets directory
 function cleanSymlinks(dir) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
