@@ -9,16 +9,71 @@ if (!fs.existsSync(openNextDir)) {
   process.exit(1);
 }
 
-// 1. Copy worker.js to assets/_worker.js
-const workerSrc = path.join(openNextDir, 'worker.js');
-const workerDest = path.join(assetsDir, '_worker.js');
-if (fs.existsSync(workerSrc)) {
-  fs.copyFileSync(workerSrc, workerDest);
-  console.log('Copied worker.js -> assets/_worker.js');
-}
+// 1. Create a Pages-compatible _worker.js that checks env.ASSETS first and reports clear error traces
+const workerContent = `// @ts-expect-error
+import { handleCdnCgiImageRequest, handleImageRequest, isCdnCgiImageRequest } from "./cloudflare/images.js";
+// @ts-expect-error
+import { runWithCloudflareRequestContext } from "./cloudflare/init.js";
+// @ts-expect-error
+import { maybeGetSkewProtectionResponse } from "./cloudflare/skew-protection.js";
+// @ts-expect-error
+import { handler as middlewareHandler } from "./middleware/handler.mjs";
+export { DOQueueHandler } from "./.build/durable-objects/queue.js";
+export { DOShardedTagCache } from "./.build/durable-objects/sharded-tag-cache.js";
+export { BucketCachePurge } from "./.build/durable-objects/bucket-cache-purge.js";
+
+export default {
+    async fetch(request, env, ctx) {
+        // 1. Serve static assets directly from Cloudflare Pages ASSETS binding
+        try {
+            if (env && env.ASSETS) {
+                const asset = await env.ASSETS.fetch(request.clone());
+                if (asset.status < 400) {
+                    return asset;
+                }
+            }
+        } catch (err) {
+            console.error("Asset fetch error:", err);
+        }
+
+        // 2. Delegate to Next.js OpenNext Server
+        try {
+            return await runWithCloudflareRequestContext(request, env, ctx, async () => {
+                const response = maybeGetSkewProtectionResponse(request);
+                if (response) {
+                    return response;
+                }
+                const url = new URL(request.url);
+                if (isCdnCgiImageRequest(url, request.headers)) {
+                    return handleCdnCgiImageRequest(url, env);
+                }
+                const basePath = globalThis.__NEXT_BASE_PATH__ || "";
+                const trailingSlash = globalThis.__TRAILING_SLASH__ ? "/" : "";
+                if (url.pathname === \`\${basePath}/_next/image\${trailingSlash}\`) {
+                    return await handleImageRequest(url, request.headers, env);
+                }
+                const reqOrResp = await middlewareHandler(request, env, ctx);
+                if (reqOrResp instanceof Response) {
+                    return reqOrResp;
+                }
+                const { handler } = await import("./server-functions/default/handler.mjs");
+                return await handler(reqOrResp, env, ctx, request.signal);
+            });
+        } catch (err) {
+            console.error("Next.js Server Execution Error:", err);
+            return new Response("DevPulse Edge Error:\\n" + (err.stack || err.message || String(err)), {
+                status: 500,
+                headers: { "content-type": "text/plain; charset=utf-8" }
+            });
+        }
+    },
+};
+`;
+
+fs.writeFileSync(path.join(assetsDir, '_worker.js'), workerContent, 'utf-8');
+console.log('Created enhanced Pages _worker.js with ASSETS binding and debug fallback.');
 
 // 2. Copy ALL directories and files from .open-next into assets with dereference: true
-// This converts any symlinks into real files so Cloudflare Pages asset validation passes
 for (const item of fs.readdirSync(openNextDir)) {
   if (item === 'assets') continue;
   const src = path.join(openNextDir, item);
@@ -31,7 +86,7 @@ for (const item of fs.readdirSync(openNextDir)) {
   }
 }
 
-// 3. Remove any remaining symlinks inside assets directory just in case
+// 3. Remove any remaining symlinks inside assets directory
 function cleanSymlinks(dir) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
