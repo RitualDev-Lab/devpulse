@@ -133,10 +133,13 @@ export function DragDropGrid({ data, isCustomizing, isDemo = false }: DragDropGr
   // Build canonical 12-col layout merging saved DB layout with available ecosystem widgets
   const computeInitialLayout = (): GridWidgetItem[] => {
     const dbRows = data.initialLayout || [];
-    // Ignore pre-Phase-4 legacy 4-col rows (width < 3) so cards never render squished in 12-col matrix
-    const hasValid2DLayout = dbRows.length > 0 && dbRows.every((r) => r.w >= 3);
+    // Ignore pre-Phase-4 legacy partial rows (width < 3 or single-item legacy remnants)
+    const hasValid2DLayout = dbRows.length >= 2 && dbRows.every((r) => r.w >= 3);
     if (hasValid2DLayout) {
+      const defaults = buildDefaultLayout(availableDefs);
       const merged: GridWidgetItem[] = [];
+      const maxSavedY = dbRows.reduce((m, r) => Math.max(m, r.y + r.h), 0);
+
       for (const def of availableDefs) {
         const saved = dbRows.find((r) => r.id === def.id);
         if (saved) {
@@ -150,11 +153,12 @@ export function DragDropGrid({ data, isCustomizing, isDemo = false }: DragDropGr
             isVisible: saved.isVisible,
           });
         } else {
+          const fallback = defaults.find((d) => d.id === def.id);
           merged.push({
             id: def.id,
             title: def.title,
-            x: 0,
-            y: 99,
+            x: fallback?.x ?? 0,
+            y: maxSavedY + (fallback?.y ?? 0),
             w: def.defaultW,
             h: def.defaultH,
             isVisible: true,
