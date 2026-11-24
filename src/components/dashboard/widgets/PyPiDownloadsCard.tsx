@@ -1,7 +1,7 @@
 import React from "react";
 import { TrendingUp, ExternalLink, GitCommit, Layers, Terminal } from "lucide-react";
 import type { PyPiStats } from "@/lib/integrations/pypi";
-import { formatNumber } from "@/lib/utils/format";
+import { formatNumber, formatCompactNumber } from "@/lib/utils/format";
 
 interface PyPiDownloadsCardProps {
   stats: PyPiStats | null;
@@ -72,8 +72,11 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
           <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
             <span className="text-[10px] text-zinc-400 block mb-0.5">Last Day</span>
             <div className="flex items-center gap-1">
-              <span className="text-sm font-bold text-white">
-                {formatNumber(stats.downloadsLastDay)}
+              <span
+                className="text-sm font-bold text-white truncate"
+                title={formatNumber(stats.downloadsLastDay)}
+              >
+                {formatCompactNumber(stats.downloadsLastDay)}
               </span>
             </div>
           </div>
@@ -81,8 +84,11 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
           <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
             <span className="text-[10px] text-zinc-400 block mb-0.5">Last 7 Days</span>
             <div className="flex items-center gap-1">
-              <span className="text-sm font-bold text-white">
-                {formatNumber(stats.downloadsLastWeek)}
+              <span
+                className="text-sm font-bold text-white truncate"
+                title={formatNumber(stats.downloadsLastWeek)}
+              >
+                {formatCompactNumber(stats.downloadsLastWeek)}
               </span>
             </div>
           </div>
@@ -90,8 +96,11 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
           <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
             <span className="text-[10px] text-zinc-400 block mb-0.5">Last 30 Days</span>
             <div className="flex items-center gap-1">
-              <span className="text-sm font-bold text-blue-400">
-                {formatNumber(stats.downloadsLastMonth)}
+              <span
+                className="text-sm font-bold text-blue-400 truncate"
+                title={formatNumber(stats.downloadsLastMonth)}
+              >
+                {formatCompactNumber(stats.downloadsLastMonth)}
               </span>
             </div>
           </div>

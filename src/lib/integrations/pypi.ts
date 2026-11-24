@@ -90,6 +90,13 @@ export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | n
             date: d.date,
             downloads: d.downloads,
           }));
+
+          // Fallback if /recent endpoint was lagged or unpopulated
+          if (downloadsLastDay === 0 && dailyHistory.length > 0) {
+            downloadsLastDay = dailyHistory[dailyHistory.length - 1].downloads;
+            downloadsLastWeek = dailyHistory.slice(-7).reduce((acc, curr) => acc + curr.downloads, 0);
+            downloadsLastMonth = dailyHistory.reduce((acc, curr) => acc + curr.downloads, 0);
+          }
         }
       } catch {
         // ignore

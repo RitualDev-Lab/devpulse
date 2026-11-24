@@ -37,25 +37,29 @@ export async function fetchDockerRepoStats(imageName: string): Promise<DockerRep
       Accept: "application/json",
     };
 
-    const [repoRes, tagsRes] = await Promise.all([
-      fetch(`https://hub.docker.com/v2/repositories/${namespace}/${repository}`, {
+    let repoRes = await fetch(
+      `https://hub.docker.com/v2/repositories/${namespace}/${repository}`,
+      {
         headers: {
           "User-Agent": "Docker-Client/24.0.0 (linux)",
           Accept: "application/json",
         },
         next: { revalidate: 3600 },
-      }).catch((e) => {
-        console.warn("Docker repo fetch error:", e);
-        return null;
-      }),
-      fetch(`https://hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=5`, {
-        headers: {
-          "User-Agent": "Docker-Client/24.0.0 (linux)",
-          Accept: "application/json",
-        },
-        next: { revalidate: 3600 },
-      }).catch(() => null),
-    ]);
+      }
+    ).catch(() => null);
+
+    if (!repoRes || !repoRes.ok) {
+      repoRes = await fetch(
+        `https://registry.hub.docker.com/v2/repositories/${namespace}/${repository}`,
+        {
+          headers: {
+            "User-Agent": "Docker-Client/24.0.0 (linux)",
+            Accept: "application/json",
+          },
+          next: { revalidate: 3600 },
+        }
+      ).catch(() => null);
+    }
 
     if (!repoRes || !repoRes.ok) {
       console.warn(
@@ -65,6 +69,30 @@ export async function fetchDockerRepoStats(imageName: string): Promise<DockerRep
     }
 
     const repoJson = await repoRes.json();
+
+    let tagsRes = await fetch(
+      `https://hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=5`,
+      {
+        headers: {
+          "User-Agent": "Docker-Client/24.0.0 (linux)",
+          Accept: "application/json",
+        },
+        next: { revalidate: 3600 },
+      }
+    ).catch(() => null);
+
+    if (!tagsRes || !tagsRes.ok) {
+      tagsRes = await fetch(
+        `https://registry.hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=5`,
+        {
+          headers: {
+            "User-Agent": "Docker-Client/24.0.0 (linux)",
+            Accept: "application/json",
+          },
+          next: { revalidate: 3600 },
+        }
+      ).catch(() => null);
+    }
 
     const tags: DockerTagInfo[] = [];
     if (tagsRes && tagsRes.ok) {

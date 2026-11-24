@@ -194,6 +194,8 @@ export async function syncAllProjects(): Promise<SyncResult[]> {
               },
             });
           syncedSources.push("docker");
+        } else {
+          errors.push(`docker: fetch returned null for image "${proj.dockerImage}"`);
         }
       } catch (err: any) {
         errors.push(`docker: ${err?.message || "Failed to fetch Docker Hub stats"}`);
