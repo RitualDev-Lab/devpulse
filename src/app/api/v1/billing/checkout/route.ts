@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import type { BillingItemKey } from "@/lib/billing/plans";
 import { createDodoCheckoutSession } from "@/lib/billing/dodo";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,16 @@ export async function POST(req: NextRequest) {
       userName: userRow?.name || user.name || user.githubUsername,
       dodoCustomerId: userRow?.dodoCustomerId || null,
       returnUrl,
+    });
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      action: "billing.checkout_created",
+      resourceType: "billing_checkout",
+      resourceId: session.sessionId,
+      headers: req.headers,
+      metadata: { itemKey, quantity },
     });
 
     return NextResponse.json({

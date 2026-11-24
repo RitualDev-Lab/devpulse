@@ -12,6 +12,7 @@ import {
   Plug,
   Plus,
   CreditCard,
+  Shield,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 import {
@@ -31,6 +32,7 @@ interface DashboardHeaderProps {
   onOpenStorage?: () => void;
   onOpenDomains?: () => void;
   onOpenBilling?: () => void;
+  onOpenSecurity?: () => void;
   customDomain?: string | null;
   storageTier: string;
   onResetLayout: () => void;
@@ -48,6 +50,7 @@ export function DashboardHeader({
   onOpenStorage,
   onOpenDomains,
   onOpenBilling,
+  onOpenSecurity,
   customDomain,
   storageTier,
   onResetLayout,
@@ -104,6 +107,16 @@ export function DashboardHeader({
                 {customDomain || "Portal / Domain"}
               </span>
               <span className="lg:hidden">Portal</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenSecurity}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"
+              title="SHA-256 Telemetry API Keys, Organizations (RBAC) & Immutable Audit Log"
+            >
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden lg:inline">Security</span>
             </button>
 
             <button

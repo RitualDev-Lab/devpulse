@@ -83,6 +83,7 @@ export async function initDb() {
     "ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'active' NOT NULL;",
     "ALTER TABLE users ADD COLUMN current_period_end TEXT;",
     "ALTER TABLE projects ADD COLUMN pagerduty_routing_key TEXT;",
+    "ALTER TABLE projects ADD COLUMN organization_id TEXT;",
   ];
 
   for (const query of optionalColumns) {
@@ -201,6 +202,72 @@ export async function initDb() {
       invoice_url TEXT,
       raw_payload_json TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS organization_members (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      github_username TEXT NOT NULL,
+      email TEXT,
+      role TEXT DEFAULT 'viewer' NOT NULL,
+      status TEXT DEFAULT 'pending' NOT NULL,
+      invited_by_user_id TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS telemetry_keys (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name TEXT DEFAULT 'Default Key' NOT NULL,
+      key_prefix TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      status TEXT DEFAULT 'active' NOT NULL,
+      created_by_user_id TEXT,
+      last_used_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      actor_username TEXT NOT NULL,
+      organization_id TEXT,
+      project_id TEXT,
+      action TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT,
+      status TEXT DEFAULT 'success' NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      metadata_json TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS rate_limit_counters (
+      bucket_key TEXT PRIMARY KEY,
+      count INTEGER DEFAULT 0 NOT NULL,
+      expires_at INTEGER NOT NULL
     );
   `);
 

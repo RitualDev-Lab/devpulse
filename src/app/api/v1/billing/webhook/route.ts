@@ -9,6 +9,7 @@ import {
   resolveItemKeyFromProductId,
 } from "@/lib/billing/dodo";
 import { createCloudflareCustomHostname } from "@/lib/domains/cloudflare-saas";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -210,6 +211,20 @@ export async function POST(req: NextRequest) {
       status: String(data.status || (isActivationEvent ? "succeeded" : eventType)),
       invoiceUrl: data.payment_link ? String(data.payment_link) : null,
       rawPayloadJson: rawBody.slice(0, 8000),
+    });
+
+    await recordAuditEvent({
+      userId: targetUserId,
+      actorUsername: userRow.githubUsername || "dodo_webhook",
+      action: `billing.${eventType}`,
+      resourceType: "subscription",
+      resourceId: subscriptionId || paymentId || externalEventId,
+      headers: req.headers,
+      metadata: {
+        tier: effective.plan.id,
+        itemKey: itemKey || null,
+        amountCents: Number(data.total_amount ?? data.recurring_pre_tax_amount ?? 0),
+      },
     });
 
     return NextResponse.json({

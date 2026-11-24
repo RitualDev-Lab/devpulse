@@ -5,6 +5,9 @@ import { projects } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
+import { listAccessibleProjects } from "@/lib/security/rbac";
+import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export async function GET() {
   try {
@@ -13,25 +16,24 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userProjects = await db
-      .select({
-        id: projects.id,
-        name: projects.name,
-        slug: projects.slug,
-        description: projects.description,
-        githubRepo: projects.githubRepo,
-        npmPackage: projects.npmPackage,
-        pypiPackage: projects.pypiPackage,
-        rustCrate: projects.rustCrate,
-        goModule: projects.goModule,
-        telemetryApiKey: projects.telemetryApiKey,
-        createdAt: projects.createdAt,
-      })
-      .from(projects)
-      .where(eq(projects.userId, user.id))
-      .orderBy(desc(projects.createdAt));
-
-    return NextResponse.json({ projects: userProjects });
+    const accessibleProjects = await listAccessibleProjects(user);
+    return NextResponse.json({
+      projects: accessibleProjects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        description: p.description,
+        githubRepo: p.githubRepo,
+        npmPackage: p.npmPackage,
+        pypiPackage: p.pypiPackage,
+        rustCrate: p.rustCrate,
+        goModule: p.goModule,
+        telemetryApiKey: p.accessRole === "viewer" ? p.telemetryApiKey.slice(0, 12) + "..." : p.telemetryApiKey,
+        accessRole: p.accessRole,
+        organizationId: p.organizationId,
+        createdAt: p.createdAt,
+      })),
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -106,6 +108,24 @@ export async function POST(request: Request) {
       telemetryApiKey,
       isPublic: true,
       theme: "dark",
+    });
+
+    await ensurePrimaryKeyHashRecorded({
+      projectId,
+      rawKey: telemetryApiKey,
+      userId: user.id,
+      name: "Primary SDK Key",
+    });
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      projectId,
+      action: "project.created",
+      resourceType: "project",
+      resourceId: projectId,
+      headers: request.headers,
+      metadata: { name, slug },
     });
 
     const created = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);

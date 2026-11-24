@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { projects, errorEvents } from "@/db/schema";
+import { errorEvents } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
 import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
+import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
+import { checkRateLimit } from "@/lib/security/rate-limit";
+import { resolveProjectAccess } from "@/lib/security/rbac";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096; // Offload payloads > 4KB (e.g. 100KB+ traces & terminal dumps) to R2
 const MAX_TURSO_PREVIEW_CHARS = 2000;
@@ -38,26 +42,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing telemetry apiKey" }, { status: 401 });
     }
 
-    // Verify project exists & fetch owner + alert channels
-    const [project] = await db
-      .select({
-        id: projects.id,
-        userId: projects.userId,
-        name: projects.name,
-        slug: projects.slug,
-        discordWebhookUrl: projects.discordWebhookUrl,
-        slackWebhookUrl: projects.slackWebhookUrl,
-        telegramBotToken: projects.telegramBotToken,
-        telegramChatId: projects.telegramChatId,
-        genericWebhookUrl: projects.genericWebhookUrl,
-        pagerdutyRoutingKey: projects.pagerdutyRoutingKey,
-      })
-      .from(projects)
-      .where(eq(projects.telemetryApiKey, String(apiKey)))
-      .limit(1);
+    const rawKeyStr = String(apiKey);
+    const keyHashPrefix = (await hashApiKey(rawKeyStr)).slice(0, 16);
+
+    // Rate limit: max 500 telemetry beacons / min per API key
+    const rl = await checkRateLimit({
+      key: `event:${keyHashPrefix}`,
+      limit: 500,
+      windowSeconds: 60,
+    });
+
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: "Telemetry rate limit exceeded (max 500 beacons/min per API key).",
+          code: "RATE_LIMIT_EXCEEDED",
+          retryAfterSeconds: rl.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Retry-After": String(rl.retryAfterSeconds),
+            "X-RateLimit-Limit": String(rl.limit),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(rl.resetAtEpoch),
+          },
+        }
+      );
+    }
+
+    // Verify project via SHA-256 key hash lookup (rejects rotated/revoked keys)
+    const project = await verifyTelemetryApiKey(rawKeyStr);
 
     if (!project) {
-      return NextResponse.json({ error: "Invalid or inactive telemetry apiKey" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Invalid, rotated, or revoked telemetry apiKey" },
+        { status: 403 }
+      );
     }
 
     const eventId = `err_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -181,6 +203,9 @@ export async function POST(req: NextRequest) {
         status: 201,
         headers: {
           "Access-Control-Allow-Origin": "*",
+          "X-RateLimit-Limit": String(rl.limit),
+          "X-RateLimit-Remaining": String(rl.remaining),
+          "X-RateLimit-Reset": String(rl.resetAtEpoch),
         },
       }
     );
@@ -210,21 +235,42 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Invalid eventId, projectId, or status" }, { status: 400 });
     }
 
-    // Verify project ownership before updating
-    const [proj] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
-      .limit(1);
-
-    if (!proj) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // Enforce RBAC: Viewer is read-only; Maintainer/Owner can triage errors
+    const access = await resolveProjectAccess(String(projectId), user);
+    if (!access || !access.canWrite) {
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        projectId: String(projectId),
+        action: "crash.status_changed",
+        resourceType: "error_event",
+        resourceId: String(eventId),
+        status: "denied",
+        headers: req.headers,
+        metadata: { targetStatus: status, role: access?.role || "none" },
+      });
+      return NextResponse.json(
+        { error: "Forbidden: Viewer role cannot modify crash statuses." },
+        { status: 403 }
+      );
     }
 
     await db
       .update(errorEvents)
       .set({ status })
       .where(and(eq(errorEvents.id, eventId), eq(errorEvents.projectId, projectId)));
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      organizationId: access.project.organizationId,
+      projectId: access.project.id,
+      action: "crash.status_changed",
+      resourceType: "error_event",
+      resourceId: String(eventId),
+      headers: req.headers,
+      metadata: { status },
+    });
 
     return NextResponse.json({ success: true, eventId, status });
   } catch (err: any) {

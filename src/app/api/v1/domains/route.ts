@@ -12,6 +12,7 @@ import {
   deleteCloudflareCustomHostname,
 } from "@/lib/domains/cloudflare-saas";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -262,6 +263,20 @@ export async function POST(req: NextRequest) {
 
     await db.update(users).set(updates).where(eq(users.id, user.id));
 
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      action: rawCustomDomain !== undefined ? "domain.custom_domain_updated" : "domain.settings_updated",
+      resourceType: "domain",
+      resourceId: updates.customDomain || updates.subdomain || user.id,
+      headers: req.headers,
+      metadata: {
+        subdomain: updates.subdomain,
+        customDomain: updates.customDomain,
+        hidePoweredBy: updates.hidePoweredBy,
+      },
+    });
+
     const [updated] = await db
       .select()
       .from(users)
@@ -356,6 +371,15 @@ export async function DELETE(req: NextRequest) {
         })
         .where(eq(users.id, user.id));
     }
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      action: "domain.custom_domain_removed",
+      resourceType: "domain",
+      resourceId: domainParam || existing?.customDomain || user.id,
+      headers: req.headers,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

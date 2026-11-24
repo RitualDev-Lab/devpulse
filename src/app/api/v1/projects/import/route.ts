@@ -7,6 +7,8 @@ import { eq, and, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
+import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export async function POST(request: Request) {
   try {
@@ -111,6 +113,24 @@ export async function POST(request: Request) {
       telemetryApiKey,
       isPublic: true,
       theme: "dark",
+    });
+
+    await ensurePrimaryKeyHashRecorded({
+      projectId,
+      rawKey: telemetryApiKey,
+      userId: user.id,
+      name: "Primary SDK Key",
+    });
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      projectId,
+      action: "project.imported",
+      resourceType: "project",
+      resourceId: projectId,
+      headers: request.headers,
+      metadata: { githubRepo: scanned.githubRepo, slug },
     });
 
     // 5. Seed initial 2D 12-column widgets for drag-and-drop grid

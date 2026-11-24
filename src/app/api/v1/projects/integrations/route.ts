@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
+import { resolveProjectAccess } from "@/lib/security/rbac";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       projectId,
@@ -20,6 +28,25 @@ export async function POST(req: NextRequest) {
 
     if (!projectId) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+    }
+
+    const access = await resolveProjectAccess(String(projectId), user);
+    if (!access || !access.canWrite) {
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        projectId: String(projectId),
+        action: "integrations.updated",
+        resourceType: "project",
+        resourceId: String(projectId),
+        status: "denied",
+        headers: req.headers,
+        metadata: { role: access?.role || "none" },
+      });
+      return NextResponse.json(
+        { error: "Forbidden: Viewer role cannot modify project integrations." },
+        { status: 403 }
+      );
     }
 
     // Clean strings: trim and convert empty to null
@@ -42,6 +69,23 @@ export async function POST(req: NextRequest) {
         mcpServerName: cleanStr(mcpServerName),
       })
       .where(eq(projects.id, projectId));
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      organizationId: access.project.organizationId,
+      projectId: access.project.id,
+      action: "integrations.updated",
+      resourceType: "project",
+      resourceId: access.project.id,
+      headers: req.headers,
+      metadata: {
+        githubRepo: cleanStr(githubRepo),
+        npmPackage: cleanStr(npmPackage),
+        pypiPackage: cleanStr(pypiPackage),
+        rustCrate: cleanStr(rustCrate),
+      },
+    });
 
     return NextResponse.json({
       success: true,

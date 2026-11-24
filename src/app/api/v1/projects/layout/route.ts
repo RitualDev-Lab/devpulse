@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { projects, dashboardWidgets } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { dashboardWidgets } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import type { GridWidgetItem } from "@/lib/layout/grid-engine";
+import { resolveProjectAccess } from "@/lib/security/rbac";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +21,8 @@ export async function GET(req: NextRequest) {
       if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      const [proj] = await db
-        .select({ id: projects.id })
-        .from(projects)
-        .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
-        .limit(1);
-
-      if (!proj) {
+      const access = await resolveProjectAccess(projectId, user);
+      if (!access) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
@@ -69,14 +66,20 @@ async function saveLayout(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId or widgets array" }, { status: 400 });
     }
 
-    const [proj] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
-      .limit(1);
-
-    if (!proj) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const access = await resolveProjectAccess(projectId, user);
+    if (!access || !access.canWrite) {
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        projectId,
+        action: "layout.updated",
+        resourceType: "dashboard_layout",
+        resourceId: projectId,
+        status: "denied",
+        headers: req.headers,
+        metadata: { role: access?.role || "none" },
+      });
+      return NextResponse.json({ error: "Forbidden: Viewer role cannot edit layout." }, { status: 403 });
     }
 
     // Replace widgets atomically for this project
@@ -97,6 +100,18 @@ async function saveLayout(req: NextRequest) {
 
       await db.insert(dashboardWidgets).values(rowsToInsert);
     }
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      organizationId: access.project.organizationId,
+      projectId,
+      action: "layout.updated",
+      resourceType: "dashboard_layout",
+      resourceId: projectId,
+      headers: req.headers,
+      metadata: { savedCount: widgets.length },
+    });
 
     return NextResponse.json({
       success: true,
@@ -131,17 +146,33 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    const [proj] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
-      .limit(1);
-
-    if (!proj) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const access = await resolveProjectAccess(projectId, user);
+    if (!access || !access.canWrite) {
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        projectId,
+        action: "layout.reset",
+        resourceType: "dashboard_layout",
+        resourceId: projectId,
+        status: "denied",
+        headers: req.headers,
+        metadata: { role: access?.role || "none" },
+      });
+      return NextResponse.json({ error: "Forbidden: Viewer role cannot edit layout." }, { status: 403 });
     }
 
     await db.delete(dashboardWidgets).where(eq(dashboardWidgets.projectId, projectId));
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      organizationId: access.project.organizationId,
+      projectId,
+      action: "layout.reset",
+      resourceType: "dashboard_layout",
+      resourceId: projectId,
+      headers: req.headers,
+    });
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("DELETE /api/v1/projects/layout error:", err);

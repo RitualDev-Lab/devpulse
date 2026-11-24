@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
 import { canUseAlertChannel } from "@/lib/billing/plans";
+import { resolveProjectAccess } from "@/lib/security/rbac";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,6 +31,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
+    const access = await resolveProjectAccess(String(projectId), user);
+    if (!access || !access.canWrite) {
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        projectId: String(projectId),
+        action: "webhooks.updated",
+        resourceType: "project",
+        resourceId: String(projectId),
+        status: "denied",
+        headers: req.headers,
+        metadata: { role: access?.role || "none" },
+      });
+      return NextResponse.json({ error: "Forbidden: Viewer role cannot configure alert webhooks." }, { status: 403 });
+    }
+
     if ((discordWebhookUrl && !canUseAlertChannel(user.storageTier, "discord")) ||
         ((telegramBotToken || telegramChatId) && !canUseAlertChannel(user.storageTier, "telegram"))) {
       return NextResponse.json(
@@ -51,7 +69,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update webhook settings strictly scoped to authenticated user's project
+    // Update webhook settings scoped by RBAC
     await db
       .update(projects)
       .set({
@@ -62,7 +80,25 @@ export async function POST(req: NextRequest) {
         genericWebhookUrl: genericWebhookUrl || null,
         pagerdutyRoutingKey: pagerdutyRoutingKey || null,
       })
-      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)));
+      .where(eq(projects.id, projectId));
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      organizationId: access.project.organizationId,
+      projectId: access.project.id,
+      action: "webhooks.updated",
+      resourceType: "project",
+      resourceId: access.project.id,
+      headers: req.headers,
+      metadata: {
+        hasDiscord: Boolean(discordWebhookUrl),
+        hasSlack: Boolean(slackWebhookUrl),
+        hasTelegram: Boolean(telegramBotToken && telegramChatId),
+        hasGeneric: Boolean(genericWebhookUrl),
+        hasPagerDuty: Boolean(pagerdutyRoutingKey),
+      },
+    });
 
     // If testPing requested, dispatch a test notification
     if (testPing) {

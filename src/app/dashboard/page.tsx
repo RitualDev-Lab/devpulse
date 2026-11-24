@@ -4,6 +4,7 @@ import { eq, desc, and, gte } from "drizzle-orm";
 import { initDb } from "@/db/setup";
 import { getCurrentUser } from "@/lib/auth";
 import { getPlanDefinition } from "@/lib/billing/plans";
+import { listAccessibleProjects } from "@/lib/security/rbac";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
@@ -50,13 +51,9 @@ export default async function DashboardPage(props: DashboardPageProps) {
   let isDemoView = false;
 
   if (user) {
-    // 3. Strict Tenant Scoping: Query projects belonging ONLY to this user
+    // 3. Strict Tenant & Org RBAC Scoping: Query owned + organization-shared projects
     try {
-      userProjects = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.userId, user.id))
-        .orderBy(desc(projects.createdAt));
+      userProjects = await listAccessibleProjects(user);
     } catch (dbErr) {
       console.error("Database query error fetching user projects:", dbErr);
       userProjects = [];
@@ -289,6 +286,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
       projects={projectSummaries}
       customDomain={user?.customDomainVerified ? user.customDomain : null}
       storageTier={user?.storageTier || "free"}
+      accessRole={(activeProject?.accessRole as "owner" | "maintainer" | "viewer") || "owner"}
       isDemo={isDemoView}
     />
   );

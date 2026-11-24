@@ -5,6 +5,9 @@ import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
 import { createPresignedUrl } from "@/lib/storage/r2";
+import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
+import { verifyTurnstileToken, getClientIp } from "@/lib/security/rate-limit";
+import { resolveProjectAccess } from "@/lib/security/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +16,7 @@ const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024; // 15 MB per crash attachment
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { apiKey, projectId, filename, contentType, sizeBytes } = body;
+    const { apiKey, projectId, projectSlug, turnstileToken, filename, contentType, sizeBytes } = body;
 
     const bytes = Number(sizeBytes || 0);
     if (!Number.isFinite(bytes) || bytes <= 0 || bytes > MAX_ATTACHMENT_BYTES) {
@@ -26,10 +29,19 @@ export async function POST(req: NextRequest) {
     let targetProject: { id: string; userId: string; name: string } | undefined;
 
     if (apiKey) {
+      const verified = await verifyTelemetryApiKey(String(apiKey));
+      if (verified) {
+        targetProject = { id: verified.id, userId: verified.userId, name: verified.name };
+      }
+    } else if (projectSlug) {
+      const turnstile = await verifyTurnstileToken(turnstileToken, getClientIp(req.headers));
+      if (!turnstile.ok) {
+        return NextResponse.json({ error: turnstile.error || "Turnstile failed" }, { status: 403 });
+      }
       const [found] = await db
         .select({ id: projects.id, userId: projects.userId, name: projects.name })
         .from(projects)
-        .where(eq(projects.telemetryApiKey, String(apiKey)))
+        .where(eq(projects.slug, String(projectSlug)))
         .limit(1);
       targetProject = found;
     } else if (projectId) {
@@ -37,14 +49,9 @@ export async function POST(req: NextRequest) {
       if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      const [found] = await db
-        .select({ id: projects.id, userId: projects.userId, name: projects.name })
-        .from(projects)
-        .where(eq(projects.id, String(projectId)))
-        .limit(1);
-
-      if (found && found.userId === user.id) {
-        targetProject = found;
+      const access = await resolveProjectAccess(String(projectId), user);
+      if (access && access.canWrite) {
+        targetProject = { id: access.project.id, userId: access.project.userId, name: access.project.name };
       }
     }
 

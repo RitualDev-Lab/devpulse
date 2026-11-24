@@ -40,6 +40,7 @@ export const users = sqliteTable("users", {
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
   userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  organizationId: text("organization_id"),
   name: text("name").notNull(),
   slug: text("slug").notNull(), // Unique per user for subdomains/paths
   description: text("description"),
@@ -203,5 +204,76 @@ export const billingEvents = sqliteTable("billing_events", {
   invoiceUrl: text("invoice_url"),
   rawPayloadJson: text("raw_payload_json"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Organizations & RBAC Team Permissions
+ * Supports Owner, Maintainer, and Viewer access control
+ */
+export const organizations = sqliteTable("organizations", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+export const organizationMembers = sqliteTable("organization_members", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+  githubUsername: text("github_username").notNull(),
+  email: text("email"),
+  role: text("role", { enum: ["owner", "maintainer", "viewer"] }).default("viewer").notNull(),
+  status: text("status", { enum: ["active", "pending"] }).default("pending").notNull(),
+  invitedByUserId: text("invited_by_user_id"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Telemetry API Keys (SHA-256 Hash Storage)
+ * Supports key generation, rotation, and instant revocation
+ */
+export const telemetryKeys = sqliteTable("telemetry_keys", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").default("Default Key").notNull(),
+  keyPrefix: text("key_prefix").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  status: text("status", { enum: ["active", "revoked"] }).default("active").notNull(),
+  createdByUserId: text("created_by_user_id"),
+  lastUsedAt: text("last_used_at"),
+  revokedAt: text("revoked_at"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Immutable Security Audit Log
+ * Records all config changes, API key operations, domains, RBAC & billing modifications
+ */
+export const auditLogs = sqliteTable("audit_logs", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  actorUsername: text("actor_username").notNull(),
+  organizationId: text("organization_id"),
+  projectId: text("project_id"),
+  action: text("action").notNull(),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id"),
+  status: text("status", { enum: ["success", "denied"] }).default("success").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  metadataJson: text("metadata_json"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Edge & Database Sliding-Window Rate Limit Counters
+ */
+export const rateLimitCounters = sqliteTable("rate_limit_counters", {
+  bucketKey: text("bucket_key").primaryKey(),
+  count: integer("count").default(0).notNull(),
+  expiresAt: integer("expires_at").notNull(),
 });
 

@@ -1,14 +1,29 @@
 "use client";
 
-import React, { useState } from "react";
-import { Send, CheckCircle2, AlertOctagon, Terminal, Paperclip, X, Loader2 } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Send, CheckCircle2, AlertOctagon, Terminal, Paperclip, X, Loader2, ShieldCheck } from "lucide-react";
 
-interface BugReportClientFormProps {
-  apiKey: string;
-  projectName: string;
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (container: HTMLElement, options: Record<string, unknown>) => string;
+      reset: (widgetId?: string) => void;
+      remove: (widgetId?: string) => void;
+    };
+  }
 }
 
-export function BugReportClientForm({ apiKey, projectName }: BugReportClientFormProps) {
+interface BugReportClientFormProps {
+  projectSlug: string;
+  projectName: string;
+  turnstileSiteKey: string;
+}
+
+export function BugReportClientForm({
+  projectSlug,
+  projectName,
+  turnstileSiteKey,
+}: BugReportClientFormProps) {
   const [errorName, setErrorName] = useState("");
   const [message, setMessage] = useState("");
   const [stackTrace, setStackTrace] = useState("");
@@ -19,9 +34,68 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string>("");
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (submitted || !turnstileSiteKey) return;
+
+    const renderWidget = () => {
+      if (!window.turnstile || !turnstileContainerRef.current) return;
+      if (widgetIdRef.current) {
+        try {
+          window.turnstile.remove(widgetIdRef.current);
+        } catch {
+          // ignore
+        }
+      }
+      widgetIdRef.current = window.turnstile.render(turnstileContainerRef.current, {
+        sitekey: turnstileSiteKey,
+        theme: "dark",
+        callback: (token: string) => setTurnstileToken(token),
+        "expired-callback": () => setTurnstileToken(""),
+        "error-callback": () => setTurnstileToken(""),
+      });
+    };
+
+    if (window.turnstile) {
+      renderWidget();
+    } else {
+      const existingScript = document.querySelector<HTMLScriptElement>(
+        'script[src*="challenges.cloudflare.com/turnstile/v0/api.js"]'
+      );
+      if (existingScript) {
+        existingScript.addEventListener("load", renderWidget);
+      } else {
+        const script = document.createElement("script");
+        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        script.async = true;
+        script.defer = true;
+        script.onload = renderWidget;
+        document.head.appendChild(script);
+      }
+    }
+
+    return () => {
+      if (widgetIdRef.current && window.turnstile) {
+        try {
+          window.turnstile.remove(widgetIdRef.current);
+        } catch {
+          // ignore
+        }
+        widgetIdRef.current = null;
+      }
+    };
+  }, [submitted, turnstileSiteKey]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!turnstileToken) {
+      setErrorMessage("Please complete the Cloudflare Turnstile verification check first.");
+      return;
+    }
+
     setSubmitting(true);
     setErrorMessage("");
 
@@ -35,7 +109,8 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            apiKey,
+            projectSlug,
+            turnstileToken,
             filename: attachmentFile.name,
             contentType: attachmentFile.type || "application/octet-stream",
             sizeBytes: attachmentFile.size,
@@ -60,23 +135,28 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
         setUploadingAttachment(false);
       }
 
-      const res = await fetch("/api/v1/event", {
+      const res = await fetch("/api/v1/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiKey,
+          projectSlug,
+          turnstileToken,
           errorName: errorName || "UserReportedBug",
           message,
           stackTrace: stackTrace || null,
           runtime,
-          environment: "production",
           reporterEmail: reporterEmail || null,
           attachmentKey,
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error("Failed to deliver report. Please try again.");
+        if (widgetIdRef.current && window.turnstile) {
+          window.turnstile.reset(widgetIdRef.current);
+          setTurnstileToken("");
+        }
+        throw new Error(data.error || "Failed to deliver report. Please try again.");
       }
 
       setSubmitted(true);
@@ -230,9 +310,23 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
         )}
       </div>
 
+      {/* Cloudflare Turnstile Bot Verification */}
+      <div className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+        <div className="flex items-center justify-between text-[11px] text-zinc-400">
+          <span className="flex items-center gap-1.5 font-medium text-zinc-300">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            Human Verification (Cloudflare Turnstile)
+          </span>
+          {turnstileToken && (
+            <span className="text-emerald-400 font-semibold">Verified</span>
+          )}
+        </div>
+        <div ref={turnstileContainerRef} className="min-h-[65px] flex items-center" />
+      </div>
+
       <button
         type="submit"
-        disabled={submitting}
+        disabled={submitting || !turnstileToken}
         className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition disabled:opacity-50"
       >
         {uploadingAttachment ? (

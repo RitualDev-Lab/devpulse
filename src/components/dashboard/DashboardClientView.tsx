@@ -9,6 +9,7 @@ import { IntegrationsModal } from "./IntegrationsModal";
 import { StorageSettingsModal } from "./StorageSettingsModal";
 import { DomainSettingsModal } from "./DomainSettingsModal";
 import { BillingModal } from "./BillingModal";
+import { SecurityModal } from "./SecurityModal";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
 import {
   normalizeThemeId,
@@ -21,6 +22,7 @@ interface DashboardClientViewProps {
   projects?: ProjectSummary[];
   customDomain?: string | null;
   storageTier: string;
+  accessRole?: "owner" | "maintainer" | "viewer";
   isDemo?: boolean;
 }
 
@@ -29,6 +31,7 @@ export function DashboardClientView({
   projects = [],
   customDomain,
   storageTier,
+  accessRole = "owner",
   isDemo = false,
 }: DashboardClientViewProps) {
   const [data] = useState<DashboardData>(initialData);
@@ -39,6 +42,7 @@ export function DashboardClientView({
   const [isStorageOpen, setIsStorageOpen] = useState(false);
   const [isDomainsOpen, setIsDomainsOpen] = useState(false);
   const [isBillingOpen, setIsBillingOpen] = useState(false);
+  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [billingSuccessBanner, setBillingSuccessBanner] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(() =>
     normalizeThemeId(initialData.project.theme)
@@ -126,6 +130,7 @@ export function DashboardClientView({
         onOpenStorage={() => setIsStorageOpen(true)}
         onOpenDomains={() => setIsDomainsOpen(true)}
         onOpenBilling={() => setIsBillingOpen(true)}
+        onOpenSecurity={() => setIsSecurityOpen(true)}
         customDomain={customDomain}
         storageTier={storageTier}
         onResetLayout={handleResetLayout}
@@ -223,6 +228,16 @@ export function DashboardClientView({
         isOpen={isBillingOpen}
         onClose={() => setIsBillingOpen(false)}
         storageTier={storageTier}
+        isDemo={isDemo}
+      />
+
+      {/* Enterprise Security: SHA-256 Keys, RBAC Orgs & Immutable Audit Log */}
+      <SecurityModal
+        isOpen={isSecurityOpen}
+        onClose={() => setIsSecurityOpen(false)}
+        projectId={data.project.id}
+        projectName={data.project.name}
+        accessRole={accessRole}
         isDemo={isDemo}
       />
 

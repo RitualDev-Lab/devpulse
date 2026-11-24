@@ -15,14 +15,13 @@ interface PageProps {
 export default async function BugReportPage({ params }: PageProps) {
   const { slug } = await params;
 
-  // Find project by slug
+  // Find project by slug (never expose private telemetryApiKey in public HTML)
   const [project] = await db
     .select({
       id: projects.id,
       name: projects.name,
       slug: projects.slug,
       description: projects.description,
-      telemetryApiKey: projects.telemetryApiKey,
     })
     .from(projects)
     .where(eq(projects.slug, slug))
@@ -31,6 +30,9 @@ export default async function BugReportPage({ params }: PageProps) {
   if (!project) {
     notFound();
   }
+
+  const turnstileSiteKey =
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "0x4AAAAAAGRcrYre1ndzSEjF";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between py-12 px-4 sm:px-6">
@@ -53,13 +55,17 @@ export default async function BugReportPage({ params }: PageProps) {
 
         {/* Client submission form */}
         <div className="bg-zinc-900/90 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
-          <BugReportClientForm apiKey={project.telemetryApiKey} projectName={project.name} />
+          <BugReportClientForm
+            projectSlug={project.slug}
+            projectName={project.name}
+            turnstileSiteKey={turnstileSiteKey}
+          />
         </div>
 
         {/* Security / Privacy notice */}
         <div className="mt-6 flex items-center justify-center gap-2 text-xs text-zinc-500">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Reports are securely delivered to DevPulse HQ telemetry</span>
+          <span>Protected by Cloudflare Turnstile &bull; Delivered securely to DevPulse HQ</span>
         </div>
       </div>
 

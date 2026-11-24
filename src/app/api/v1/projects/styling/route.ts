@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { normalizeThemeId } from "@/lib/layout/css-scoper";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
+import { resolveProjectAccess } from "@/lib/security/rbac";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -22,14 +24,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    const [proj] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
-      .limit(1);
-
-    if (!proj) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const access = await resolveProjectAccess(String(projectId), user);
+    if (!access || !access.canWrite) {
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        projectId: String(projectId),
+        action: "styling.updated",
+        resourceType: "project",
+        resourceId: String(projectId),
+        status: "denied",
+        headers: req.headers,
+        metadata: { role: access?.role || "none" },
+      });
+      return NextResponse.json({ error: "Forbidden: Viewer role cannot edit styling." }, { status: 403 });
     }
 
     const normalizedTheme = normalizeThemeId(theme);
@@ -55,7 +63,19 @@ export async function POST(req: NextRequest) {
         customCss: cleanCss,
         updatedAt: new Date().toISOString(),
       })
-      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)));
+      .where(eq(projects.id, projectId));
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      organizationId: access.project.organizationId,
+      projectId: access.project.id,
+      action: "styling.updated",
+      resourceType: "project",
+      resourceId: access.project.id,
+      headers: req.headers,
+      metadata: { theme: normalizedTheme, hasCustomCss: Boolean(cleanCss.trim()) },
+    });
 
     return NextResponse.json({
       success: true,

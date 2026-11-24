@@ -5,6 +5,8 @@ import { users, userStorageConfigs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { resolveUserStorageContext, getTierMeta, type StorageTier } from "@/lib/storage/quota";
 import { headR2Bucket } from "@/lib/storage/r2";
+import { getEffectiveEntitlements } from "@/lib/billing/plans";
+import { recordAuditEvent } from "@/lib/security/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -73,13 +75,15 @@ export async function POST(req: NextRequest) {
       testConnection,
     } = body;
 
-    // Optional tier update
-    if (storageTier && ["free", "pro", "team", "enterprise", "byos"].includes(storageTier)) {
-      const tierMeta = getTierMeta(storageTier as StorageTier);
+    const entitlements = getEffectiveEntitlements({ storageTier: user.storageTier });
+
+    // Only allow downgrade to Free self-serve; paid upgrades require Dodo Payments checkout
+    if (storageTier === "free") {
+      const tierMeta = getTierMeta("free");
       await db
         .update(users)
         .set({
-          storageTier: storageTier as StorageTier,
+          storageTier: "free",
           updatedAt: new Date().toISOString(),
         })
         .where(eq(users.id, user.id));
@@ -104,6 +108,16 @@ export async function POST(req: NextRequest) {
       provider && ["devpulse_r2", "byos_r2", "byos_s3"].includes(provider)
         ? provider
         : existing?.provider || "devpulse_r2";
+
+    if ((nextProvider === "byos_r2" || nextProvider === "byos_s3") && !entitlements.allowByos) {
+      return NextResponse.json(
+        {
+          error: "Bring Your Own Storage (BYOS R2 / S3) requires a Team / Studio ($49/mo) subscription.",
+          code: "BYOS_UPGRADE_REQUIRED",
+        },
+        { status: 402 }
+      );
+    }
 
     const nextEndpoint = endpoint !== undefined ? String(endpoint).trim() : existing?.endpoint || null;
     const nextBucket = bucketName !== undefined ? String(bucketName).trim() : existing?.bucketName || null;
@@ -153,6 +167,16 @@ export async function POST(req: NextRequest) {
       .where(eq(userStorageConfigs.userId, user.id));
 
     const updatedCtx = await resolveUserStorageContext(user.id);
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      action: "storage.config_updated",
+      resourceType: "storage_config",
+      resourceId: user.id,
+      headers: req.headers,
+      metadata: { provider: updatedCtx.provider, isByos: updatedCtx.isByos },
+    });
 
     return NextResponse.json({
       success: true,
