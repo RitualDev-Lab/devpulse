@@ -3,6 +3,15 @@ export function formatNumber(num: number | undefined | null): string {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+export function formatCurrency(amount: number | undefined | null, currency: string = "USD"): string {
+  const val = formatNumber(Math.round(amount || 0));
+  const curr = (currency || "USD").toUpperCase();
+  if (curr === "INR") return `₹${val}`;
+  if (curr === "EUR") return `€${val}`;
+  if (curr === "GBP") return `£${val}`;
+  return `$${val}`;
+}
+
 export function formatDate(dateString: string | undefined | null): string {
   if (!dateString) return "";
   try {

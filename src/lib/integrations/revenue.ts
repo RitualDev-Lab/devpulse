@@ -111,29 +111,51 @@ async function fetchStripeRevenue(apiKey: string): Promise<RevenueStats | null> 
 async function fetchDodoRevenue(apiKey: string, environment: string = "live"): Promise<RevenueStats | null> {
   try {
     const baseUrl = environment === "test" ? "https://test.dodopayments.com" : "https://live.dodopayments.com";
-    const authHeader = { Authorization: `Bearer ${apiKey}` };
+    const authHeader = { Authorization: `Bearer ${apiKey.trim()}` };
 
-    const paymentsRes = await fetch(`${baseUrl}/payments?page_size=25`, {
-      headers: authHeader,
-    });
-    const paymentsData = paymentsRes.ok ? await paymentsRes.json() : null;
+    const [paymentsRes, subsRes, custRes] = await Promise.all([
+      fetch(`${baseUrl}/payments?page_size=50`, {
+        headers: authHeader,
+        next: { revalidate: 300 },
+      }).catch(() => null),
+      fetch(`${baseUrl}/subscriptions?page_size=50`, {
+        headers: authHeader,
+        next: { revalidate: 300 },
+      }).catch(() => null),
+      fetch(`${baseUrl}/customers?page_size=50`, {
+        headers: authHeader,
+        next: { revalidate: 300 },
+      }).catch(() => null),
+    ]);
+
+    const paymentsData = paymentsRes && paymentsRes.ok ? await paymentsRes.json() : null;
+    const subsData = subsRes && subsRes.ok ? await subsRes.json() : null;
+    const custData = custRes && custRes.ok ? await custRes.json() : null;
 
     let netVolume = 0;
     const transactions: TransactionItem[] = [];
     const dateMap: Record<string, number> = {};
+    let detectedCurrency = "USD";
 
     if (paymentsData && Array.isArray(paymentsData.items)) {
       for (const p of paymentsData.items) {
         const amt = (p.total_amount || 0) / 100;
-        netVolume += amt;
+        const curr = (p.currency || "USD").toUpperCase();
+        detectedCurrency = curr;
+
+        // If succeeded, add to net volume
+        if (p.status === "succeeded") {
+          netVolume += amt;
+        }
+
         const dStr = p.created_at ? p.created_at.split("T")[0] : new Date().toISOString().split("T")[0];
         dateMap[dStr] = (dateMap[dStr] || 0) + amt;
 
         transactions.push({
           id: p.payment_id || `dodo_${Math.random().toString(36).substring(7)}`,
-          customer: p.customer?.name || p.customer?.email || "Developer Customer",
+          customer: p.customer?.name || p.customer?.email || "Customer",
           amount: amt,
-          currency: (p.currency || "USD").toUpperCase(),
+          currency: curr,
           provider: "dodo",
           status: p.status === "succeeded" ? "succeeded" : "pending",
           date: dStr,
@@ -141,20 +163,41 @@ async function fetchDodoRevenue(apiKey: string, environment: string = "live"): P
       }
     }
 
+    // Active subscriptions & MRR
+    let mrr = 0;
+    let activeSubs = 0;
+    if (subsData && Array.isArray(subsData.items)) {
+      for (const sub of subsData.items) {
+        if (sub.status === "active") {
+          activeSubs++;
+          const recurringAmt = (sub.total_amount || sub.amount || 0) / 100;
+          mrr += recurringAmt;
+        }
+      }
+    }
+
+    // Paying customers
+    let payingCustomers = 0;
+    if (custData && Array.isArray(custData.items) && custData.items.length > 0) {
+      payingCustomers = custData.items.length;
+    } else {
+      payingCustomers = new Set(transactions.map((t) => t.customer)).size;
+    }
+
     const history = Object.entries(dateMap)
       .map(([date, amount]) => ({ date, amount }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     return {
-      mrr: Math.round(netVolume * 0.4),
+      mrr: Math.round(mrr),
       totalRevenue: Math.round(netVolume),
       netVolume30Days: Math.round(netVolume),
-      payingCustomers: transactions.length,
-      activeSubscriptions: Math.round(transactions.length * 0.7),
-      currency: "USD",
+      payingCustomers,
+      activeSubscriptions: activeSubs,
+      currency: detectedCurrency,
       provider: "dodo",
       isDemo: false,
-      history: history.length > 0 ? history : generateDefaultVelocity(netVolume),
+      history: history.length > 0 ? history : [{ date: new Date().toISOString().split("T")[0], amount: 0 }],
       recentTransactions: transactions.slice(0, 5),
     };
   } catch (err) {

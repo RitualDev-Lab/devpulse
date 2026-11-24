@@ -13,7 +13,7 @@ import {
   Lock,
 } from "lucide-react";
 import type { RevenueStats } from "@/lib/integrations/revenue";
-import { formatNumber, formatDate } from "@/lib/utils/format";
+import { formatNumber, formatDate, formatCurrency } from "@/lib/utils/format";
 
 interface RevenueStatsCardProps {
   stats: RevenueStats | null;
@@ -86,27 +86,31 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                 <h3 className="font-semibold text-white text-base leading-tight">
                   Developer Revenue
                 </h3>
-                {data?.isDemo && (
+                {data?.provider === "dodo" ? (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    Dodo Payments (Live)
+                  </span>
+                ) : data?.isDemo ? (
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     Live Demo
                   </span>
-                )}
+                ) : null}
               </div>
-              <p className="text-xs text-zinc-400">MRR, Stripe & Dodo Payments</p>
+              <p className="text-xs text-zinc-400">MRR, Net Volume & Subscriptions</p>
             </div>
           </div>
           <button
             onClick={() => setIsConfigOpen(true)}
             className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition"
-            title="Connect Payment Keys"
+            title="Configure Payment Keys"
           >
             <Settings className="w-3.5 h-3.5" />
-            <span>Connect</span>
+            <span>Manage</span>
           </button>
         </div>
 
         {!data ? (
-          /* Empty / Unconnected State (100% Real, No Fake Numbers) */
+          /* Empty / Unconnected State */
           <div className="py-8 px-4 text-center rounded-xl bg-zinc-950/60 border border-zinc-800/60 flex flex-col items-center justify-center space-y-2 mb-3">
             <CreditCard className="w-8 h-8 text-emerald-400/80 mb-1" />
             <h4 className="text-sm font-semibold text-white">No Payment Provider Connected</h4>
@@ -129,7 +133,7 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                 <span className="text-[10px] text-zinc-400 block mb-0.5">Monthly (MRR)</span>
                 <div className="flex items-center gap-1">
                   <span className="text-base font-bold text-emerald-400 font-mono">
-                    ${formatNumber(data.mrr || 0)}
+                    {formatCurrency(data.mrr || 0, data.currency)}
                   </span>
                 </div>
               </div>
@@ -138,7 +142,7 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                 <span className="text-[10px] text-zinc-400 block mb-0.5">30-Day Volume</span>
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-bold text-white font-mono">
-                    ${formatNumber(data.netVolume30Days || 0)}
+                    {formatCurrency(data.netVolume30Days || 0, data.currency)}
                   </span>
                 </div>
               </div>
@@ -170,7 +174,7 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                 <span className="flex items-center gap-1 text-zinc-300">
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> 30-Day Inflow Velocity
                 </span>
-                <span className="font-mono">Peak: ${formatNumber(maxAmount)}</span>
+                <span className="font-mono">Peak: {formatCurrency(maxAmount, data.currency)}</span>
               </div>
 
               <div className="w-full h-16 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">
@@ -211,35 +215,45 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
               <div className="space-y-1.5 pt-2 border-t border-zinc-800/60">
                 <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-zinc-400 px-1">
                   <span>Recent Payments</span>
-                  <span>Platform</span>
+                  <span>Status / Platform</span>
                 </div>
-                {data.recentTransactions.slice(0, 3).map((tx) => (
+                {data.recentTransactions.slice(0, 4).map((tx) => (
                   <div
                     key={tx.id}
                     className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/50 border border-zinc-800/60 text-xs"
                   >
                     <div className="flex items-center gap-2 truncate pr-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          tx.status === "succeeded" ? "bg-emerald-400" : "bg-amber-400"
+                        }`}
+                      ></span>
                       <span className="text-zinc-200 truncate font-medium">{tx.customer}</span>
+                      <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline">
+                        {tx.date}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="font-mono font-bold text-emerald-400">
-                        +${formatNumber(tx.amount)}
+                        +{formatCurrency(tx.amount, tx.currency)}
                       </span>
                       <span
                         className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${
                           tx.provider === "dodo"
                             ? "bg-purple-900/60 text-purple-300 border border-purple-700/60"
-                            : tx.provider === "stripe"
-                            ? "bg-blue-900/60 text-blue-300 border border-blue-700/60"
-                            : "bg-pink-900/60 text-pink-300 border border-pink-700/60"
+                            : "bg-blue-900/60 text-blue-300 border border-blue-700/60"
                         }`}
                       >
-                        {tx.provider === "dodo"
-                          ? "Dodo"
-                          : tx.provider === "stripe"
-                          ? "Stripe"
-                          : "Sponsor"}
+                        {tx.provider === "dodo" ? "Dodo" : "Stripe"}
+                      </span>
+                      <span
+                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                          tx.status === "succeeded"
+                            ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                            : "bg-amber-950 text-amber-400 border border-amber-800"
+                        }`}
+                      >
+                        {tx.status}
                       </span>
                     </div>
                   </div>
