@@ -6,17 +6,22 @@ import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
 import { IntegrationsModal } from "./IntegrationsModal";
+import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
 
 interface DashboardClientViewProps {
   initialData: DashboardData;
+  projects?: ProjectSummary[];
   customDomain?: string | null;
   storageTier: string;
+  isDemo?: boolean;
 }
 
 export function DashboardClientView({
   initialData,
+  projects = [],
   customDomain,
   storageTier,
+  isDemo = false,
 }: DashboardClientViewProps) {
   const [data, setData] = useState<DashboardData>(initialData);
   const [isCustomizing, setIsCustomizing] = useState(false);
@@ -35,6 +40,17 @@ export function DashboardClientView({
     }
   };
 
+  const currentProjectSummary: ProjectSummary = {
+    id: data.project.id,
+    name: data.project.name,
+    slug: data.project.slug,
+    githubRepo: data.project.githubRepo,
+    npmPackage: data.project.npmPackage,
+    pypiPackage: data.project.pypiPackage,
+    rustCrate: data.project.rustCrate,
+    telemetryApiKey: data.project.telemetryApiKey,
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-indigo-500/30 selection:text-white">
       {/* Dynamic Custom CSS injection */}
@@ -42,8 +58,8 @@ export function DashboardClientView({
 
       {/* Top Navbar */}
       <DashboardHeader
-        projectName={data.project.name}
-        repoName={data.project.githubRepo || undefined}
+        currentProject={currentProjectSummary}
+        projects={projects.length > 0 ? projects : [currentProjectSummary]}
         isCustomizing={isCustomizing}
         onToggleCustomizing={() => setIsCustomizing((prev) => !prev)}
         onOpenStyling={() => setIsStylingOpen(true)}
@@ -52,6 +68,7 @@ export function DashboardClientView({
         customDomain={customDomain}
         storageTier={storageTier}
         onResetLayout={handleResetLayout}
+        isDemo={isDemo}
       />
 
       {/* Main Content Area */}
@@ -130,6 +147,7 @@ export function DashboardClientView({
         initialNpm={data.project.npmPackage}
         initialPypi={data.project.pypiPackage}
         initialRustCrate={data.project.rustCrate}
+        initialGoModule={data.project.goModule}
         initialVsCode={data.project.vscodeExtension}
         initialMcp={data.project.mcpServerName}
       />

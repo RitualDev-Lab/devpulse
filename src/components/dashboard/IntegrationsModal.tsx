@@ -11,6 +11,7 @@ interface IntegrationsModalProps {
   initialNpm?: string | null;
   initialPypi?: string | null;
   initialRustCrate?: string | null;
+  initialGoModule?: string | null;
   initialVsCode?: string | null;
   initialMcp?: string | null;
 }
@@ -23,6 +24,7 @@ export function IntegrationsModal({
   initialNpm = "",
   initialPypi = "",
   initialRustCrate = "",
+  initialGoModule = "",
   initialVsCode = "",
   initialMcp = "",
 }: IntegrationsModalProps) {
@@ -30,6 +32,7 @@ export function IntegrationsModal({
   const [npm, setNpm] = useState(initialNpm || "");
   const [pypi, setPypi] = useState(initialPypi || "");
   const [rustCrate, setRustCrate] = useState(initialRustCrate || "");
+  const [goModule, setGoModule] = useState(initialGoModule || "");
   const [vscode, setVsCode] = useState(initialVsCode || "");
   const [mcp, setMcp] = useState(initialMcp || "");
 
@@ -51,6 +54,7 @@ export function IntegrationsModal({
           npmPackage: npm,
           pypiPackage: pypi,
           rustCrate: rustCrate,
+          goModule: goModule,
           vscodeExtension: vscode,
           mcpServerName: mcp,
         }),
@@ -160,6 +164,21 @@ export function IntegrationsModal({
               placeholder="e.g. tokio, serde, or your crate"
               value={rustCrate}
               onChange={(e) => setRustCrate(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+            />
+          </div>
+
+          {/* Go Module */}
+          <div className="space-y-1.5">
+            <label className="font-semibold text-zinc-200 flex items-center gap-1.5">
+              <Box className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Go Module Path (optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. charm.land/bubbletea or github.com/user/repo"
+              value={goModule}
+              onChange={(e) => setGoModule(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 font-mono text-xs"
             />
           </div>

@@ -21,11 +21,13 @@ export interface ErrorEventItem {
 interface ErrorStreamCardProps {
   initialErrors: ErrorEventItem[];
   projectId: string;
+  telemetryApiKey?: string;
 }
 
-export function ErrorStreamCard({ initialErrors, projectId }: ErrorStreamCardProps) {
+export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: ErrorStreamCardProps) {
   const [errors, setErrors] = useState<ErrorEventItem[]>(initialErrors);
   const [selectedError, setSelectedError] = useState<ErrorEventItem | null>(null);
+  const [copiedBeacon, setCopiedBeacon] = useState(false);
 
   const unresolvedCount = errors.filter((e) => e.status === "unresolved").length;
 
@@ -34,6 +36,16 @@ export function ErrorStreamCard({ initialErrors, projectId }: ErrorStreamCardPro
     setErrors((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: "resolved" } : item))
     );
+  };
+
+  const testBeaconCommand = `curl -X POST https://devpulse.ritualdev.in/api/v1/event -H "Content-Type: application/json" -d '{"api_key":"${telemetryApiKey || "YOUR_KEY"}","error_name":"FirstTestError","message":"Verifying DevPulse crash telemetry ingest"}'`;
+
+  const copyTestBeacon = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(testBeaconCommand);
+      setCopiedBeacon(true);
+      setTimeout(() => setCopiedBeacon(false), 2000);
+    }
   };
 
   return (
@@ -66,12 +78,22 @@ export function ErrorStreamCard({ initialErrors, projectId }: ErrorStreamCardPro
 
         {/* Error Items List */}
         {errors.length === 0 ? (
-          <div className="py-8 text-center text-zinc-500 flex flex-col items-center">
-            <CheckCircle2 className="w-8 h-8 text-emerald-500/80 mb-2" />
-            <p className="text-sm font-medium text-zinc-300">Zero Crash Reports Recorded</p>
-            <p className="text-xs text-zinc-500 mt-1 max-w-xs">
-              Install the zero-dependency DevPulse snippet in your package to start capturing live runtime errors.
+          <div className="py-6 px-4 text-center rounded-xl bg-zinc-950/60 border border-zinc-800/60 flex flex-col items-center">
+            <CheckCircle2 className="w-7 h-7 text-emerald-400 mb-2" />
+            <p className="text-sm font-semibold text-white">Zero Crashes Recorded</p>
+            <p className="text-xs text-zinc-400 mt-1 max-w-sm">
+              Your runtime telemetry is active and waiting for crash events. Test sending your first crash beacon:
             </p>
+            <div className="w-full mt-3 flex items-center justify-between gap-2 p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-300">
+              <span className="truncate text-left text-zinc-400 select-all">{testBeaconCommand}</span>
+              <button
+                type="button"
+                onClick={copyTestBeacon}
+                className="shrink-0 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition"
+              >
+                {copiedBeacon ? "Copied!" : "Copy"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="space-y-2.5 max-h-[310px] overflow-y-auto pr-1">

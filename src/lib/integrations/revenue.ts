@@ -96,7 +96,7 @@ async function fetchStripeRevenue(apiKey: string): Promise<RevenueStats | null> 
       currency: "USD",
       provider: "stripe",
       isDemo: false,
-      history: history.length > 0 ? history : generateDefaultVelocity(mrr),
+      history: history.length > 0 ? history : [{ date: new Date().toISOString().split("T")[0], amount: 0 }],
       recentTransactions: recentTransactions.slice(0, 5),
     };
   } catch (err) {
@@ -207,94 +207,9 @@ async function fetchDodoRevenue(apiKey: string, environment: string = "live"): P
 }
 
 /**
- * Generate 30-day velocity sparkline data points
- */
-function generateDefaultVelocity(baseAmount: number): Array<{ date: string; amount: number }> {
-  const points: Array<{ date: string; amount: number }> = [];
-  const now = new Date();
-  const dailyAvg = Math.max(20, Math.round(baseAmount / 30));
-
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    // Smooth deterministic wave with weekend variance
-    const variance = ((i * 17) % 35) - 15;
-    const amt = Math.max(10, dailyAvg + variance);
-    points.push({
-      date: d.toISOString().split("T")[0],
-      amount: amt,
-    });
-  }
-  return points;
-}
-
-/**
- * Fallback intelligent developer demo data for live preview
- */
-export function getDemoRevenueStats(): RevenueStats {
-  return {
-    mrr: 2840,
-    totalRevenue: 24650,
-    netVolume30Days: 3410,
-    payingCustomers: 142,
-    activeSubscriptions: 96,
-    currency: "USD",
-    provider: "hybrid",
-    isDemo: true,
-    history: generateDefaultVelocity(3410),
-    recentTransactions: [
-      {
-        id: "tx_dodo_981a2f",
-        customer: "alex.dev@acme.ai",
-        amount: 49,
-        currency: "USD",
-        provider: "dodo",
-        status: "succeeded",
-        date: "2026-11-24",
-      },
-      {
-        id: "ch_3Pz7dF2eZv",
-        customer: "sarah_m@cloudscale.io",
-        amount: 120,
-        currency: "USD",
-        provider: "stripe",
-        status: "succeeded",
-        date: "2026-11-23",
-      },
-      {
-        id: "tx_dodo_714c0b",
-        customer: "enterprise@fintech.sh",
-        amount: 299,
-        currency: "USD",
-        provider: "dodo",
-        status: "succeeded",
-        date: "2026-11-23",
-      },
-      {
-        id: "sp_gh_881902",
-        customer: "chen-code (GitHub Sponsor)",
-        amount: 25,
-        currency: "USD",
-        provider: "sponsors",
-        status: "succeeded",
-        date: "2026-11-22",
-      },
-      {
-        id: "ch_3Py1aM9eZv",
-        customer: "ops-lead@datarouter.net",
-        amount: 79,
-        currency: "USD",
-        provider: "stripe",
-        status: "succeeded",
-        date: "2026-11-21",
-      },
-    ],
-  };
-}
-
-/**
  * Universal Revenue Fetcher
  * Returns real revenue stats if configured, otherwise returns null.
+ * Pure 100% genuine data - zero mock fallbacks.
  */
 export async function fetchRevenueStats(config?: {
   stripeKey?: string | null;

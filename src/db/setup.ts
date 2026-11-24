@@ -53,6 +53,7 @@ export async function initDb() {
     "ALTER TABLE projects ADD COLUMN dodo_payments_environment TEXT DEFAULT 'live';",
     "ALTER TABLE projects ADD COLUMN github_sponsors_username TEXT;",
     "ALTER TABLE projects ADD COLUMN rust_crate TEXT;",
+    "ALTER TABLE projects ADD COLUMN go_module TEXT;",
   ];
 
   for (const query of optionalColumns) {

@@ -46,6 +46,7 @@ export interface DashboardData {
     npmPackage?: string | null;
     pypiPackage?: string | null;
     rustCrate?: string | null;
+    goModule?: string | null;
     vscodeExtension?: string | null;
     mcpServerName?: string | null;
     telemetryApiKey: string;
@@ -236,6 +237,7 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
           <ErrorStreamCard
             initialErrors={data.errors}
             projectId={data.project.id}
+            telemetryApiKey={data.project.telemetryApiKey}
           />
         );
       case "telemetry_setup":

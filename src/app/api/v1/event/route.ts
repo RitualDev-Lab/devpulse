@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Extract API key either from Authorization header or body
-    const apiKey = authHeader?.replace(/^Bearer\s+/i, "") || body.apiKey || body.key;
+    const apiKey = authHeader?.replace(/^Bearer\s+/i, "") || body.apiKey || body.key || body.api_key;
     if (!apiKey) {
       return NextResponse.json({ error: "Missing telemetry apiKey" }, { status: 401 });
     }
