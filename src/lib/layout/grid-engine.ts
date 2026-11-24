@@ -101,7 +101,8 @@ export function resolveCollisionAndReflow(
   const target = items.find((i) => i.id === targetId);
   if (!target) return items;
 
-  const w = Math.min(Math.max(2, nextRect.w ?? target.w), cols);
+  const minW = cols >= 12 ? 3 : 2;
+  const w = Math.min(Math.max(minW, nextRect.w ?? target.w), cols);
   const h = Math.min(Math.max(1, nextRect.h ?? target.h), 4);
   const x = Math.min(Math.max(0, nextRect.x ?? target.x), cols - w);
   const y = Math.max(0, nextRect.y ?? target.y);

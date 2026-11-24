@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { projects, dashboardWidgets } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import crypto from "crypto";
+import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 
 export async function POST(request: Request) {
   try {
@@ -91,35 +92,36 @@ export async function POST(request: Request) {
       theme: "dark",
     });
 
-    // 5. Seed initial widgets for drag-and-drop grid
-    const initialWidgets = [
-      { type: "github_stats", title: "GitHub Repository" },
-      ...(scanned.detectedEcosystems.npmPackage ? [{ type: "npm_downloads", title: "npm Registry" }] : []),
-      ...(scanned.detectedEcosystems.pypiPackage ? [{ type: "pypi_downloads", title: "PyPI Package" }] : []),
-      ...(scanned.detectedEcosystems.rustCrate ? [{ type: "rust_crates", title: "Rust Crates.io" }] : []),
-      ...(scanned.detectedEcosystems.dockerImage ? [{ type: "docker_container", title: "Docker Hub Container" }] : []),
-      ...(scanned.detectedEcosystems.vscodeExtension ? [{ type: "vscode_installs", title: "VS Code Extension" }] : []),
-      ...(scanned.detectedEcosystems.mcpServerName ? [{ type: "mcp_servers", title: "MCP Server Registry" }] : []),
-      { type: "error_stream", title: "Crash & Error Stream" },
-      { type: "web_analytics", title: "Cookie-Free Web Traffic" },
-      { type: "revenue_stats", title: "Developer Revenue" },
-      { type: "telemetry_setup", title: "SDK Integration" },
-      { type: "bug_report_badge", title: "Public Bug Portal" },
+    // 5. Seed initial 2D 12-column widgets for drag-and-drop grid
+    const initialDefs = [
+      { id: "github_stats", title: "GitHub Repository", defaultW: 4, defaultH: 1 },
+      ...(scanned.detectedEcosystems.npmPackage ? [{ id: "npm_downloads", title: "npm Registry", defaultW: 4, defaultH: 1 }] : []),
+      ...(scanned.detectedEcosystems.pypiPackage ? [{ id: "pypi_downloads", title: "PyPI Package", defaultW: 4, defaultH: 1 }] : []),
+      ...(scanned.detectedEcosystems.rustCrate ? [{ id: "rust_crates", title: "Rust Crates.io", defaultW: 4, defaultH: 1 }] : []),
+      ...(scanned.detectedEcosystems.dockerImage ? [{ id: "docker_container", title: "Docker Hub Container", defaultW: 4, defaultH: 1 }] : []),
+      ...(scanned.detectedEcosystems.vscodeExtension ? [{ id: "vscode_stats", title: "VS Code Extension", defaultW: 4, defaultH: 1 }] : []),
+      ...(scanned.detectedEcosystems.mcpServerName ? [{ id: "mcp_servers", title: "MCP Server Registry", defaultW: 4, defaultH: 1 }] : []),
+      { id: "web_analytics", title: "Cookie-Free Web Traffic", defaultW: 4, defaultH: 1 },
+      { id: "error_stream", title: "Crash & Error Stream", defaultW: 8, defaultH: 1 },
+      { id: "telemetry_setup", title: "SDK Integration", defaultW: 4, defaultH: 1 },
+      { id: "bug_report_badge", title: "Public Bug Portal", defaultW: 4, defaultH: 1 },
     ];
 
-    for (let i = 0; i < initialWidgets.length; i++) {
-      const w = initialWidgets[i];
-      await db.insert(dashboardWidgets).values({
-        id: `wdg_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
-        projectId,
-        widgetType: w.type,
-        title: w.title,
-        positionX: (i % 3) * 4,
-        positionY: Math.floor(i / 3) * 2,
-        width: 1,
-        height: 1,
-        isVisible: true,
-      });
+    const layoutItems = buildDefaultLayout(initialDefs);
+    if (layoutItems.length > 0) {
+      await db.insert(dashboardWidgets).values(
+        layoutItems.map((w) => ({
+          id: `w_${projectId}_${w.id}`.slice(0, 128),
+          projectId,
+          widgetType: w.id,
+          title: w.title,
+          positionX: w.x,
+          positionY: w.y,
+          width: w.w,
+          height: w.h,
+          isVisible: w.isVisible,
+        }))
+      );
     }
 
     const created = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);

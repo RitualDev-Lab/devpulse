@@ -133,7 +133,9 @@ export function DragDropGrid({ data, isCustomizing, isDemo = false }: DragDropGr
   // Build canonical 12-col layout merging saved DB layout with available ecosystem widgets
   const computeInitialLayout = (): GridWidgetItem[] => {
     const dbRows = data.initialLayout || [];
-    if (dbRows.length > 0) {
+    // Ignore pre-Phase-4 legacy 4-col rows (width < 3) so cards never render squished in 12-col matrix
+    const hasValid2DLayout = dbRows.length > 0 && dbRows.every((r) => r.w >= 3);
+    if (hasValid2DLayout) {
       const merged: GridWidgetItem[] = [];
       for (const def of availableDefs) {
         const saved = dbRows.find((r) => r.id === def.id);
@@ -143,8 +145,8 @@ export function DragDropGrid({ data, isCustomizing, isDemo = false }: DragDropGr
             title: def.title,
             x: saved.x,
             y: saved.y,
-            w: saved.w,
-            h: saved.h,
+            w: Math.max(3, saved.w),
+            h: Math.max(1, saved.h),
             isVisible: saved.isVisible,
           });
         } else {
