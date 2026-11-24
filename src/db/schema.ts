@@ -33,6 +33,7 @@ export const projects = sqliteTable("projects", {
   githubRepo: text("github_repo"), // e.g. "ritualdev-lab/my-project"
   npmPackage: text("npm_package"), // e.g. "@ritualdev/pulse"
   pypiPackage: text("pypi_package"), // e.g. "ritualdev-pulse"
+  rustCrate: text("rust_crate"), // e.g. "tokio" or "devpulse"
   vscodeExtension: text("vscode_extension"), // e.g. "ritualdev.pulse-tools"
   mcpServerName: text("mcp_server_name"), // e.g. "ritualdev/devpulse-mcp"
   dockerImage: text("docker_image"), // e.g. "ritualdev/devpulse"

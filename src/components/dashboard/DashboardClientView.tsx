@@ -5,6 +5,7 @@ import { DashboardHeader } from "./DashboardHeader";
 import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
+import { IntegrationsModal } from "./IntegrationsModal";
 
 interface DashboardClientViewProps {
   initialData: DashboardData;
@@ -21,6 +22,7 @@ export function DashboardClientView({
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isStylingOpen, setIsStylingOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
+  const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [currentTheme, setCurrentTheme] = useState("dark");
   const [customCss, setCustomCss] = useState("");
 
@@ -46,6 +48,7 @@ export function DashboardClientView({
         onToggleCustomizing={() => setIsCustomizing((prev) => !prev)}
         onOpenStyling={() => setIsStylingOpen(true)}
         onOpenAlerts={() => setIsAlertsOpen(true)}
+        onOpenIntegrations={() => setIsIntegrationsOpen(true)}
         customDomain={customDomain}
         storageTier={storageTier}
         onResetLayout={handleResetLayout}
@@ -116,6 +119,19 @@ export function DashboardClientView({
         initialSlack={data.project.slackWebhookUrl}
         initialTelegramToken={data.project.telegramBotToken}
         initialTelegramChatId={data.project.telegramChatId}
+      />
+
+      {/* Package Ecosystems & Connect Data Modal */}
+      <IntegrationsModal
+        isOpen={isIntegrationsOpen}
+        onClose={() => setIsIntegrationsOpen(false)}
+        projectId={data.project.id}
+        initialGithub={data.project.githubRepo}
+        initialNpm={data.project.npmPackage}
+        initialPypi={data.project.pypiPackage}
+        initialRustCrate={data.project.rustCrate}
+        initialVsCode={data.project.vscodeExtension}
+        initialMcp={data.project.mcpServerName}
       />
     </div>
   );

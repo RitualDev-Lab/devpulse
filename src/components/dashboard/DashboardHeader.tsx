@@ -9,6 +9,7 @@ import {
   HardDrive,
   RefreshCw,
   Bell,
+  Plug,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 
@@ -19,6 +20,7 @@ interface DashboardHeaderProps {
   onToggleCustomizing: () => void;
   onOpenStyling: () => void;
   onOpenAlerts: () => void;
+  onOpenIntegrations: () => void;
   customDomain?: string | null;
   storageTier: string;
   onResetLayout: () => void;
@@ -31,6 +33,7 @@ export function DashboardHeader({
   onToggleCustomizing,
   onOpenStyling,
   onOpenAlerts,
+  onOpenIntegrations,
   customDomain,
   storageTier,
   onResetLayout,
@@ -82,6 +85,15 @@ export function DashboardHeader({
           </div>
 
           {/* Action Buttons */}
+          <button
+            onClick={onOpenIntegrations}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"
+            title="Connect or disconnect package tabs (npm, PyPI, Rust, VS Code)"
+          >
+            <Plug className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Connect Data</span>
+          </button>
+
           <button
             onClick={onOpenAlerts}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"

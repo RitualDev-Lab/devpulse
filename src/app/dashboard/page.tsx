@@ -6,6 +6,7 @@ import { seedDemoData } from "@/db/seed";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
+import { fetchRustCrateStats } from "@/lib/integrations/crates";
 import { fetchVsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats } from "@/lib/integrations/mcp";
 import { fetchRevenueStats } from "@/lib/integrations/revenue";
@@ -39,13 +40,14 @@ export default async function DashboardPage() {
     project = {
       id: "prj_ritual_core",
       userId: "usr_ritualdev_demo",
-      name: "Ritual Core CLI",
-      slug: "ritual-core",
+      name: "RitualDev Pulse",
+      slug: "devpulse",
       description: "Unified developer toolkit & telemetry system for modern workflows.",
-      githubRepo: "ritualdev-lab/ritual-core",
-      npmPackage: "ritual-core",
-      pypiPackage: "ritual-core",
-      vscodeExtension: "ritualdev.ritual-vscode",
+      githubRepo: "ritualdev-lab/devpulse",
+      npmPackage: "@ritualdev/pulse",
+      pypiPackage: null,
+      rustCrate: null,
+      vscodeExtension: null,
       mcpServerName: null,
       dockerImage: null,
       telemetryApiKey: "dp_live_8f93e1b74a9c82",
@@ -59,7 +61,7 @@ export default async function DashboardPage() {
       stripeApiKey: null,
       dodoPaymentsApiKey: null,
       dodoPaymentsEnvironment: "live",
-      githubSponsorsUsername: "RitualDev-Lab",
+      githubSponsorsUsername: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -83,10 +85,11 @@ export default async function DashboardPage() {
   }
 
   // Fetch live registry metrics & revenue data in parallel
-  const [githubStats, npmStats, pypiStats, vscodeStats, mcpStats, revenueStats, rawErrors] = await Promise.all([
+  const [githubStats, npmStats, pypiStats, rustStats, vscodeStats, mcpStats, revenueStats, rawErrors] = await Promise.all([
     project.githubRepo ? fetchGitHubRepoStats(project.githubRepo).catch(() => null) : Promise.resolve(null),
     project.npmPackage ? fetchNpmStats(project.npmPackage).catch(() => null) : Promise.resolve(null),
     project.pypiPackage ? fetchPyPiStats(project.pypiPackage).catch(() => null) : Promise.resolve(null),
+    project.rustCrate ? fetchRustCrateStats(project.rustCrate).catch(() => null) : Promise.resolve(null),
     project.vscodeExtension ? fetchVsCodeStats(project.vscodeExtension).catch(() => null) : Promise.resolve(null),
     project.mcpServerName ? fetchMcpStats(project.mcpServerName).catch(() => null) : Promise.resolve(null),
     fetchRevenueStats({
@@ -118,7 +121,7 @@ export default async function DashboardPage() {
     createdAt: err.createdAt,
   }));
 
-  // Fetch pageviews analytics
+  // Fetch pageviews analytics (100% REAL data, no fake fallbacks)
   let rawPageviews: any[] = [];
   try {
     rawPageviews = await db
@@ -142,36 +145,17 @@ export default async function DashboardPage() {
     else desktopCount++;
   }
 
-  const analyticsSummary =
-    rawPageviews.length > 0
-      ? {
-          totalPageviews: rawPageviews.length,
-          uniqueReferrers: Object.keys(refMap).length,
-          topReferrers: Object.entries(refMap)
-            .map(([referrer, count]) => ({ referrer, count }))
-            .sort((a, b) => b.count - a.count),
-          topCountries: Object.entries(countryMap)
-            .map(([country, count]) => ({ country, count }))
-            .sort((a, b) => b.count - a.count),
-          devices: { desktop: desktopCount, mobile: mobileCount },
-        }
-      : {
-          totalPageviews: 3480,
-          uniqueReferrers: 14,
-          topReferrers: [
-            { referrer: "github.com", count: 1420 },
-            { referrer: "news.ycombinator.com", count: 980 },
-            { referrer: "reddit.com", count: 640 },
-            { referrer: "x.com", count: 440 },
-          ],
-          topCountries: [
-            { country: "US", count: 1350 },
-            { country: "IN", count: 820 },
-            { country: "DE", count: 540 },
-            { country: "GB", count: 390 },
-          ],
-          devices: { desktop: 2780, mobile: 700 },
-        };
+  const analyticsSummary = {
+    totalPageviews: rawPageviews.length,
+    uniqueReferrers: Object.keys(refMap).length,
+    topReferrers: Object.entries(refMap)
+      .map(([referrer, count]) => ({ referrer, count }))
+      .sort((a, b) => b.count - a.count),
+    topCountries: Object.entries(countryMap)
+      .map(([country, count]) => ({ country, count }))
+      .sort((a, b) => b.count - a.count),
+    devices: { desktop: desktopCount, mobile: mobileCount },
+  };
 
   const initialData = {
     project: {
@@ -181,6 +165,7 @@ export default async function DashboardPage() {
       githubRepo: project.githubRepo,
       npmPackage: project.npmPackage,
       pypiPackage: project.pypiPackage,
+      rustCrate: project.rustCrate,
       vscodeExtension: project.vscodeExtension,
       mcpServerName: project.mcpServerName,
       telemetryApiKey: project.telemetryApiKey,
@@ -188,10 +173,13 @@ export default async function DashboardPage() {
       slackWebhookUrl: project.slackWebhookUrl,
       telegramBotToken: project.telegramBotToken,
       telegramChatId: project.telegramChatId,
+      stripeApiKey: project.stripeApiKey,
+      dodoPaymentsApiKey: project.dodoPaymentsApiKey,
     },
     githubStats,
     npmStats,
     pypiStats,
+    rustStats,
     vscodeStats,
     mcpStats,
     revenueStats,

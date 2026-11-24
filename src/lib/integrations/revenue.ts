@@ -251,13 +251,14 @@ export function getDemoRevenueStats(): RevenueStats {
 
 /**
  * Universal Revenue Fetcher
+ * Returns real revenue stats if configured, otherwise returns null.
  */
 export async function fetchRevenueStats(config?: {
   stripeKey?: string | null;
   dodoKey?: string | null;
   dodoEnv?: string | null;
   githubSponsorsUsername?: string | null;
-}): Promise<RevenueStats> {
+}): Promise<RevenueStats | null> {
   if (config?.stripeKey) {
     const stripeStats = await fetchStripeRevenue(config.stripeKey);
     if (stripeStats) return stripeStats;
@@ -268,5 +269,6 @@ export async function fetchRevenueStats(config?: {
     if (dodoStats) return dodoStats;
   }
 
-  return getDemoRevenueStats();
+  // Return null when no active payment provider is connected
+  return null;
 }

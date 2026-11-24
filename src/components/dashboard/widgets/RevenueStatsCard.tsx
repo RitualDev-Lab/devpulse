@@ -105,128 +105,148 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
           </button>
         </div>
 
-        {/* 4 Metric Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3.5">
-          <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-            <span className="text-[10px] text-zinc-400 block mb-0.5">Monthly (MRR)</span>
-            <div className="flex items-center gap-1">
-              <span className="text-base font-bold text-emerald-400 font-mono">
-                ${formatNumber(data?.mrr || 0)}
-              </span>
-            </div>
-          </div>
-
-          <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-            <span className="text-[10px] text-zinc-400 block mb-0.5">30-Day Volume</span>
-            <div className="flex items-center gap-1">
-              <span className="text-sm font-bold text-white font-mono">
-                ${formatNumber(data?.netVolume30Days || 0)}
-              </span>
-            </div>
-          </div>
-
-          <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-            <span className="text-[10px] text-zinc-400 block mb-0.5">Active Subs</span>
-            <div className="flex items-center gap-1 text-zinc-200">
-              <Repeat className="w-3 h-3 text-emerald-400" />
-              <span className="text-sm font-bold font-mono">
-                {formatNumber(data?.activeSubscriptions || 0)}
-              </span>
-            </div>
-          </div>
-
-          <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-            <span className="text-[10px] text-zinc-400 block mb-0.5">Customers</span>
-            <div className="flex items-center gap-1 text-zinc-200">
-              <Users className="w-3 h-3 text-cyan-400" />
-              <span className="text-sm font-bold font-mono">
-                {formatNumber(data?.payingCustomers || 0)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 30-Day Velocity Chart */}
-        <div className="mt-2 mb-3">
-          <div className="flex items-center justify-between text-[11px] text-zinc-400 mb-1.5">
-            <span className="flex items-center gap-1 text-zinc-300">
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> 30-Day Inflow Velocity
-            </span>
-            <span className="font-mono">Peak: ${formatNumber(maxAmount)}</span>
-          </div>
-
-          <div className="w-full h-16 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">
-            <svg
-              viewBox={`0 0 ${width} ${height}`}
-              className="w-full h-full overflow-visible"
-              preserveAspectRatio="none"
+        {!data ? (
+          /* Empty / Unconnected State (100% Real, No Fake Numbers) */
+          <div className="py-8 px-4 text-center rounded-xl bg-zinc-950/60 border border-zinc-800/60 flex flex-col items-center justify-center space-y-2 mb-3">
+            <CreditCard className="w-8 h-8 text-emerald-400/80 mb-1" />
+            <h4 className="text-sm font-semibold text-white">No Payment Provider Connected</h4>
+            <p className="text-xs text-zinc-400 max-w-sm">
+              Track your project&apos;s real MRR, 30-day volume, and subscribers by connecting a read-only Stripe or Dodo Payments key.
+            </p>
+            <button
+              onClick={() => setIsConfigOpen(true)}
+              className="mt-2 inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition shadow-sm"
             >
-              <defs>
-                <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-
-              {points && (
-                <>
-                  <polygon
-                    points={`0,${height} ${points} ${width},${height}`}
-                    fill="url(#revenueGradient)"
-                  />
-                  <polyline
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points={points}
-                  />
-                </>
-              )}
-            </svg>
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Connect Payments</span>
+            </button>
           </div>
-        </div>
-
-        {/* Recent Transactions */}
-        {data?.recentTransactions && data.recentTransactions.length > 0 && (
-          <div className="space-y-1.5 pt-2 border-t border-zinc-800/60">
-            <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-zinc-400 px-1">
-              <span>Recent Payments</span>
-              <span>Platform</span>
-            </div>
-            {data.recentTransactions.slice(0, 3).map((tx) => (
-              <div
-                key={tx.id}
-                className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/50 border border-zinc-800/60 text-xs"
-              >
-                <div className="flex items-center gap-2 truncate pr-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
-                  <span className="text-zinc-200 truncate font-medium">{tx.customer}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-mono font-bold text-emerald-400">
-                    +${formatNumber(tx.amount)}
-                  </span>
-                  <span
-                    className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${
-                      tx.provider === "dodo"
-                        ? "bg-purple-900/60 text-purple-300 border border-purple-700/60"
-                        : tx.provider === "stripe"
-                        ? "bg-blue-900/60 text-blue-300 border border-blue-700/60"
-                        : "bg-pink-900/60 text-pink-300 border border-pink-700/60"
-                    }`}
-                  >
-                    {tx.provider === "dodo"
-                      ? "Dodo"
-                      : tx.provider === "stripe"
-                      ? "Stripe"
-                      : "Sponsor"}
+        ) : (
+          <>
+            {/* 4 Metric Counters */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3.5">
+              <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
+                <span className="text-[10px] text-zinc-400 block mb-0.5">Monthly (MRR)</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-base font-bold text-emerald-400 font-mono">
+                    ${formatNumber(data.mrr || 0)}
                   </span>
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
+                <span className="text-[10px] text-zinc-400 block mb-0.5">30-Day Volume</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-bold text-white font-mono">
+                    ${formatNumber(data.netVolume30Days || 0)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
+                <span className="text-[10px] text-zinc-400 block mb-0.5">Active Subs</span>
+                <div className="flex items-center gap-1 text-zinc-200">
+                  <Repeat className="w-3 h-3 text-emerald-400" />
+                  <span className="text-sm font-bold font-mono">
+                    {formatNumber(data.activeSubscriptions || 0)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
+                <span className="text-[10px] text-zinc-400 block mb-0.5">Customers</span>
+                <div className="flex items-center gap-1 text-zinc-200">
+                  <Users className="w-3 h-3 text-cyan-400" />
+                  <span className="text-sm font-bold font-mono">
+                    {formatNumber(data.payingCustomers || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 30-Day Velocity Chart */}
+            <div className="mt-2 mb-3">
+              <div className="flex items-center justify-between text-[11px] text-zinc-400 mb-1.5">
+                <span className="flex items-center gap-1 text-zinc-300">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> 30-Day Inflow Velocity
+                </span>
+                <span className="font-mono">Peak: ${formatNumber(maxAmount)}</span>
+              </div>
+
+              <div className="w-full h-16 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">
+                <svg
+                  viewBox={`0 0 ${width} ${height}`}
+                  className="w-full h-full overflow-visible"
+                  preserveAspectRatio="none"
+                >
+                  <defs>
+                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+
+                  {points && (
+                    <>
+                      <polygon
+                        points={`0,${height} ${points} ${width},${height}`}
+                        fill="url(#revenueGradient)"
+                      />
+                      <polyline
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        points={points}
+                      />
+                    </>
+                  )}
+                </svg>
+              </div>
+            </div>
+
+            {/* Recent Transactions */}
+            {data.recentTransactions && data.recentTransactions.length > 0 && (
+              <div className="space-y-1.5 pt-2 border-t border-zinc-800/60">
+                <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-zinc-400 px-1">
+                  <span>Recent Payments</span>
+                  <span>Platform</span>
+                </div>
+                {data.recentTransactions.slice(0, 3).map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/50 border border-zinc-800/60 text-xs"
+                  >
+                    <div className="flex items-center gap-2 truncate pr-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                      <span className="text-zinc-200 truncate font-medium">{tx.customer}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono font-bold text-emerald-400">
+                        +${formatNumber(tx.amount)}
+                      </span>
+                      <span
+                        className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                          tx.provider === "dodo"
+                            ? "bg-purple-900/60 text-purple-300 border border-purple-700/60"
+                            : tx.provider === "stripe"
+                            ? "bg-blue-900/60 text-blue-300 border border-blue-700/60"
+                            : "bg-pink-900/60 text-pink-300 border border-pink-700/60"
+                        }`}
+                      >
+                        {tx.provider === "dodo"
+                          ? "Dodo"
+                          : tx.provider === "stripe"
+                          ? "Stripe"
+                          : "Sponsor"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 

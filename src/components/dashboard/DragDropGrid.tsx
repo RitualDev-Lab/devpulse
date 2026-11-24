@@ -20,17 +20,19 @@ import { SortableCard } from "./SortableCard";
 import { GitHubStatsCard } from "./widgets/GitHubStatsCard";
 import { NpmDownloadsCard } from "./widgets/NpmDownloadsCard";
 import { PyPiDownloadsCard } from "./widgets/PyPiDownloadsCard";
+import { RustCratesCard } from "./widgets/RustCratesCard";
 import { VsCodeStatsCard } from "./widgets/VsCodeStatsCard";
 import { McpStatsCard } from "./widgets/McpStatsCard";
+import { RevenueStatsCard } from "./widgets/RevenueStatsCard";
 import { WebAnalyticsCard, type AnalyticsSummary } from "./widgets/WebAnalyticsCard";
 import { ErrorStreamCard, type ErrorEventItem } from "./widgets/ErrorStreamCard";
 import { TelemetrySetupCard } from "./widgets/TelemetrySetupCard";
 import { BugReportBadgeCard } from "./widgets/BugReportBadgeCard";
-import { RevenueStatsCard } from "./widgets/RevenueStatsCard";
 import { Plus, Eye } from "lucide-react";
 import type { GitHubRepoStats } from "@/lib/integrations/github";
 import type { NpmStats } from "@/lib/integrations/npm";
 import type { PyPiStats } from "@/lib/integrations/pypi";
+import type { RustCrateStats } from "@/lib/integrations/crates";
 import type { VsCodeStats } from "@/lib/integrations/vscode";
 import type { McpServerStats } from "@/lib/integrations/mcp";
 import type { RevenueStats } from "@/lib/integrations/revenue";
@@ -43,6 +45,7 @@ export interface DashboardData {
     githubRepo?: string | null;
     npmPackage?: string | null;
     pypiPackage?: string | null;
+    rustCrate?: string | null;
     vscodeExtension?: string | null;
     mcpServerName?: string | null;
     telemetryApiKey: string;
@@ -50,10 +53,13 @@ export interface DashboardData {
     slackWebhookUrl?: string | null;
     telegramBotToken?: string | null;
     telegramChatId?: string | null;
+    stripeApiKey?: string | null;
+    dodoPaymentsApiKey?: string | null;
   };
   githubStats: GitHubRepoStats | null;
   npmStats: NpmStats | null;
   pypiStats: PyPiStats | null;
+  rustStats: RustCrateStats | null;
   vscodeStats: VsCodeStats | null;
   mcpStats: McpServerStats | null;
   analyticsSummary?: AnalyticsSummary | null;
@@ -68,32 +74,44 @@ interface DragDropGridProps {
 
 export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
   // Determine available widgets based on what ecosystems exist (Smart Card Filter)
+  // If user has only PyPI and no npm, npm tab is omitted!
   const initialWidgets = [
-    ...(data.project.githubRepo ? [{ id: "github_stats", title: "GitHub Stats", colSpan: 1 as const }] : []),
-    ...(data.project.npmPackage ? [{ id: "npm_downloads", title: "npm Downloads", colSpan: 1 as const }] : []),
-    ...(data.project.pypiPackage ? [{ id: "pypi_downloads", title: "PyPI Downloads", colSpan: 1 as const }] : []),
-    ...(data.project.vscodeExtension ? [{ id: "vscode_stats", title: "VS Code Extension", colSpan: 1 as const }] : []),
-    ...(data.project.mcpServerName ? [{ id: "mcp_stats", title: "MCP Server", colSpan: 1 as const }] : []),
-    { id: "revenue_stats", title: "Revenue & Monetization", colSpan: 2 as const },
-    { id: "web_analytics", title: "Cookie-Free Web Traffic", colSpan: 1 as const },
-    { id: "error_stream", title: "Runtime Crashes & Bugs", colSpan: 2 as const },
-    { id: "telemetry_setup", title: "Package Crash SDK", colSpan: 1 as const },
-    { id: "bug_report_badge", title: "Public Bug Report Hub", colSpan: 1 as const },
+    ...(data.project.githubRepo ? [{ id: "github_stats", title: "GitHub Stats", defaultColSpan: 1 as const }] : []),
+    ...(data.project.npmPackage ? [{ id: "npm_downloads", title: "npm Downloads", defaultColSpan: 1 as const }] : []),
+    ...(data.project.pypiPackage ? [{ id: "pypi_downloads", title: "PyPI Downloads", defaultColSpan: 1 as const }] : []),
+    ...(data.project.rustCrate ? [{ id: "rust_crates", title: "Rust Crates", defaultColSpan: 1 as const }] : []),
+    ...(data.project.vscodeExtension ? [{ id: "vscode_stats", title: "VS Code Extension", defaultColSpan: 1 as const }] : []),
+    ...(data.project.mcpServerName ? [{ id: "mcp_stats", title: "MCP Server", defaultColSpan: 1 as const }] : []),
+    ...(data.revenueStats || data.project.stripeApiKey || data.project.dodoPaymentsApiKey
+      ? [{ id: "revenue_stats", title: "Revenue & Monetization", defaultColSpan: 2 as const }]
+      : []),
+    { id: "web_analytics", title: "Cookie-Free Web Traffic", defaultColSpan: 1 as const },
+    { id: "error_stream", title: "Runtime Crashes & Bugs", defaultColSpan: 2 as const },
+    { id: "telemetry_setup", title: "Package Crash SDK", defaultColSpan: 1 as const },
+    { id: "bug_report_badge", title: "Public Bug Report Hub", defaultColSpan: 1 as const },
   ];
 
   const [items, setItems] = useState<string[]>(() => initialWidgets.map((w) => w.id));
   const [hiddenItems, setHiddenItems] = useState<string[]>([]);
+  const [colSpans, setColSpans] = useState<Record<string, 1 | 2 | 3>>({});
 
-  // Load saved order from localStorage
+  // Load saved order & resizable card sizes from localStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(`devpulse_layout_${data.project.id}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedLayout = localStorage.getItem(`devpulse_layout_${data.project.id}`);
+      if (savedLayout) {
+        const parsed = JSON.parse(savedLayout);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Keep only valid widget IDs
           const valid = parsed.filter((id) => initialWidgets.some((w) => w.id === id));
           if (valid.length > 0) setItems(valid);
+        }
+      }
+
+      const savedSpans = localStorage.getItem(`devpulse_colspans_${data.project.id}`);
+      if (savedSpans) {
+        const parsedSpans = JSON.parse(savedSpans);
+        if (parsedSpans && typeof parsedSpans === "object") {
+          setColSpans(parsedSpans);
         }
       }
     } catch {
@@ -101,10 +119,22 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
     }
   }, [data.project.id]);
 
+  const handleResizeCard = (id: string, newSpan: 1 | 2 | 3) => {
+    setColSpans((prev) => {
+      const updated = { ...prev, [id]: newSpan };
+      try {
+        localStorage.setItem(`devpulse_colspans_${data.project.id}`, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 5, // 5px movement required before drag begins
+        distance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -166,6 +196,13 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
             packageName={data.project.pypiPackage || "PyPI package"}
           />
         );
+      case "rust_crates":
+        return (
+          <RustCratesCard
+            stats={data.rustStats}
+            crateName={data.project.rustCrate || "Rust crate"}
+          />
+        );
       case "vscode_stats":
         return (
           <VsCodeStatsCard
@@ -215,14 +252,15 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
     }
   };
 
-  const getColSpan = (id: string) => {
+  const getEffectiveColSpan = (id: string): 1 | 2 | 3 => {
+    if (colSpans[id]) return colSpans[id];
     if (id === "error_stream" || id === "revenue_stats") return 2;
     return 1;
   };
 
   return (
     <div className="space-y-6">
-      {/* Hidden Widgets Restore Bar (only shown when customizing) */}
+      {/* Hidden Widgets Restore Bar */}
       {isCustomizing && hiddenItems.length > 0 && (
         <div className="p-3.5 rounded-2xl bg-zinc-900 border border-dashed border-zinc-700 flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-zinc-300">
@@ -244,7 +282,7 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
         </div>
       )}
 
-      {/* Main Sortable Grid */}
+      {/* Main Sortable & Resizable Grid */}
       <DndContext
         id="devpulse-dnd-context"
         sensors={sensors}
@@ -259,7 +297,8 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
                 id={id}
                 isCustomizing={isCustomizing}
                 onHide={hideWidget}
-                colSpan={getColSpan(id)}
+                colSpan={getEffectiveColSpan(id)}
+                onResize={handleResizeCard}
               >
                 {renderWidgetContent(id)}
               </SortableCard>
