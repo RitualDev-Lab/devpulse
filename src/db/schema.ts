@@ -89,8 +89,8 @@ export const dashboardWidgets = sqliteTable("dashboard_widgets", {
 export const dailyMetrics = sqliteTable("daily_metrics", {
   id: text("id").primaryKey(),
   projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
-  source: text("source", { enum: ["github", "npm", "pypi", "vscode", "docker", "web"] }).notNull(),
-  metricType: text("metric_type", { enum: ["downloads", "stars", "views", "clones", "installs", "pageviews"] }).notNull(),
+  source: text("source", { enum: ["github", "npm", "pypi", "vscode", "docker", "web", "crates"] }).notNull(),
+  metricType: text("metric_type", { enum: ["downloads", "stars", "views", "clones", "installs", "pageviews", "pulls"] }).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
   value: integer("value").notNull(),
   metadataJson: text("metadata_json"),

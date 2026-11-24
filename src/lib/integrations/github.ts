@@ -12,6 +12,12 @@ export interface GitHubRepoStats {
   stars: number;
   forks: number;
   openIssuesCount: number;
+  totalOpenIssuesAndPrs: number;
+  openPrCount: number;
+  prReviewVelocityHours: number;
+  staleIssuesCount: number;
+  freshIssuesCount: number;
+  dependabotAlertsCount: number;
   defaultBranch: string;
   license?: string;
   latestRelease?: {
@@ -28,6 +34,8 @@ export interface GitHubRepoStats {
     isPullRequest: boolean;
     author: string;
     htmlUrl: string;
+    ageDays: number;
+    isStale: boolean;
   }>;
 }
 
@@ -67,8 +75,35 @@ export async function fetchGitHubRepoStats(
     }
 
     const repoData = await repoRes.json();
+    const totalOpen = repoData.open_issues_count || 0;
 
-    // 2. Fetch Latest Release
+    // 2. Fetch Open PRs & Calculate PR Review Velocity
+    let openPrCount = 0;
+    let prReviewVelocityHours = 0;
+    try {
+      const prsRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=30`,
+        { headers, next: { revalidate: 600 } }
+      );
+      if (prsRes.ok) {
+        const prsData = await prsRes.json();
+        if (Array.isArray(prsData)) {
+          openPrCount = prsData.length;
+          if (prsData.length > 0) {
+            const now = Date.now();
+            const totalHours = prsData.reduce((acc: number, pr: any) => {
+              const diffMs = now - new Date(pr.created_at).getTime();
+              return acc + Math.max(0, diffMs / (1000 * 3600));
+            }, 0);
+            prReviewVelocityHours = Math.round((totalHours / prsData.length) * 10) / 10;
+          }
+        }
+      }
+    } catch {
+      // PRs optional
+    }
+
+    // 3. Fetch Latest Release
     let latestRelease: GitHubRepoStats["latestRelease"] | undefined;
     try {
       const relRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
@@ -87,26 +122,43 @@ export async function fetchGitHubRepoStats(
       // Release is optional
     }
 
-    // 3. Fetch Recent Issues & PRs
+    // 4. Fetch Recent Issues & Triage Aging
     const recentIssues: GitHubRepoStats["recentIssues"] = [];
+    let staleIssuesCount = 0;
+    let freshIssuesCount = 0;
     try {
       const issuesRes = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/issues?state=open&sort=updated&per_page=8`,
+        `https://api.github.com/repos/${owner}/${repo}/issues?state=open&sort=updated&per_page=15`,
         { headers, next: { revalidate: 600 } }
       );
       if (issuesRes.ok) {
         const issuesData = await issuesRes.json();
         if (Array.isArray(issuesData)) {
+          const now = Date.now();
           for (const item of issuesData) {
+            const ageDays = Math.max(
+              0,
+              Math.floor((now - new Date(item.created_at).getTime()) / (1000 * 3600 * 24))
+            );
+            const isStale = ageDays > 14;
+            const isPr = !!item.pull_request;
+
+            if (!isPr) {
+              if (isStale) staleIssuesCount++;
+              else freshIssuesCount++;
+            }
+
             recentIssues.push({
               id: item.id,
               number: item.number,
               title: item.title,
               state: item.state,
               createdAt: item.created_at,
-              isPullRequest: !!item.pull_request,
+              isPullRequest: isPr,
               author: item.user?.login || "anonymous",
               htmlUrl: item.html_url,
+              ageDays,
+              isStale,
             });
           }
         }
@@ -115,6 +167,25 @@ export async function fetchGitHubRepoStats(
       // Issues optional
     }
 
+    // 5. Dependabot security alerts count
+    let dependabotAlertsCount = 0;
+    try {
+      const depRes = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/dependabot/alerts?state=open&per_page=100`,
+        { headers, next: { revalidate: 1800 } }
+      );
+      if (depRes.ok) {
+        const depData = await depRes.json();
+        if (Array.isArray(depData)) {
+          dependabotAlertsCount = depData.length;
+        }
+      }
+    } catch {
+      // Dependabot optional
+    }
+
+    const pureOpenIssues = Math.max(0, totalOpen - openPrCount);
+
     return {
       owner,
       repo,
@@ -122,7 +193,13 @@ export async function fetchGitHubRepoStats(
       description: repoData.description || "",
       stars: repoData.stargazers_count || 0,
       forks: repoData.forks_count || 0,
-      openIssuesCount: repoData.open_issues_count || 0,
+      openIssuesCount: pureOpenIssues,
+      totalOpenIssuesAndPrs: totalOpen,
+      openPrCount,
+      prReviewVelocityHours,
+      staleIssuesCount,
+      freshIssuesCount,
+      dependabotAlertsCount,
       defaultBranch: repoData.default_branch || "main",
       license: repoData.license?.spdx_id || repoData.license?.name,
       latestRelease,

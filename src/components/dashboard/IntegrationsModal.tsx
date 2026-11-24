@@ -12,6 +12,7 @@ interface IntegrationsModalProps {
   initialPypi?: string | null;
   initialRustCrate?: string | null;
   initialGoModule?: string | null;
+  initialDockerImage?: string | null;
   initialVsCode?: string | null;
   initialMcp?: string | null;
 }
@@ -25,6 +26,7 @@ export function IntegrationsModal({
   initialPypi = "",
   initialRustCrate = "",
   initialGoModule = "",
+  initialDockerImage = "",
   initialVsCode = "",
   initialMcp = "",
 }: IntegrationsModalProps) {
@@ -33,6 +35,7 @@ export function IntegrationsModal({
   const [pypi, setPypi] = useState(initialPypi || "");
   const [rustCrate, setRustCrate] = useState(initialRustCrate || "");
   const [goModule, setGoModule] = useState(initialGoModule || "");
+  const [dockerImage, setDockerImage] = useState(initialDockerImage || "");
   const [vscode, setVsCode] = useState(initialVsCode || "");
   const [mcp, setMcp] = useState(initialMcp || "");
 
@@ -55,6 +58,7 @@ export function IntegrationsModal({
           pypiPackage: pypi,
           rustCrate: rustCrate,
           goModule: goModule,
+          dockerImage: dockerImage,
           vscodeExtension: vscode,
           mcpServerName: mcp,
         }),
@@ -179,6 +183,21 @@ export function IntegrationsModal({
               placeholder="e.g. charm.land/bubbletea or github.com/user/repo"
               value={goModule}
               onChange={(e) => setGoModule(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+            />
+          </div>
+
+          {/* Docker Hub Image */}
+          <div className="space-y-1.5">
+            <label className="font-semibold text-zinc-200 flex items-center gap-1.5">
+              <Box className="w-3.5 h-3.5 text-sky-400" />
+              <span>Docker Hub Container (namespace/repo or image)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. ritualdev/pulse, alpine, or redis"
+              value={dockerImage}
+              onChange={(e) => setDockerImage(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 font-mono text-xs"
             />
           </div>

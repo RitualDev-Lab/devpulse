@@ -93,19 +93,8 @@ export async function fetchVsCodeStats(extensionId: string): Promise<VsCodeStats
       };
     }
 
-    // Mock/Demo fallback if extension is newly created or unlisted
-    return {
-      extensionId,
-      name,
-      publisher,
-      displayName: name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      description: "Visual Studio Code Extension by " + publisher,
-      installs: 1420,
-      averageRating: 4.9,
-      reviewCount: 18,
-      version: "v1.2.0",
-      marketplaceUrl: `https://marketplace.visualstudio.com/items?itemName=${extensionId}`,
-    };
+    // Return null if not found on VS Code Marketplace or Open-VSX (100% genuine data)
+    return null;
   } catch (err) {
     console.error(`Error fetching VS Code extension ${extensionId}:`, err);
     return null;

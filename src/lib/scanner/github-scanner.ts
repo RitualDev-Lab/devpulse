@@ -24,6 +24,7 @@ export interface ScannedRepoResult {
     goModule?: string;
     vscodeExtension?: string;
     mcpServerName?: string;
+    dockerImage?: string;
   };
   summary: string[];
 }
@@ -202,6 +203,13 @@ export async function scanGitHubRepository(
     }
     detected.mcpServerName = mcpName;
     summary.push(`Detected MCP Server: "${mcpName}" (from mcp.json)`);
+  }
+
+  // 8. Inspect Dockerfile or docker-compose.yml (Docker Hub Container)
+  if (fileMap.has("dockerfile") || fileMap.has("docker-compose.yml") || fileMap.has("docker-compose.yaml")) {
+    const defaultDockerImage = `${owner.toLowerCase()}/${repo.toLowerCase()}`;
+    detected.dockerImage = defaultDockerImage;
+    summary.push(`Detected Docker container: "${defaultDockerImage}" (from Dockerfile)`);
   }
 
   if (summary.length === 0) {

@@ -7,6 +7,7 @@ import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
 import { fetchRustCrateStats } from "@/lib/integrations/crates";
+import { fetchDockerRepoStats } from "@/lib/integrations/docker";
 import { fetchVsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats } from "@/lib/integrations/mcp";
 import { fetchRevenueStats } from "@/lib/integrations/revenue";
@@ -102,6 +103,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
     npmStats,
     pypiStats,
     rustStats,
+    dockerStats,
     vscodeStats,
     mcpStats,
     revenueStats,
@@ -118,6 +120,9 @@ export default async function DashboardPage(props: DashboardPageProps) {
       : Promise.resolve(null),
     activeProject.rustCrate
       ? fetchRustCrateStats(activeProject.rustCrate).catch(() => null)
+      : Promise.resolve(null),
+    activeProject.dockerImage
+      ? fetchDockerRepoStats(activeProject.dockerImage).catch(() => null)
       : Promise.resolve(null),
     activeProject.vscodeExtension
       ? fetchVsCodeStats(activeProject.vscodeExtension).catch(() => null)
@@ -200,6 +205,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
       pypiPackage: activeProject.pypiPackage,
       rustCrate: activeProject.rustCrate,
       goModule: activeProject.goModule,
+      dockerImage: activeProject.dockerImage,
       vscodeExtension: activeProject.vscodeExtension,
       mcpServerName: activeProject.mcpServerName,
       telemetryApiKey: activeProject.telemetryApiKey,
@@ -214,6 +220,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
     npmStats,
     pypiStats,
     rustStats,
+    dockerStats,
     vscodeStats,
     mcpStats,
     revenueStats,
@@ -230,6 +237,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
     pypiPackage: p.pypiPackage,
     rustCrate: p.rustCrate,
     goModule: p.goModule,
+    dockerImage: p.dockerImage,
     telemetryApiKey: p.telemetryApiKey,
   }));
 

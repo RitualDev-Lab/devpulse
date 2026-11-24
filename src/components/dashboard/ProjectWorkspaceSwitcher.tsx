@@ -24,6 +24,7 @@ export interface ProjectSummary {
   pypiPackage?: string | null;
   rustCrate?: string | null;
   goModule?: string | null;
+  dockerImage?: string | null;
   telemetryApiKey: string;
 }
 

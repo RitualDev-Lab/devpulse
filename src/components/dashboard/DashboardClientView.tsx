@@ -48,6 +48,8 @@ export function DashboardClientView({
     npmPackage: data.project.npmPackage,
     pypiPackage: data.project.pypiPackage,
     rustCrate: data.project.rustCrate,
+    goModule: data.project.goModule,
+    dockerImage: data.project.dockerImage,
     telemetryApiKey: data.project.telemetryApiKey,
   };
 
@@ -148,6 +150,7 @@ export function DashboardClientView({
         initialPypi={data.project.pypiPackage}
         initialRustCrate={data.project.rustCrate}
         initialGoModule={data.project.goModule}
+        initialDockerImage={data.project.dockerImage}
         initialVsCode={data.project.vscodeExtension}
         initialMcp={data.project.mcpServerName}
       />

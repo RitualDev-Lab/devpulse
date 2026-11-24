@@ -1,5 +1,5 @@
 import React from "react";
-import { TrendingUp, ExternalLink } from "lucide-react";
+import { TrendingUp, ExternalLink, GitCommit, Layers, Terminal } from "lucide-react";
 import type { PyPiStats } from "@/lib/integrations/pypi";
 import { formatNumber } from "@/lib/utils/format";
 
@@ -24,7 +24,7 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
   const history = stats.dailyHistory || [];
   const maxDownload = history.length > 0 ? Math.max(...history.map((h) => h.downloads), 10) : 100;
   const width = 360;
-  const height = 90;
+  const height = 80;
 
   const points = history.map((pt, idx) => {
     const x = (idx / Math.max(history.length - 1, 1)) * width;
@@ -45,10 +45,15 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
               PyPI
             </div>
             <div>
-              <h3 className="font-semibold text-white text-base leading-tight">{stats.packageName}</h3>
-              {stats.latestVersion && (
-                <span className="text-[11px] text-blue-400/90 font-mono">v{stats.latestVersion}</span>
-              )}
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-white text-base leading-tight">{stats.packageName}</h3>
+                {stats.latestVersion && (
+                  <span className="text-[11px] text-blue-400/90 font-mono">v{stats.latestVersion}</span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-400 truncate max-w-[200px]">
+                {stats.description || "Python Package"}
+              </p>
             </div>
           </div>
           <a
@@ -63,7 +68,7 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
         </div>
 
         {/* 3 Metric Stats */}
-        <div className="grid grid-cols-3 gap-2.5 mb-4">
+        <div className="grid grid-cols-3 gap-2.5 mb-3.5">
           <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
             <span className="text-[10px] text-zinc-400 block mb-0.5">Last Day</span>
             <div className="flex items-center gap-1">
@@ -92,16 +97,41 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
           </div>
         </div>
 
+        {/* Python Version Breakdown & Releases */}
+        <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
+          {stats.totalReleases > 0 && (
+            <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-400 font-mono">
+              <GitCommit className="w-3 h-3 text-blue-400" />
+              <span>{stats.totalReleases} releases</span>
+            </span>
+          )}
+
+          {stats.pythonVersions && stats.pythonVersions.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] text-zinc-500">Python:</span>
+              {stats.pythonVersions.slice(0, 3).map((v) => (
+                <span
+                  key={v.version}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-mono"
+                  title={`${v.version}: ${formatNumber(v.downloads)} downloads (${v.percentage}%)`}
+                >
+                  {v.version} ({v.percentage}%)
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Sparkline Chart */}
-        <div className="mt-2">
+        <div className="mt-1">
           <div className="flex items-center justify-between text-[11px] text-zinc-400 mb-1.5">
             <span className="flex items-center gap-1 text-zinc-300">
-              <TrendingUp className="w-3.5 h-3.5 text-blue-400" /> Daily Pipeline Installs
+              <TrendingUp className="w-3.5 h-3.5 text-blue-400" /> Non-Mirror Installs
             </span>
             <span>Peak: {formatNumber(maxDownload)}</span>
           </div>
 
-          <div className="w-full h-24 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">
+          <div className="w-full h-20 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">
             <svg
               viewBox={`0 0 ${width} ${height}`}
               className="w-full h-full overflow-visible"
@@ -130,7 +160,7 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
       </div>
 
       <div className="mt-3 pt-2 flex items-center justify-between text-[11px] text-zinc-500 border-t border-zinc-800/40">
-        <span>PyPI Stats API</span>
+        <span>pypistats.org Non-Mirror API</span>
         <span className="text-emerald-400 font-medium flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
           Live Sync

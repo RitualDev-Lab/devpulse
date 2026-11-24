@@ -21,6 +21,7 @@ import { GitHubStatsCard } from "./widgets/GitHubStatsCard";
 import { NpmDownloadsCard } from "./widgets/NpmDownloadsCard";
 import { PyPiDownloadsCard } from "./widgets/PyPiDownloadsCard";
 import { RustCratesCard } from "./widgets/RustCratesCard";
+import { DockerContainerCard } from "./widgets/DockerContainerCard";
 import { VsCodeStatsCard } from "./widgets/VsCodeStatsCard";
 import { McpStatsCard } from "./widgets/McpStatsCard";
 import { RevenueStatsCard } from "./widgets/RevenueStatsCard";
@@ -33,6 +34,7 @@ import type { GitHubRepoStats } from "@/lib/integrations/github";
 import type { NpmStats } from "@/lib/integrations/npm";
 import type { PyPiStats } from "@/lib/integrations/pypi";
 import type { RustCrateStats } from "@/lib/integrations/crates";
+import type { DockerRepoStats } from "@/lib/integrations/docker";
 import type { VsCodeStats } from "@/lib/integrations/vscode";
 import type { McpServerStats } from "@/lib/integrations/mcp";
 import type { RevenueStats } from "@/lib/integrations/revenue";
@@ -47,6 +49,7 @@ export interface DashboardData {
     pypiPackage?: string | null;
     rustCrate?: string | null;
     goModule?: string | null;
+    dockerImage?: string | null;
     vscodeExtension?: string | null;
     mcpServerName?: string | null;
     telemetryApiKey: string;
@@ -61,6 +64,7 @@ export interface DashboardData {
   npmStats: NpmStats | null;
   pypiStats: PyPiStats | null;
   rustStats: RustCrateStats | null;
+  dockerStats?: DockerRepoStats | null;
   vscodeStats: VsCodeStats | null;
   mcpStats: McpServerStats | null;
   analyticsSummary?: AnalyticsSummary | null;
@@ -81,6 +85,7 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
     ...(data.project.npmPackage ? [{ id: "npm_downloads", title: "npm Downloads", defaultColSpan: 1 as const }] : []),
     ...(data.project.pypiPackage ? [{ id: "pypi_downloads", title: "PyPI Downloads", defaultColSpan: 1 as const }] : []),
     ...(data.project.rustCrate ? [{ id: "rust_crates", title: "Rust Crates", defaultColSpan: 1 as const }] : []),
+    ...(data.project.dockerImage ? [{ id: "docker_container", title: "Docker Hub Container", defaultColSpan: 1 as const }] : []),
     ...(data.project.vscodeExtension ? [{ id: "vscode_stats", title: "VS Code Extension", defaultColSpan: 1 as const }] : []),
     ...(data.project.mcpServerName ? [{ id: "mcp_stats", title: "MCP Server", defaultColSpan: 1 as const }] : []),
     ...(data.revenueStats || data.project.stripeApiKey || data.project.dodoPaymentsApiKey
@@ -202,6 +207,13 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
           <RustCratesCard
             stats={data.rustStats}
             crateName={data.project.rustCrate || "Rust crate"}
+          />
+        );
+      case "docker_container":
+        return (
+          <DockerContainerCard
+            stats={data.dockerStats || null}
+            imageName={data.project.dockerImage || "Docker container"}
           />
         );
       case "vscode_stats":

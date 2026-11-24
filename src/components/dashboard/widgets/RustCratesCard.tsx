@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Download, ExternalLink, Box, Tag, BookOpen, Layers } from "lucide-react";
+import { Download, ExternalLink, Box, Tag, BookOpen, Layers, GitFork, TrendingUp } from "lucide-react";
 import type { RustCrateStats } from "@/lib/integrations/crates";
 import { formatNumber } from "@/lib/utils/format";
 
@@ -37,6 +37,8 @@ export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
     );
   }
 
+  const maxDaily = Math.max(...(stats.dailyHistory?.map((d) => d.downloads) || [1]), 1);
+
   return (
     <div className="flex flex-col h-full justify-between p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg shadow-black/40 hover:border-zinc-700 transition">
       <div>
@@ -69,28 +71,66 @@ export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
           </a>
         </div>
 
-        {/* Big Download Stats */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
-            <div className="flex items-center gap-1.5 text-zinc-400 text-xs mb-1">
-              <Download className="w-3.5 h-3.5 text-orange-400" />
-              <span>Total Downloads</span>
+        {/* 3 Metrics Grid: Total, 90-day, Reverse Dependencies */}
+        <div className="grid grid-cols-3 gap-2.5 mb-3.5">
+          <div className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
+            <div className="flex items-center gap-1 text-zinc-400 text-[10px] mb-0.5">
+              <Download className="w-3 h-3 text-orange-400" />
+              <span>Total DLs</span>
             </div>
-            <p className="text-2xl font-black text-white tracking-tight">
+            <p className="text-base font-bold text-white tracking-tight">
               {formatNumber(stats.totalDownloads)}
             </p>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
-            <div className="flex items-center gap-1.5 text-zinc-400 text-xs mb-1">
-              <Layers className="w-3.5 h-3.5 text-amber-400" />
-              <span>Recent (90d)</span>
+          <div className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
+            <div className="flex items-center gap-1 text-zinc-400 text-[10px] mb-0.5">
+              <Layers className="w-3 h-3 text-amber-400" />
+              <span>90d Velocity</span>
             </div>
-            <p className="text-2xl font-black text-white tracking-tight">
+            <p className="text-base font-bold text-white tracking-tight">
               {formatNumber(stats.recentDownloads)}
             </p>
           </div>
+
+          <div className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
+            <div className="flex items-center gap-1 text-zinc-400 text-[10px] mb-0.5" title="Crates that depend on this crate">
+              <GitFork className="w-3 h-3 text-cyan-400" />
+              <span>Dep Health</span>
+            </div>
+            <p className="text-base font-bold text-cyan-400 tracking-tight" title={`${formatNumber(stats.reverseDependencies)} reverse dependencies`}>
+              {formatNumber(stats.reverseDependencies)}
+            </p>
+          </div>
         </div>
+
+        {/* 30-Day Daily Velocity Sparkline if available */}
+        {stats.dailyHistory && stats.dailyHistory.length > 0 && (
+          <div className="mb-3.5">
+            <div className="flex items-center justify-between text-[11px] text-zinc-400 mb-1.5">
+              <span className="flex items-center gap-1">
+                <TrendingUp className="w-3 h-3 text-orange-400" />
+                <span>30-Day Inflow Trends</span>
+              </span>
+              <span className="text-[10px] text-zinc-500 font-mono">
+                Peak: {formatNumber(maxDaily)}/day
+              </span>
+            </div>
+            <div className="flex items-end gap-1 h-12 w-full pt-1 px-1 bg-zinc-950/60 rounded-xl border border-zinc-800/60">
+              {stats.dailyHistory.map((d, i) => {
+                const heightPercent = Math.max(8, Math.round((d.downloads / maxDaily) * 100));
+                return (
+                  <div
+                    key={d.date || i}
+                    className="flex-1 bg-gradient-to-t from-orange-500/30 to-orange-400/80 hover:to-orange-300 rounded-t-sm transition-all"
+                    style={{ height: `${heightPercent}%` }}
+                    title={`${d.date}: ${formatNumber(d.downloads)} downloads`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Crate Meta Badges */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -98,6 +138,7 @@ export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
             <Tag className="w-3 h-3 text-orange-400" />
             <span className="font-mono text-[11px]">v{stats.maxVersion}</span>
           </div>
+
           {stats.documentation && (
             <a
               href={stats.documentation}
@@ -108,6 +149,12 @@ export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
               <BookOpen className="w-3 h-3 text-cyan-400" />
               <span className="text-[11px]">docs.rs</span>
             </a>
+          )}
+
+          {stats.reverseDependencies > 0 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              Used by {formatNumber(stats.reverseDependencies)} crates
+            </span>
           )}
         </div>
       </div>

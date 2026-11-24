@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
       pypiPackage,
       rustCrate,
       goModule,
+      dockerImage,
       vscodeExtension,
       mcpServerName,
     } = body;
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
         pypiPackage: cleanStr(pypiPackage),
         rustCrate: cleanStr(rustCrate),
         goModule: cleanStr(goModule),
+        dockerImage: cleanStr(dockerImage),
         vscodeExtension: cleanStr(vscodeExtension),
         mcpServerName: cleanStr(mcpServerName),
       })

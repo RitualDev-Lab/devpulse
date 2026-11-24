@@ -1,5 +1,5 @@
 import React from "react";
-import { Download, TrendingUp, ExternalLink } from "lucide-react";
+import { Download, TrendingUp, ExternalLink, ShieldCheck, GitCommit, Box } from "lucide-react";
 import type { NpmStats } from "@/lib/integrations/npm";
 import { formatNumber } from "@/lib/utils/format";
 
@@ -46,10 +46,15 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
               npm
             </div>
             <div>
-              <h3 className="font-semibold text-white text-base leading-tight">{stats.packageName}</h3>
-              {stats.latestVersion && (
-                <span className="text-[11px] text-red-400/90 font-mono">v{stats.latestVersion}</span>
-              )}
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-white text-base leading-tight">{stats.packageName}</h3>
+                {stats.latestVersion && (
+                  <span className="text-[11px] text-red-400/90 font-mono">v{stats.latestVersion}</span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-400 truncate max-w-[200px]">
+                {stats.description || "Node / npm / Bun Package"}
+              </p>
             </div>
           </div>
           <a
@@ -64,7 +69,7 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
         </div>
 
         {/* 3 Metric Stats */}
-        <div className="grid grid-cols-3 gap-2.5 mb-4">
+        <div className="grid grid-cols-3 gap-2.5 mb-3.5">
           <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
             <span className="text-[10px] text-zinc-400 block mb-0.5">Today</span>
             <div className="flex items-center gap-1">
@@ -93,6 +98,33 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
           </div>
         </div>
 
+        {/* Release Cadence & License Badges */}
+        <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
+          {stats.license && (
+            <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-300 font-mono">
+              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+              <span>{stats.license}</span>
+            </span>
+          )}
+
+          {stats.totalReleases > 0 && (
+            <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-400">
+              <GitCommit className="w-3 h-3 text-red-400" />
+              <span>{stats.totalReleases} releases</span>
+              {stats.daysSinceLastRelease !== undefined && stats.daysSinceLastRelease > 0 && (
+                <span className="text-zinc-500">({stats.daysSinceLastRelease}d ago)</span>
+              )}
+            </span>
+          )}
+
+          {stats.dependenciesCount !== undefined && (
+            <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-400">
+              <Box className="w-3 h-3 text-cyan-400" />
+              <span>{stats.dependenciesCount} deps</span>
+            </span>
+          )}
+        </div>
+
         {/* Sparkline Chart */}
         <div className="mt-2">
           <div className="flex items-center justify-between text-[11px] text-zinc-400 mb-1.5">
@@ -102,7 +134,7 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
             <span>Peak: {formatNumber(maxDownload)}</span>
           </div>
 
-          <div className="w-full h-24 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">
+          <div className="w-full h-20 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">
             <svg
               viewBox={`0 0 ${width} ${height}`}
               className="w-full h-full overflow-visible"

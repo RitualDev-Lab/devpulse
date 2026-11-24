@@ -115,6 +115,28 @@ export default {
             });
         }
     },
+    async scheduled(event, env, ctx) {
+        // Cloudflare Scheduled Cron Trigger (every 6 hours)
+        try {
+            console.log("Cloudflare Cron Trigger fired at:", new Date(event.scheduledTime).toISOString(), "cron:", event.cron);
+            const dummyRequest = new Request("https://devpulse.ritualdev.in/api/cron/sync", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "User-Agent": "Cloudflare-Cron-Sync/1.0",
+                    ...(env && env.CRON_SECRET ? { "Authorization": "Bearer " + env.CRON_SECRET } : {})
+                }
+            });
+            const { handler } = await import("./server-functions/default/handler.mjs");
+            if (ctx && ctx.waitUntil) {
+                ctx.waitUntil(handler(dummyRequest, env, ctx));
+            } else {
+                await handler(dummyRequest, env, ctx);
+            }
+        } catch (err) {
+            console.error("Scheduled cron sync error:", err);
+        }
+    },
 };
 `;
 
