@@ -48,6 +48,12 @@ export const projects = sqliteTable("projects", {
   slackWebhookUrl: text("slack_webhook_url"),
   telegramBotToken: text("telegram_bot_token"),
   telegramChatId: text("telegram_chat_id"),
+
+  // Developer Revenue & Monetization (Stripe, Dodo Payments, Sponsors)
+  stripeApiKey: text("stripe_api_key"),
+  dodoPaymentsApiKey: text("dodo_payments_api_key"),
+  dodoPaymentsEnvironment: text("dodo_payments_environment").default("live"),
+  githubSponsorsUsername: text("github_sponsors_username"),
   
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),

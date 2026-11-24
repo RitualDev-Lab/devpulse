@@ -42,12 +42,16 @@ export async function initDb() {
     );
   `);
 
-  // Migrate existing tables to add new webhook columns if missing
+  // Migrate existing tables to add new webhook and revenue columns if missing
   const optionalColumns = [
     "ALTER TABLE projects ADD COLUMN discord_webhook_url TEXT;",
     "ALTER TABLE projects ADD COLUMN slack_webhook_url TEXT;",
     "ALTER TABLE projects ADD COLUMN telegram_bot_token TEXT;",
     "ALTER TABLE projects ADD COLUMN telegram_chat_id TEXT;",
+    "ALTER TABLE projects ADD COLUMN stripe_api_key TEXT;",
+    "ALTER TABLE projects ADD COLUMN dodo_payments_api_key TEXT;",
+    "ALTER TABLE projects ADD COLUMN dodo_payments_environment TEXT DEFAULT 'live';",
+    "ALTER TABLE projects ADD COLUMN github_sponsors_username TEXT;",
   ];
 
   for (const query of optionalColumns) {

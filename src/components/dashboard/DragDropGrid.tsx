@@ -26,12 +26,14 @@ import { WebAnalyticsCard, type AnalyticsSummary } from "./widgets/WebAnalyticsC
 import { ErrorStreamCard, type ErrorEventItem } from "./widgets/ErrorStreamCard";
 import { TelemetrySetupCard } from "./widgets/TelemetrySetupCard";
 import { BugReportBadgeCard } from "./widgets/BugReportBadgeCard";
+import { RevenueStatsCard } from "./widgets/RevenueStatsCard";
 import { Plus, Eye } from "lucide-react";
 import type { GitHubRepoStats } from "@/lib/integrations/github";
 import type { NpmStats } from "@/lib/integrations/npm";
 import type { PyPiStats } from "@/lib/integrations/pypi";
 import type { VsCodeStats } from "@/lib/integrations/vscode";
 import type { McpServerStats } from "@/lib/integrations/mcp";
+import type { RevenueStats } from "@/lib/integrations/revenue";
 
 export interface DashboardData {
   project: {
@@ -55,6 +57,7 @@ export interface DashboardData {
   vscodeStats: VsCodeStats | null;
   mcpStats: McpServerStats | null;
   analyticsSummary?: AnalyticsSummary | null;
+  revenueStats?: RevenueStats | null;
   errors: ErrorEventItem[];
 }
 
@@ -71,6 +74,7 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
     ...(data.project.pypiPackage ? [{ id: "pypi_downloads", title: "PyPI Downloads", colSpan: 1 as const }] : []),
     ...(data.project.vscodeExtension ? [{ id: "vscode_stats", title: "VS Code Extension", colSpan: 1 as const }] : []),
     ...(data.project.mcpServerName ? [{ id: "mcp_stats", title: "MCP Server", colSpan: 1 as const }] : []),
+    { id: "revenue_stats", title: "Revenue & Monetization", colSpan: 2 as const },
     { id: "web_analytics", title: "Cookie-Free Web Traffic", colSpan: 1 as const },
     { id: "error_stream", title: "Runtime Crashes & Bugs", colSpan: 2 as const },
     { id: "telemetry_setup", title: "Package Crash SDK", colSpan: 1 as const },
@@ -176,6 +180,13 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
             serverName={data.project.mcpServerName || "MCP Server"}
           />
         );
+      case "revenue_stats":
+        return (
+          <RevenueStatsCard
+            stats={data.revenueStats || null}
+            projectId={data.project.id}
+          />
+        );
       case "web_analytics":
         return (
           <WebAnalyticsCard
@@ -205,7 +216,7 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
   };
 
   const getColSpan = (id: string) => {
-    if (id === "error_stream") return 2;
+    if (id === "error_stream" || id === "revenue_stats") return 2;
     return 1;
   };
 
