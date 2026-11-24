@@ -1,6 +1,7 @@
 import React from "react";
 import { Download, TrendingUp, ExternalLink } from "lucide-react";
 import type { NpmStats } from "@/lib/integrations/npm";
+import { formatNumber } from "@/lib/utils/format";
 
 interface NpmDownloadsCardProps {
   stats: NpmStats | null;
@@ -68,7 +69,7 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
             <span className="text-[10px] text-zinc-400 block mb-0.5">Today</span>
             <div className="flex items-center gap-1">
               <span className="text-sm font-bold text-white">
-                {stats.downloadsLastDay.toLocaleString()}
+                {formatNumber(stats.downloadsLastDay)}
               </span>
             </div>
           </div>
@@ -77,7 +78,7 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
             <span className="text-[10px] text-zinc-400 block mb-0.5">This Week</span>
             <div className="flex items-center gap-1">
               <span className="text-sm font-bold text-white">
-                {stats.downloadsLastWeek.toLocaleString()}
+                {formatNumber(stats.downloadsLastWeek)}
               </span>
             </div>
           </div>
@@ -86,7 +87,7 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
             <span className="text-[10px] text-zinc-400 block mb-0.5">This Month</span>
             <div className="flex items-center gap-1">
               <span className="text-sm font-bold text-red-400">
-                {stats.downloadsLastMonth.toLocaleString()}
+                {formatNumber(stats.downloadsLastMonth)}
               </span>
             </div>
           </div>
@@ -98,7 +99,7 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
             <span className="flex items-center gap-1 text-zinc-300">
               <TrendingUp className="w-3.5 h-3.5 text-red-400" /> 30-Day Download Velocity
             </span>
-            <span>Peak: {maxDownload.toLocaleString()}</span>
+            <span>Peak: {formatNumber(maxDownload)}</span>
           </div>
 
           <div className="w-full h-24 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">

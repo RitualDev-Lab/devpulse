@@ -1,6 +1,7 @@
 import React from "react";
 import { TrendingUp, ExternalLink } from "lucide-react";
 import type { PyPiStats } from "@/lib/integrations/pypi";
+import { formatNumber } from "@/lib/utils/format";
 
 interface PyPiDownloadsCardProps {
   stats: PyPiStats | null;
@@ -67,7 +68,7 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
             <span className="text-[10px] text-zinc-400 block mb-0.5">Last Day</span>
             <div className="flex items-center gap-1">
               <span className="text-sm font-bold text-white">
-                {stats.downloadsLastDay.toLocaleString()}
+                {formatNumber(stats.downloadsLastDay)}
               </span>
             </div>
           </div>
@@ -76,7 +77,7 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
             <span className="text-[10px] text-zinc-400 block mb-0.5">Last 7 Days</span>
             <div className="flex items-center gap-1">
               <span className="text-sm font-bold text-white">
-                {stats.downloadsLastWeek.toLocaleString()}
+                {formatNumber(stats.downloadsLastWeek)}
               </span>
             </div>
           </div>
@@ -85,7 +86,7 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
             <span className="text-[10px] text-zinc-400 block mb-0.5">Last 30 Days</span>
             <div className="flex items-center gap-1">
               <span className="text-sm font-bold text-blue-400">
-                {stats.downloadsLastMonth.toLocaleString()}
+                {formatNumber(stats.downloadsLastMonth)}
               </span>
             </div>
           </div>
@@ -97,7 +98,7 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
             <span className="flex items-center gap-1 text-zinc-300">
               <TrendingUp className="w-3.5 h-3.5 text-blue-400" /> Daily Pipeline Installs
             </span>
-            <span>Peak: {maxDownload.toLocaleString()}</span>
+            <span>Peak: {formatNumber(maxDownload)}</span>
           </div>
 
           <div className="w-full h-24 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">

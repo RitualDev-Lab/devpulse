@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { AlertOctagon, CheckCircle2, ChevronRight, X, Terminal, Clock, ShieldAlert } from "lucide-react";
+import { formatDate, formatTime } from "@/lib/utils/format";
 
 export interface ErrorEventItem {
   id: string;
@@ -99,12 +100,9 @@ export function ErrorStreamCard({ initialErrors, projectId }: ErrorStreamCardPro
                   <p className="text-xs text-zinc-200 font-medium truncate">{err.message}</p>
                   <div className="flex items-center gap-3 text-[10px] text-zinc-500 mt-1.5">
                     {err.os && <span>OS: {err.os}</span>}
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1" suppressHydrationWarning>
                       <Clock className="w-3 h-3" />
-                      {new Date(err.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {formatTime(err.createdAt)}
                     </span>
                   </div>
                 </div>
@@ -143,8 +141,8 @@ export function ErrorStreamCard({ initialErrors, projectId }: ErrorStreamCardPro
                 </div>
                 <div>
                   <h3 className="font-bold text-white text-base">{selectedError.errorName}</h3>
-                  <p className="text-xs text-zinc-400">
-                    Reported on {new Date(selectedError.createdAt).toLocaleString()}
+                  <p className="text-xs text-zinc-400" suppressHydrationWarning>
+                    Reported on {formatDate(selectedError.createdAt)} {formatTime(selectedError.createdAt)}
                   </p>
                 </div>
               </div>

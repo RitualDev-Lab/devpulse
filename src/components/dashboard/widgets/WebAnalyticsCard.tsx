@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Globe, Users, Copy, Check, Smartphone, Monitor } from "lucide-react";
+import { formatNumber } from "@/lib/utils/format";
 
 export interface AnalyticsSummary {
   totalPageviews: number;
@@ -57,7 +58,7 @@ export function WebAnalyticsCard({ summary, projectSlug }: WebAnalyticsCardProps
             <span className="text-[10px] text-zinc-400 block mb-0.5">Total Pageviews</span>
             <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-lg">
               <Users className="w-4 h-4 text-emerald-400/80" />
-              <span>{total.toLocaleString()}</span>
+              <span>{formatNumber(total)}</span>
             </div>
           </div>
 

@@ -1,6 +1,7 @@
 import React from "react";
 import { GitFork, Star, AlertCircle, Tag, ExternalLink } from "lucide-react";
 import type { GitHubRepoStats } from "@/lib/integrations/github";
+import { formatNumber, formatDate } from "@/lib/utils/format";
 
 interface GitHubStatsCardProps {
   stats: GitHubRepoStats | null;
@@ -55,7 +56,7 @@ export function GitHubStatsCard({ stats, repoName }: GitHubStatsCardProps) {
           <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/60 flex flex-col items-center justify-center">
             <div className="flex items-center gap-1 text-amber-400 mb-1">
               <Star className="w-4 h-4 fill-amber-400" />
-              <span className="font-bold text-sm text-zinc-100">{stats.stars.toLocaleString()}</span>
+              <span className="font-bold text-sm text-zinc-100">{formatNumber(stats.stars)}</span>
             </div>
             <span className="text-[11px] text-zinc-400">Stars</span>
           </div>
@@ -63,7 +64,7 @@ export function GitHubStatsCard({ stats, repoName }: GitHubStatsCardProps) {
           <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/60 flex flex-col items-center justify-center">
             <div className="flex items-center gap-1 text-blue-400 mb-1">
               <GitFork className="w-4 h-4" />
-              <span className="font-bold text-sm text-zinc-100">{stats.forks.toLocaleString()}</span>
+              <span className="font-bold text-sm text-zinc-100">{formatNumber(stats.forks)}</span>
             </div>
             <span className="text-[11px] text-zinc-400">Forks</span>
           </div>
@@ -71,7 +72,7 @@ export function GitHubStatsCard({ stats, repoName }: GitHubStatsCardProps) {
           <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/60 flex flex-col items-center justify-center">
             <div className="flex items-center gap-1 text-emerald-400 mb-1">
               <AlertCircle className="w-4 h-4" />
-              <span className="font-bold text-sm text-zinc-100">{stats.openIssuesCount.toLocaleString()}</span>
+              <span className="font-bold text-sm text-zinc-100">{formatNumber(stats.openIssuesCount)}</span>
             </div>
             <span className="text-[11px] text-zinc-400">Open Issues</span>
           </div>
@@ -85,8 +86,8 @@ export function GitHubStatsCard({ stats, repoName }: GitHubStatsCardProps) {
               <span>Latest Release:</span>
               <span className="font-semibold text-white">{stats.latestRelease.tagName}</span>
             </div>
-            <span className="text-[11px] text-zinc-400">
-              {new Date(stats.latestRelease.publishedAt).toLocaleDateString()}
+            <span className="text-[11px] text-zinc-400" suppressHydrationWarning>
+              {formatDate(stats.latestRelease.publishedAt)}
             </span>
           </div>
         )}

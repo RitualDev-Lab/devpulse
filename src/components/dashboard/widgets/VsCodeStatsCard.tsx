@@ -1,6 +1,7 @@
 import React from "react";
 import { Download, Star, ExternalLink, Code2, CheckCircle2 } from "lucide-react";
 import type { VsCodeStats } from "@/lib/integrations/vscode";
+import { formatNumber } from "@/lib/utils/format";
 
 interface VsCodeStatsCardProps {
   stats: VsCodeStats | null;
@@ -56,7 +57,7 @@ export function VsCodeStatsCard({ stats, extensionId }: VsCodeStatsCardProps) {
             <span className="text-[10px] text-zinc-400 block mb-0.5">Total Installs</span>
             <div className="flex items-center gap-1 text-sky-400 font-bold text-sm">
               <Download className="w-3.5 h-3.5" />
-              <span>{stats.installs.toLocaleString()}</span>
+              <span>{formatNumber(stats.installs)}</span>
             </div>
           </div>
 
