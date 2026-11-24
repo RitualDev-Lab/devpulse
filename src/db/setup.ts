@@ -1,0 +1,104 @@
+import { client } from "./index";
+
+export async function initDb() {
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      github_username TEXT NOT NULL UNIQUE,
+      name TEXT,
+      email TEXT,
+      avatar_url TEXT,
+      storage_tier TEXT DEFAULT 'free' NOT NULL,
+      custom_domain TEXT UNIQUE,
+      custom_domain_verified INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT,
+      github_repo TEXT,
+      npm_package TEXT,
+      pypi_package TEXT,
+      vscode_extension TEXT,
+      mcp_server_name TEXT,
+      docker_image TEXT,
+      telemetry_api_key TEXT UNIQUE NOT NULL,
+      is_public INTEGER DEFAULT 1 NOT NULL,
+      custom_css TEXT,
+      theme TEXT DEFAULT 'dark' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS dashboard_widgets (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      widget_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      position_x INTEGER DEFAULT 0 NOT NULL,
+      position_y INTEGER DEFAULT 0 NOT NULL,
+      width INTEGER DEFAULT 2 NOT NULL,
+      height INTEGER DEFAULT 2 NOT NULL,
+      is_visible INTEGER DEFAULT 1 NOT NULL,
+      config_json TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS daily_metrics (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      metric_type TEXT NOT NULL,
+      date TEXT NOT NULL,
+      value INTEGER NOT NULL,
+      metadata_json TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS error_events (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      error_name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      stack_trace TEXT,
+      runtime TEXT DEFAULT 'node' NOT NULL,
+      version TEXT,
+      os TEXT,
+      environment TEXT DEFAULT 'production',
+      status TEXT DEFAULT 'unresolved' NOT NULL,
+      attachment_url TEXT,
+      reporter_email TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS user_storage_configs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      provider TEXT DEFAULT 'devpulse_r2' NOT NULL,
+      bucket_name TEXT,
+      endpoint TEXT,
+      access_key_encrypted TEXT,
+      secret_key_encrypted TEXT,
+      storage_used_bytes INTEGER DEFAULT 0 NOT NULL,
+      storage_limit_bytes INTEGER DEFAULT 104857600 NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  console.log("DevPulse Database tables verified successfully.");
+}
