@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { MessageSquarePlus, Copy, Check, ExternalLink } from "lucide-react";
 
 interface BugReportBadgeCardProps {
@@ -11,11 +11,15 @@ interface BugReportBadgeCardProps {
 export function BugReportBadgeCard({ projectSlug, projectName }: BugReportBadgeCardProps) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedBadge, setCopiedBadge] = useState(false);
+  const [origin, setOrigin] = useState("https://devpulse.rolenest.in");
 
-  const reportUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/report/${projectSlug}`
-    : `https://devpulse.ritualdev.in/report/${projectSlug}`;
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
+    }
+  }, []);
 
+  const reportUrl = `${origin}/report/${projectSlug}`;
   const readmeBadge = `[![Report Issue](https://img.shields.io/badge/DevPulse-Report_Bug-red?style=flat-square&logo=github)](${reportUrl})`;
 
   const copyLink = () => {
@@ -66,7 +70,7 @@ export function BugReportBadgeCard({ projectSlug, projectName }: BugReportBadgeC
             Direct Report URL
           </span>
           <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="font-mono text-zinc-200 truncate">{reportUrl}</span>
+            <span className="font-mono text-zinc-200 truncate" suppressHydrationWarning>{reportUrl}</span>
             <button
               onClick={copyLink}
               className="flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition shrink-0"
@@ -83,7 +87,7 @@ export function BugReportBadgeCard({ projectSlug, projectName }: BugReportBadgeC
             README.md Markdown Badge
           </span>
           <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="font-mono text-zinc-400 truncate text-[11px]">{readmeBadge}</span>
+            <span className="font-mono text-zinc-400 truncate text-[11px]" suppressHydrationWarning>{readmeBadge}</span>
             <button
               onClick={copyBadge}
               className="flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition shrink-0"

@@ -235,6 +235,7 @@ export function DragDropGrid({ data, isCustomizing }: DragDropGridProps) {
 
       {/* Main Sortable Grid */}
       <DndContext
+        id="devpulse-dnd-context"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}

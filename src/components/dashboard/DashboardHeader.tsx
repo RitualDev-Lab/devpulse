@@ -53,7 +53,7 @@ export function DashboardHeader({
               </span>
             </div>
             <p className="text-xs text-zinc-400 font-medium">
-              {projectName} {repoName ? `(${repoName})` : ""}
+              {projectName}{repoName ? ` (${repoName})` : ""}
             </p>
           </div>
         </div>
