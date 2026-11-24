@@ -17,15 +17,13 @@ if (fs.existsSync(workerSrc)) {
   console.log('Copied worker.js -> assets/_worker.js');
 }
 
-// 2. Copy server-functions, middleware, and .build into assets using native fs.cpSync
-const dirsToCopy = ['server-functions', 'middleware', '.build'];
-for (const dir of dirsToCopy) {
-  const src = path.join(openNextDir, dir);
-  const dest = path.join(assetsDir, dir);
-  if (fs.existsSync(src)) {
-    fs.cpSync(src, dest, { recursive: true });
-    console.log(`Copied ${dir} -> assets/${dir}`);
-  }
+// 2. Copy ALL directories and files from .open-next into assets (except assets itself)
+for (const item of fs.readdirSync(openNextDir)) {
+  if (item === 'assets') continue;
+  const src = path.join(openNextDir, item);
+  const dest = path.join(assetsDir, item);
+  fs.cpSync(src, dest, { recursive: true });
+  console.log(`Copied ${item} -> assets/${item}`);
 }
 
 console.log('Successfully prepared Cloudflare Pages assets with _worker.js and all dependencies.');
