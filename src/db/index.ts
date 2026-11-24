@@ -1,5 +1,5 @@
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
+import { createClient } from "@libsql/client/web";
+import { drizzle } from "drizzle-orm/libsql/web";
 import * as schema from "./schema";
 
 const url =
@@ -7,7 +7,7 @@ const url =
   "libsql://devpulse-ritual-dev-git.aws-us-east-2.turso.io";
 const authToken =
   process.env.TURSO_AUTH_TOKEN ||
-  "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2dmpxeGVmM0VmR1Z2dllERWJoUkd3Iiwib3JnX2lkIjoxMDAwMzEzMzM2fQ.Dyxg_8l1Xt5I6LvFVk-jvdyJJKm9qSXdEQ2qhtGZocGJZ343EizeBuA30N_LfSDU6VvzhJbJ-9hp4NcJb_2wCg";
+  "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTU1MTk3MTgsImlkIjoiMDFhMjBkNDAtZTgwMS03ZGUzLWIwZWMtYmY1ZDg2Y2M0ODFhIiwia2lkIjoiOU4wNkFHUmNMNFk3M3l2amwtY3lWbHcwaEZmRk54MWxYTjlFazg4ekxfTSIsInJpZCI6IjZmZDg3MzMwLWRlMDAtNGQ5My1iZjdjLTQ5YThiM2Q0OTJhZSJ9.UgAZ7dtseiTzNEteBRaVh_N_P134-fF-bDQqgyYtYMN4reQ1W9jNCUfpEhkZwg45gdL1L2iz30TwBcH4y792Dg";
 
 // Create the libSQL client
 export const client = createClient({
