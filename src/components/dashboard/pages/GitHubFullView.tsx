@@ -20,7 +20,9 @@ import {
   Tag,
   Eye,
   X,
+  KeyRound,
 } from "lucide-react";
+import { GitHubPatModal } from "../GitHubPatModal";
 import {
   AreaChart,
   Area,
@@ -102,6 +104,7 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
   } | null>(null);
   const [loadingThread, setLoadingThread] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [isPatOpen, setIsPatOpen] = useState(false);
 
   const inspectThread = async (itemNumber: number, fallback: { title: string; author: string; state: string; htmlUrl: string }) => {
     setLoadingThread(true);
@@ -269,17 +272,29 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
               {project.githubRepo || "No repository connected"} &bull; Manage PRs, Issues, Daily Clones &amp; Repo Views
             </p>
           </div>
-          {project.githubRepo && (
-            <a
-              href={`https://github.com/${project.githubRepo}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-white transition"
-            >
-              <span>Open {project.githubRepo} on GitHub</span>
-              <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
-            </a>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {!isDemo && (
+              <button
+                type="button"
+                onClick={() => setIsPatOpen(true)}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-semibold text-amber-200 transition"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span>{project.hasGithubToken ? "Update GitHub PAT & Guide" : "Add GitHub PAT + Guide"}</span>
+              </button>
+            )}
+            {project.githubRepo && (
+              <a
+                href={`https://github.com/${project.githubRepo}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-white transition"
+              >
+                <span>Open {project.githubRepo} on GitHub</span>
+                <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Summary KPI Strip */}
@@ -356,8 +371,20 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800/70 flex items-center justify-center text-xs text-zinc-500 text-center px-4">
-                  Connect a GitHub PAT (repo scope) in Quick Connect to unlock daily git clone charts.
+                <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800/70 flex flex-col items-center justify-center gap-3 text-xs text-zinc-400 text-center px-4">
+                  <p className="max-w-xs leading-relaxed">
+                    Connect a GitHub PAT (<code className="text-amber-300 font-mono">repo</code> scope) to unlock daily git clone charts &amp; private repo metrics.
+                  </p>
+                  {!isDemo && (
+                    <button
+                      type="button"
+                      onClick={() => setIsPatOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-xs font-semibold transition"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Add GitHub PAT + Setup Guide</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -719,6 +746,13 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
         </div>,
         document.body
       )}
+      <GitHubPatModal
+        isOpen={isPatOpen}
+        onClose={() => setIsPatOpen(false)}
+        projectId={project.id}
+        hasExistingToken={project.hasGithubToken}
+        onSaved={() => void loadGitHubData()}
+      />
     </WorkspaceShell>
   );
 }

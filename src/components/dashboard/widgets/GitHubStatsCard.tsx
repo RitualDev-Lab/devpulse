@@ -3,6 +3,8 @@ import { GitFork, Star, AlertCircle, Tag, ExternalLink, GitPullRequest, Clock, S
 import type { GitHubRepoStats } from "@/lib/integrations/github";
 import { formatNumber, formatDate } from "@/lib/utils/format";
 
+import Link from "next/link";
+
 interface GitHubStatsCardProps {
   stats: GitHubRepoStats | null;
   repoName: string;
@@ -11,12 +13,22 @@ interface GitHubStatsCardProps {
 export function GitHubStatsCard({ stats, repoName }: GitHubStatsCardProps) {
   if (!stats) {
     return (
-      <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-zinc-400">
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-zinc-400 space-y-3">
+        <div className="flex items-center justify-between">
           <span className="font-semibold text-zinc-200">GitHub Repository</span>
-          <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 text-zinc-400">Offline</span>
+          <span className="text-xs px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+            PAT Recommended
+          </span>
         </div>
-        <p className="text-sm">Unable to load public stats for {repoName}.</p>
+        <p className="text-xs text-zinc-400 leading-relaxed">
+          Unable to load public stats for <span className="font-mono text-zinc-200">{repoName}</span>. If this is a private repository, add a GitHub PAT (<code className="text-amber-300 font-mono">repo</code> scope) + setup guide.
+        </p>
+        <Link
+          href="/dashboard/github"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-xs font-semibold transition"
+        >
+          <span>Add GitHub PAT + Guide</span>
+        </Link>
       </div>
     );
   }

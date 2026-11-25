@@ -12,7 +12,9 @@ import {
   Check,
   Layers,
   X,
+  BookOpen,
 } from "lucide-react";
+import { GitHubPatModal } from "./GitHubPatModal";
 import { parseMultipleConnectorInputs } from "@/lib/integrations/url-parser";
 import { STACK_PRESETS, type StackPresetId } from "@/lib/dashboard/presets";
 
@@ -53,6 +55,7 @@ export function QuickConnectPanel({
   const [discoveredSummary, setDiscoveredSummary] = useState<string[]>([]);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [isPatGuideOpen, setIsPatGuideOpen] = useState(false);
 
   const detected = useMemo(() => parseMultipleConnectorInputs(linksText), [linksText]);
   const detectedGithubItem = useMemo(() => detected.find((d) => d.kind === "github"), [detected]);
@@ -144,6 +147,7 @@ export function QuickConnectPanel({
   };
 
   return (
+    <>
     <form
       onSubmit={handleApply}
       className="rounded-2xl bg-zinc-900/90 border border-zinc-800 p-5 sm:p-6 space-y-5 shadow-xl"
@@ -251,9 +255,19 @@ export function QuickConnectPanel({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-                GitHub PAT (Private Repos &amp; Clones)
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="block text-[11px] font-medium text-zinc-400">
+                  GitHub PAT (Private Repos &amp; Clones)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsPatGuideOpen(true)}
+                  className="text-[10px] font-semibold text-amber-300 hover:text-amber-200 inline-flex items-center gap-1"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  <span>Setup Guide</span>
+                </button>
+              </div>
               <input
                 type="password"
                 value={githubToken}
@@ -380,5 +394,13 @@ export function QuickConnectPanel({
         </button>
       </div>
     </form>
+    <GitHubPatModal
+      isOpen={isPatGuideOpen}
+      onClose={() => setIsPatGuideOpen(false)}
+      projectId={projectId}
+      hasExistingToken={hasGithubToken}
+      onSaved={onSuccess}
+    />
+    </>
   );
 }

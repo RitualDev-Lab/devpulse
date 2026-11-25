@@ -13,6 +13,7 @@ type LangTabId =
   | "desktop"
   | "react_native"
   | "flutter"
+  | "oci"
   | "cli";
 
 interface LanguageSdkTabsProps {
@@ -32,6 +33,7 @@ const LANG_TABS: Array<{ id: LangTabId; label: string; file: string }> = [
   { id: "desktop", label: "Tauri / Electron", file: "main.ts" },
   { id: "react_native", label: "React Native", file: "App.tsx" },
   { id: "flutter", label: "Flutter", file: "lib/devpulse.dart" },
+  { id: "oci", label: "OCI / Linux VPS", file: "oci-agent.sh" },
   { id: "cli", label: "CLI Apps", file: "beacon.sh" },
 ];
 
@@ -56,6 +58,8 @@ function buildLanguageSnippet(tab: LangTabId, apiKey?: string | null): string {
       return `// npm i @ritualdev/devpulse\nimport { DevPulseClient } from "@ritualdev/devpulse";\n\nconst pulse = new DevPulseClient({ apiKey: "${key}", release: "2.1.0" }).initReactNative({\n  platform: "ios",\n  deviceModel: "iPhone 15 Pro",\n  anrThresholdMs: 5000,\n});\n\n// Report native OOM / network failures & evaluate feature flags:\npulse.reportMobileEvent({ errorName: "OOMKill", message: "Memory warning", category: "oom", platform: "ios" });`;
     case "flutter":
       return `// packages/devpulse_flutter — captures exceptions, OOM, ANR & network errors\nawait DevPulseFlutter.init(\n  apiKey: "${key}",\n  release: "2.1.0",\n  deviceModel: "Pixel 9",\n);\n\nif (await DevPulseFlutter.instance!.flag("new-checkout", userId: "usr_123")) {\n  // Render new checkout\n}`;
+    case "oci":
+      return `# OCI Compute / AWS EC2 / VPS Host & App Telemetry\n# Cron or systemd timer pushing server health + errors without needing a GitHub repo\ncurl -s -X POST https://devpulse.ritualdev.in/api/v1/analytics \\\n  -H "Content-Type: application/json" \\\n  -d '{"project":"${key}","metricName":"oci_active_requests","metricValue":128,"sourceType":"app","os":"Oracle Linux OCI"}'\n\ncurl -s -X POST https://devpulse.ritualdev.in/api/v1/event \\\n  -H "Content-Type: application/json" \\\n  -d '{"apiKey":"${key}","errorName":"ServiceHealthWarn","message":"High memory usage on OCI worker","runtime":"oci-linux"}'`;
     case "cli":
       return `# Track custom numeric metrics & CLI runs from any shell binary\ncurl -s -X POST https://devpulse.ritualdev.in/api/v1/analytics \\\n  -H "Content-Type: application/json" \\\n  -d '{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"cli","os":"Linux"}'`;
   }

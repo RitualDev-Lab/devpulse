@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
-import { projects } from "@/db/schema";
+import { dashboardWidgets, projects, uptimeMonitors } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
@@ -9,6 +9,10 @@ import { listAccessibleProjects } from "@/lib/security/rbac";
 import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
+import { encryptSecret } from "@/lib/security/crypto";
+import { normalizeStackPreset, STACK_PRESETS } from "@/lib/dashboard/presets";
+import { buildDefaultLayout } from "@/lib/layout/grid-engine";
+import { isValidPublicMonitorUrl } from "@/lib/monitors/checker";
 
 export async function GET() {
   try {
@@ -52,15 +56,32 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, githubRepo, npmPackage, pypiPackage, rustCrate, goModule, vscodeExtension, mcpServerName } = body;
+    const {
+      name,
+      description,
+      githubRepo,
+      githubToken,
+      npmPackage,
+      pypiPackage,
+      rustCrate,
+      goModule,
+      dockerImage,
+      vscodeExtension,
+      mcpServerName,
+      stackPreset: rawPreset,
+      websiteUrl,
+    } = body;
 
-    if (!name || typeof name !== "string") {
+    if (!name || typeof name !== "string" || !name.trim()) {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
     }
 
+    const explicitPat =
+      typeof githubToken === "string" && githubToken.trim() ? githubToken.trim() : null;
+
     let verifiedGithubRepo: string | null = null;
     if (githubRepo && typeof githubRepo === "string" && githubRepo.trim()) {
-      const ownership = await verifyGitHubRepoOwnership(user, githubRepo);
+      const ownership = await verifyGitHubRepoOwnership(user, githubRepo, explicitPat);
       if (!ownership.allowed) {
         await recordAuditEvent({
           userId: user.id,
@@ -119,24 +140,94 @@ export async function POST(request: Request) {
     const projectId = `prj_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
     const telemetryApiKey = `dp_live_${crypto.randomBytes(12).toString("hex")}`;
     const publicWriteKey = `dp_pub_${crypto.randomBytes(12).toString("hex")}`;
+    const stackPreset = normalizeStackPreset(rawPreset);
+    const encryptedPat = explicitPat ? await encryptSecret(explicitPat).catch(() => null) : null;
+
+    const cleanOpt = (v: unknown) =>
+      typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : null;
 
     await db.insert(projects).values({
       id: projectId,
       userId: user.id,
-      name,
+      name: name.trim().slice(0, 80),
       slug,
+      description: cleanOpt(description),
       githubRepo: verifiedGithubRepo,
-      npmPackage: npmPackage || null,
-      pypiPackage: pypiPackage || null,
-      rustCrate: rustCrate || null,
-      goModule: goModule || null,
-      vscodeExtension: vscodeExtension || null,
-      mcpServerName: mcpServerName || null,
+      githubTokenEncrypted: encryptedPat,
+      npmPackage: cleanOpt(npmPackage),
+      pypiPackage: cleanOpt(pypiPackage),
+      rustCrate: cleanOpt(rustCrate),
+      goModule: cleanOpt(goModule),
+      dockerImage: cleanOpt(dockerImage),
+      vscodeExtension: cleanOpt(vscodeExtension),
+      mcpServerName: cleanOpt(mcpServerName),
+      stackPreset,
       telemetryApiKey,
       publicWriteKey,
       isPublic: true,
       theme: "dark",
     });
+
+    // Seed smart 2D dashboard widgets matching standalone packages / web / OCI apps
+    const presetDefs = STACK_PRESETS[stackPreset].recommendedWidgets;
+    const widgetMap = new Map<
+      string,
+      { id: string; title: string; defaultW: number; defaultH: number }
+    >();
+    const chosenEcosystems = [
+      ...(verifiedGithubRepo ? [{ id: "github_stats", title: "GitHub Repository", defaultW: 4, defaultH: 1 }] : []),
+      ...(cleanOpt(npmPackage) ? [{ id: "npm_downloads", title: "npm Registry", defaultW: 4, defaultH: 1 }] : []),
+      ...(cleanOpt(pypiPackage) ? [{ id: "pypi_downloads", title: "PyPI Package", defaultW: 4, defaultH: 1 }] : []),
+      ...(cleanOpt(rustCrate) ? [{ id: "rust_crates", title: "Rust Crates.io", defaultW: 4, defaultH: 1 }] : []),
+      ...(cleanOpt(dockerImage) ? [{ id: "docker_container", title: "Docker Hub Container", defaultW: 4, defaultH: 1 }] : []),
+      ...(cleanOpt(vscodeExtension) ? [{ id: "vscode_stats", title: "VS Code Extension", defaultW: 4, defaultH: 1 }] : []),
+      ...(cleanOpt(mcpServerName) ? [{ id: "mcp_stats", title: "MCP Server Registry", defaultW: 4, defaultH: 1 }] : []),
+    ];
+    for (const def of [...chosenEcosystems, ...presetDefs]) {
+      // Omit unrelated github/npm preset defaults when creating a standalone workspace without them
+      if (!verifiedGithubRepo && def.id === "github_stats") continue;
+      if (!cleanOpt(npmPackage) && def.id === "npm_downloads") continue;
+      if (!widgetMap.has(def.id)) widgetMap.set(def.id, def);
+    }
+    if (!widgetMap.has("telemetry_setup")) {
+      widgetMap.set("telemetry_setup", { id: "telemetry_setup", title: "SDK Integration", defaultW: 4, defaultH: 1 });
+    }
+    if (!widgetMap.has("bug_report_badge")) {
+      widgetMap.set("bug_report_badge", { id: "bug_report_badge", title: "Public Bug Portal", defaultW: 4, defaultH: 1 });
+    }
+    const layoutItems = buildDefaultLayout(Array.from(widgetMap.values()));
+    if (layoutItems.length > 0) {
+      await db.insert(dashboardWidgets).values(
+        layoutItems.map((w) => ({
+          id: `w_${projectId}_${w.id}`.slice(0, 128),
+          projectId,
+          widgetType: w.id,
+          title: w.title,
+          positionX: w.x,
+          positionY: w.y,
+          width: w.w,
+          height: w.h,
+          isVisible: w.isVisible,
+        }))
+      );
+    }
+
+    // Optional website / OCI / VPS health monitor created inline
+    if (typeof websiteUrl === "string" && websiteUrl.trim()) {
+      const check = isValidPublicMonitorUrl(websiteUrl.trim());
+      if (check.valid && check.normalized) {
+        await db.insert(uptimeMonitors).values({
+          id: `mon_${crypto.randomUUID().replace(/-/g, "").slice(0, 14)}`,
+          projectId,
+          name: `${name.trim()} Endpoint`,
+          url: check.normalized,
+          method: "GET",
+          expectedStatus: 200,
+          intervalMinutes: 5,
+          isActive: true,
+        }).catch(() => {});
+      }
+    }
 
     await ensurePrimaryKeyHashRecorded({
       projectId,

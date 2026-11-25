@@ -3,12 +3,18 @@ import { db } from "../src/db";
 import { featureRequests, featureVotes, statusSubscribers } from "../src/db/schema";
 import { eq } from "drizzle-orm";
 import { getEffectiveEntitlements } from "../src/lib/billing/plans";
+import { fetchGa4Report } from "../src/lib/integrations/ga4";
 
 async function main() {
   const freeEntitlements = getEffectiveEntitlements({ storageTier: "free" });
   const proEntitlements = getEffectiveEntitlements({ storageTier: "pro" });
   assert.equal(freeEntitlements.maxProjects, 5);
   assert.equal(proEntitlements.maxProjects, 25);
+
+  await assert.rejects(
+    () => fetchGa4Report({ propertyId: "invalid-id", credential: "tok" }),
+    /Property ID must be numeric/
+  );
 
   const projectId = "prj_ritual_core";
   const subId = `ssub_test_${Date.now()}`;

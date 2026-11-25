@@ -16,6 +16,7 @@ import { scanGitHubRepository } from "@/lib/scanner/github-scanner";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { decryptSecret } from "@/lib/security/crypto";
 import { validatePublicUrl } from "@/lib/security/ssrf";
+import { fetchExternalAnalyticsSnapshot } from "@/lib/integrations/ga4";
 
 export const dynamic = "force-dynamic";
 
@@ -321,7 +322,27 @@ export async function POST(req: NextRequest) {
       const rawSecret = body.apiKey ? String(body.apiKey).trim() : "";
 
       const encrypted = rawSecret ? await encryptSecret(rawSecret) : null;
-      const metadata: Record<string, any> = {};
+      let metadata: Record<string, any> = {};
+
+      if (category === "analytics") {
+        try {
+          metadata = await fetchExternalAnalyticsSnapshot({
+            provider,
+            identifier,
+            targetUrl,
+            credential: rawSecret || null,
+          });
+        } catch (analyticsErr: any) {
+          return NextResponse.json(
+            {
+              error:
+                analyticsErr?.message ||
+                `Failed to verify ${provider.toUpperCase()} analytics credentials.`,
+            },
+            { status: 400 }
+          );
+        }
+      }
 
       // Optional instant balance/revenue probe for custom/LemonSqueezy/Polar/Gumroad keys
       if (category === "payment" && rawSecret) {
@@ -426,6 +447,45 @@ export async function POST(req: NextRequest) {
       });
 
       return NextResponse.json({ success: true, connectorId: id, metadata }, { status: 201 });
+    }
+
+    if (action === "sync_connector") {
+      const connectorId = String(body.connectorId || "");
+      const [conn] = await db
+        .select()
+        .from(projectConnectors)
+        .where(and(eq(projectConnectors.id, connectorId), eq(projectConnectors.projectId, projectId)))
+        .limit(1);
+
+      if (!conn) {
+        return NextResponse.json({ error: "Connector not found" }, { status: 404 });
+      }
+
+      const decrypted = conn.credentialsEncrypted
+        ? await decryptSecret(conn.credentialsEncrypted).catch(() => null)
+        : null;
+
+      let metadata: Record<string, any> = {};
+      if (conn.category === "analytics") {
+        metadata = await fetchExternalAnalyticsSnapshot({
+          provider: conn.provider,
+          identifier: conn.identifier,
+          targetUrl: conn.targetUrl,
+          credential: decrypted,
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      await db
+        .update(projectConnectors)
+        .set({
+          metadataJson: JSON.stringify(metadata),
+          lastSyncedAt: nowIso,
+          updatedAt: nowIso,
+        })
+        .where(eq(projectConnectors.id, conn.id));
+
+      return NextResponse.json({ success: true, metadata, lastSyncedAt: nowIso });
     }
 
     if (action === "delete_connector") {

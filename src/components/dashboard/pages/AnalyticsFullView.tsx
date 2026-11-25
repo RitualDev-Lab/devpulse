@@ -15,6 +15,7 @@ import { WorkspaceShell } from "../WorkspaceShell";
 import { useWorkspaceData } from "../WorkspaceCacheContext";
 import { WebAnalyticsCard } from "../widgets/WebAnalyticsCard";
 import { LanguageSdkTabs } from "../LanguageSdkTabs";
+import { ExternalAnalyticsHub } from "../ExternalAnalyticsHub";
 
 export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { projects, customDomain, storageTier, isDemo } = workspace;
@@ -177,6 +178,14 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
             </div>
           </div>
         )}
+
+        <ExternalAnalyticsHub
+          projectId={project.id}
+          projectSlug={project.slug}
+          publicWriteKey={project.publicWriteKey}
+          telemetryApiKey={project.telemetryApiKey}
+          isDemo={isDemo}
+        />
 
         <LanguageSdkTabs
           apiKey={project.telemetryApiKey}

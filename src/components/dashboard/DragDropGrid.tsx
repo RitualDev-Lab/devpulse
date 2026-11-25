@@ -61,6 +61,7 @@ export interface DashboardData {
     vscodeExtension?: string | null;
     mcpServerName?: string | null;
     telemetryApiKey?: string | null;
+    publicWriteKey?: string | null;
     hasTelemetryApiKey?: boolean;
     discordWebhookUrl?: string | null;
     slackWebhookUrl?: string | null;

@@ -11,6 +11,7 @@ import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
+import { encryptSecret } from "@/lib/security/crypto";
 
 export async function POST(request: Request) {
   try {
@@ -23,7 +24,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { repo, stackPreset: rawPreset } = body;
+    const { repo, stackPreset: rawPreset, githubToken } = body;
+    const explicitPat = typeof githubToken === "string" && githubToken.trim() ? githubToken.trim() : null;
     const stackPreset = normalizeStackPreset(rawPreset);
 
     if (!repo || typeof repo !== "string" || !repo.trim()) {
@@ -33,8 +35,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // 0. Enforce strict Personal / Verified GitHub Organization ownership
-    const ownership = await verifyGitHubRepoOwnership(user, repo);
+    // 0. Enforce strict Personal / Verified GitHub Organization ownership (supports inline PAT for private repos)
+    const ownership = await verifyGitHubRepoOwnership(user, repo, explicitPat);
     if (!ownership.allowed) {
       await recordAuditEvent({
         userId: user.id,
@@ -71,6 +73,15 @@ export async function POST(request: Request) {
       .limit(1);
 
     if (existing[0]) {
+      if (explicitPat) {
+        const enc = await encryptSecret(explicitPat).catch(() => null);
+        if (enc) {
+          await db
+            .update(projects)
+            .set({ githubTokenEncrypted: enc })
+            .where(eq(projects.id, existing[0].id));
+        }
+      }
       return NextResponse.json({
         success: true,
         message: "Repository is already imported.",
@@ -120,6 +131,7 @@ export async function POST(request: Request) {
     const projectId = `prj_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
     const telemetryApiKey = `dp_live_${crypto.randomBytes(12).toString("hex")}`;
     const publicWriteKey = `dp_pub_${crypto.randomBytes(12).toString("hex")}`;
+    const encryptedPat = explicitPat ? await encryptSecret(explicitPat).catch(() => null) : null;
 
     // 4. Insert new Project row
     await db.insert(projects).values({
@@ -129,6 +141,7 @@ export async function POST(request: Request) {
       slug,
       description: scanned.description || `Developer mission control for ${scanned.githubRepo}`,
       githubRepo: scanned.githubRepo,
+      githubTokenEncrypted: encryptedPat,
       npmPackage: scanned.detectedEcosystems.npmPackage || null,
       pypiPackage: scanned.detectedEcosystems.pypiPackage || null,
       rustCrate: scanned.detectedEcosystems.rustCrate || null,

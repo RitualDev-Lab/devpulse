@@ -210,7 +210,8 @@ export async function listUserAndOrgRepositories(user: AuthenticatedUser): Promi
  */
 export async function verifyGitHubRepoOwnership(
   user: AuthenticatedUser,
-  rawRepo: string
+  rawRepo: string,
+  overrideToken?: string | null
 ): Promise<{
   allowed: boolean;
   githubRepo: string;
@@ -236,7 +237,8 @@ export async function verifyGitHubRepoOwnership(
 
   const [owner, repo] = parts;
   const canonical = `${owner}/${repo}`;
-  const token = await getUserGitHubAccessToken(user.id);
+  const explicitPat = overrideToken && overrideToken.trim() ? overrideToken.trim() : null;
+  const token = explicitPat || (await getUserGitHubAccessToken(user.id));
 
   // 1. Direct personal repository match
   if (owner.toLowerCase() === user.githubUsername.toLowerCase()) {
