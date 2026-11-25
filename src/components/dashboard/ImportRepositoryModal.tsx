@@ -70,7 +70,10 @@ export function ImportRepositoryModal({
   const [pypiPackage, setPypiPackage] = useState("");
   const [npmPackage, setNpmPackage] = useState("");
   const [rustCrate, setRustCrate] = useState("");
+  const [goModule, setGoModule] = useState("");
   const [dockerImage, setDockerImage] = useState("");
+  const [vscodeExtension, setVsCodeExtension] = useState("");
+  const [mcpServerName, setMcpServerName] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
 
   const [isScanning, setIsScanning] = useState(false);
@@ -170,7 +173,10 @@ export function ImportRepositoryModal({
           pypiPackage: pypiPackage.trim() || null,
           npmPackage: npmPackage.trim() || null,
           rustCrate: rustCrate.trim() || null,
+          goModule: goModule.trim() || null,
           dockerImage: dockerImage.trim() || null,
+          vscodeExtension: vscodeExtension.trim() || null,
+          mcpServerName: mcpServerName.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
         }),
       });
@@ -187,7 +193,10 @@ export function ImportRepositoryModal({
           ...(pypiPackage.trim() ? [`PyPI: ${pypiPackage.trim()}`] : []),
           ...(npmPackage.trim() ? [`npm: ${npmPackage.trim()}`] : []),
           ...(rustCrate.trim() ? [`Crates.io: ${rustCrate.trim()}`] : []),
+          ...(goModule.trim() ? [`Go: ${goModule.trim()}`] : []),
           ...(dockerImage.trim() ? [`Docker: ${dockerImage.trim()}`] : []),
+          ...(vscodeExtension.trim() ? [`VS Code: ${vscodeExtension.trim()}`] : []),
+          ...(mcpServerName.trim() ? [`MCP: ${mcpServerName.trim()}`] : []),
           ...(websiteUrl.trim() ? [`Health Probe: ${websiteUrl.trim()}`] : []),
         ],
       });
@@ -553,6 +562,42 @@ export function ImportRepositoryModal({
                       value={dockerImage}
                       onChange={(e) => setDockerImage(e.target.value)}
                       placeholder="e.g., myorg/api-server"
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono text-white placeholder-zinc-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-zinc-400 mb-1">
+                      Go Module Path (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={goModule}
+                      onChange={(e) => setGoModule(e.target.value)}
+                      placeholder="e.g., github.com/gin-gonic/gin"
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono text-white placeholder-zinc-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-zinc-400 mb-1">
+                      VS Code Extension ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={vscodeExtension}
+                      onChange={(e) => setVsCodeExtension(e.target.value)}
+                      placeholder="e.g., publisher.extension-name"
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono text-white placeholder-zinc-600"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] text-zinc-400 mb-1">
+                      MCP Server Registry Slug (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={mcpServerName}
+                      onChange={(e) => setMcpServerName(e.target.value)}
+                      placeholder="e.g., @ritualdev-lab/devpulse-mcp"
                       className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono text-white placeholder-zinc-600"
                     />
                   </div>

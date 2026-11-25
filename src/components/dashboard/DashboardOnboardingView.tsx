@@ -59,7 +59,10 @@ export function DashboardOnboardingView({ user }: DashboardOnboardingViewProps) 
   const [standaloneName, setStandaloneName] = useState(`${user.githubUsername} App`);
   const [standaloneType, setStandaloneType] = useState<"saas" | "desktop" | "package" | "mobile">("saas");
   const [standaloneUrl, setStandaloneUrl] = useState("");
-  const [standalonePypi, setStandalonePypi] = useState("");
+  const [standalonePkgKind, setStandalonePkgKind] = useState<
+    "pypiPackage" | "npmPackage" | "rustCrate" | "goModule" | "dockerImage" | "vscodeExtension" | "mcpServerName"
+  >("pypiPackage");
+  const [standalonePkgVal, setStandalonePkgVal] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [scanningRepo, setScanningRepo] = useState<string | null>(null);
   const [scanStep, setScanStep] = useState<string>("");
@@ -136,7 +139,7 @@ export function DashboardOnboardingView({ user }: DashboardOnboardingViewProps) 
           name: standaloneName.trim() || `${user.githubUsername} App`,
           stackPreset: preset,
           websiteUrl: standaloneUrl.trim() || null,
-          pypiPackage: standalonePypi.trim() || null,
+          ...(standalonePkgVal.trim() ? { [standalonePkgKind]: standalonePkgVal.trim() } : {}),
         }),
       });
       const data = await res.json();
@@ -421,7 +424,7 @@ export function DashboardOnboardingView({ user }: DashboardOnboardingViewProps) 
             ))}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <input
               type="text"
               required
@@ -437,12 +440,27 @@ export function DashboardOnboardingView({ user }: DashboardOnboardingViewProps) 
               placeholder="Website / Health URL (optional)"
               className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
             />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <select
+              value={standalonePkgKind}
+              onChange={(e) => setStandalonePkgKind(e.target.value as any)}
+              className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white"
+            >
+              <option value="pypiPackage">PyPI (Python-only)</option>
+              <option value="npmPackage">npm Package</option>
+              <option value="rustCrate">Rust Crate (crates.io)</option>
+              <option value="goModule">Go Module</option>
+              <option value="dockerImage">Docker Image</option>
+              <option value="vscodeExtension">VS Code Extension</option>
+              <option value="mcpServerName">MCP Server</option>
+            </select>
             <input
               type="text"
-              value={standalonePypi}
-              onChange={(e) => setStandalonePypi(e.target.value)}
-              placeholder="PyPI Package (optional)"
-              className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
+              value={standalonePkgVal}
+              onChange={(e) => setStandalonePkgVal(e.target.value)}
+              placeholder="Optional package slug (e.g., devpulse-sdk or devpulse-rs)"
+              className="sm:col-span-2 px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
             />
           </div>
 
