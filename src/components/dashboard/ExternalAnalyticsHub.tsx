@@ -14,6 +14,7 @@ import {
   Globe,
   HeartPulse,
 } from "lucide-react";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 interface ExternalConnector {
   id: string;
@@ -31,6 +32,7 @@ interface ParsedMeta {
   sessions?: number;
   pageViews?: number;
   bounceRatePct?: number;
+  daily?: Array<{ date: string; activeUsers: number; sessions: number; pageViews: number }>;
   note?: string;
 }
 
@@ -51,7 +53,7 @@ export function ExternalAnalyticsHub({
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
 
-  const [provider, setProvider] = useState<"ga4" | "plausible" | "umami" | "oci_server">("ga4");
+  const [provider, setProvider] = useState<"ga4" | "plausible" | "posthog" | "umami" | "oci_server">("ga4");
   const [label, setLabel] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
@@ -248,11 +250,12 @@ curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
             onSubmit={handleConnect}
             className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3"
           >
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {(
                 [
                   { id: "ga4", title: "Google Analytics 4", sub: "GA4 Data API" },
                   { id: "plausible", title: "Plausible", sub: "Stats API" },
+                  { id: "posthog", title: "PostHog", sub: "Trends API" },
                   { id: "umami", title: "Umami", sub: "Self-Hosted" },
                   { id: "oci_server", title: "OCI / Server URL", sub: "Custom JSON" },
                 ] as const
@@ -304,6 +307,8 @@ curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
                     ? "GA4 Property ID (e.g., 391827450)"
                     : provider === "plausible"
                     ? "Domain (e.g., myapp.com)"
+                    : provider === "posthog"
+                    ? "PostHog Project ID (e.g., 12345)"
                     : provider === "umami"
                     ? "Website UUID"
                     : "Node / Region identifier (e.g., oci-iad-1)"
@@ -312,7 +317,7 @@ curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
               />
             </div>
 
-            {(provider === "plausible" || provider === "umami" || provider === "oci_server") && (
+            {(provider === "plausible" || provider === "posthog" || provider === "umami" || provider === "oci_server") && (
               <input
                 type="url"
                 required={provider === "umami" || provider === "oci_server"}
@@ -321,6 +326,8 @@ curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
                 placeholder={
                   provider === "plausible"
                     ? "Self-hosted URL (optional, defaults to https://plausible.io)"
+                    : provider === "posthog"
+                    ? "PostHog Host (optional, defaults to https://us.posthog.com)"
                     : provider === "umami"
                     ? "https://analytics.yourdomain.com"
                     : "https://metrics.your-oci-server.com/summary.json"
@@ -332,13 +339,13 @@ curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
             <div>
               <textarea
                 rows={provider === "ga4" ? 3 : 1}
-                required={provider === "ga4" || provider === "plausible"}
+                required={provider === "ga4" || provider === "plausible" || provider === "posthog"}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder={
                   provider === "ga4"
                     ? 'Paste Google Service Account JSON ({"client_email":...,"private_key":...}) or ya29... OAuth token'
-                    : "API Key / Bearer Token (optional for public endpoints)"
+                    : "API Key / Personal Access Key (optional for public endpoints)"
                 }
                 className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono text-white"
               />
@@ -364,81 +371,144 @@ curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
             No external analytics sources connected yet. Click <strong>Connect Analytics Source</strong> to pull GA4, Plausible, Umami, or OCI Server metrics here.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {connectors.map((c) => {
-              let meta: ParsedMeta = {};
-              try {
-                if (c.metadataJson) meta = JSON.parse(c.metadataJson);
-              } catch {
-                // ignore
-              }
+          <div className="space-y-3">
+            {connectors.length > 1 && (() => {
+              const totals = connectors.reduce(
+                (acc, c) => {
+                  try {
+                    const m = c.metadataJson ? (JSON.parse(c.metadataJson) as ParsedMeta) : {};
+                    acc.users += Number(m.activeUsers || 0);
+                    acc.sessions += Number(m.sessions || 0);
+                    acc.views += Number(m.pageViews || 0);
+                  } catch {}
+                  return acc;
+                },
+                { users: 0, sessions: 0, views: 0 }
+              );
               return (
-                <div
-                  key={c.id}
-                  className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                          {c.provider}
-                        </span>
-                        <span className="text-xs font-bold text-white">{c.label}</span>
-                      </div>
-                      {c.identifier && (
-                        <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
-                          ID: {c.identifier}
-                        </div>
-                      )}
-                    </div>
-                    {!isDemo && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleSync(c.id)}
-                          disabled={syncingId === c.id}
-                          title="Sync latest report"
-                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
-                        >
-                          <RefreshCw
-                            className={`w-3.5 h-3.5 ${syncingId === c.id ? "animate-spin" : ""}`}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(c.id)}
-                          title="Disconnect"
-                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-400 hover:text-red-300 border border-zinc-800"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="p-2 rounded-lg bg-zinc-900/70 border border-zinc-800/80">
-                      <div className="text-sm font-bold text-white">
-                        {(meta.activeUsers ?? 0).toLocaleString()}
-                      </div>
-                      <div className="text-[10px] text-zinc-400">Active Users</div>
-                    </div>
-                    <div className="p-2 rounded-lg bg-zinc-900/70 border border-zinc-800/80">
-                      <div className="text-sm font-bold text-white">
-                        {(meta.sessions ?? 0).toLocaleString()}
-                      </div>
-                      <div className="text-[10px] text-zinc-400">Sessions</div>
-                    </div>
-                    <div className="p-2 rounded-lg bg-zinc-900/70 border border-zinc-800/80">
-                      <div className="text-sm font-bold text-white">
-                        {(meta.pageViews ?? 0).toLocaleString()}
-                      </div>
-                      <div className="text-[10px] text-zinc-400">Pageviews</div>
-                    </div>
+                <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <span className="font-semibold text-indigo-200">
+                    Combined Across {connectors.length} Connected Sources:
+                  </span>
+                  <div className="flex items-center gap-4 font-mono">
+                    <span className="text-white tabular-nums">{totals.users.toLocaleString()} users</span>
+                    <span className="text-cyan-300 tabular-nums">{totals.sessions.toLocaleString()} sessions</span>
+                    <span className="text-emerald-300 tabular-nums">{totals.views.toLocaleString()} views</span>
                   </div>
                 </div>
               );
-            })}
+            })()}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {connectors.map((c) => {
+                let meta: ParsedMeta = {};
+                try {
+                  if (c.metadataJson) meta = JSON.parse(c.metadataJson);
+                } catch {
+                  // ignore
+                }
+                return (
+                  <div
+                    key={c.id}
+                    className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                            {c.provider}
+                          </span>
+                          <span className="text-xs font-bold text-white">{c.label}</span>
+                        </div>
+                        {c.identifier && (
+                          <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                            ID: {c.identifier}
+                          </div>
+                        )}
+                      </div>
+                      {!isDemo && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSync(c.id)}
+                            disabled={syncingId === c.id}
+                            title="Sync latest report"
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
+                          >
+                            <RefreshCw
+                              className={`w-3.5 h-3.5 ${syncingId === c.id ? "animate-spin" : ""}`}
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(c.id)}
+                            title="Disconnect"
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-400 hover:text-red-300 border border-zinc-800"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={`grid ${typeof meta.bounceRatePct === "number" ? "grid-cols-4" : "grid-cols-3"} gap-2 text-center`}>
+                      <div className="p-2 rounded-lg bg-zinc-900/70 border border-zinc-800/80">
+                        <div className="text-sm font-bold text-white tabular-nums">
+                          {(meta.activeUsers ?? 0).toLocaleString()}
+                        </div>
+                        <div className="text-[10px] text-zinc-400">Active Users</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-zinc-900/70 border border-zinc-800/80">
+                        <div className="text-sm font-bold text-white tabular-nums">
+                          {(meta.sessions ?? 0).toLocaleString()}
+                        </div>
+                        <div className="text-[10px] text-zinc-400">Sessions</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-zinc-900/70 border border-zinc-800/80">
+                        <div className="text-sm font-bold text-white tabular-nums">
+                          {(meta.pageViews ?? 0).toLocaleString()}
+                        </div>
+                        <div className="text-[10px] text-zinc-400">Pageviews</div>
+                      </div>
+                      {typeof meta.bounceRatePct === "number" && (
+                        <div className="p-2 rounded-lg bg-zinc-900/70 border border-zinc-800/80">
+                          <div className="text-sm font-bold text-amber-300 tabular-nums">
+                            {meta.bounceRatePct}%
+                          </div>
+                          <div className="text-[10px] text-zinc-400">Bounce</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {Array.isArray(meta.daily) && meta.daily.length > 0 && (
+                      <div className="h-24 pt-1">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={meta.daily}>
+                            <XAxis dataKey="date" hide />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "#09090b",
+                                borderColor: "#27272a",
+                                borderRadius: "8px",
+                                fontSize: "11px",
+                              }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="activeUsers"
+                              name="Active Users"
+                              stroke="#818cf8"
+                              fill="#818cf830"
+                              strokeWidth={1.5}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

@@ -273,6 +273,52 @@ export async function fetchExternalAnalyticsSnapshot(params: {
     };
   }
 
+  if (provider === "posthog") {
+    if (!params.identifier || !params.credential) {
+      throw new Error("PostHog requires Project ID and Personal API Key.");
+    }
+    const base = params.targetUrl
+      ? assertSafePublicHttpsUrl(params.targetUrl).replace(/\/+$/, "")
+      : "https://us.posthog.com";
+    const res = await fetch(
+      `${base}/api/projects/${encodeURIComponent(params.identifier)}/insights/trend/?events=${encodeURIComponent(
+        JSON.stringify([{ id: "$pageview", math: "dau" }])
+      )}&date_from=-30d`,
+      {
+        headers: {
+          Authorization: `Bearer ${params.credential}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) throw new Error(`PostHog API HTTP ${res.status}`);
+    const data = (await res.json()) as {
+      result?: Array<{
+        count?: number;
+        data?: number[];
+        days?: string[];
+      }>;
+    };
+    const series = data.result?.[0];
+    const dailyPts = Array.isArray(series?.data)
+      ? series.data.map((val, idx) => ({
+          date: series.days?.[idx] || String(idx + 1),
+          activeUsers: Number(val || 0),
+          sessions: Number(val || 0),
+          pageViews: Number(val || 0),
+        }))
+      : [];
+    const total = dailyPts.reduce((acc, p) => acc + p.activeUsers, 0) || Number(series?.count || 0);
+    return {
+      provider: "posthog",
+      activeUsers: total,
+      sessions: total,
+      pageViews: total,
+      daily: dailyPts,
+      syncedAt: new Date().toISOString(),
+    };
+  }
+
   // OCI / VPS / Custom Server Telemetry JSON Endpoint (SSRF-guarded public HTTPS URL)
   if (params.targetUrl) {
     const safeUrl = assertSafePublicHttpsUrl(params.targetUrl);
