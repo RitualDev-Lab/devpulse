@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertOctagon,
   CheckCircle2,
@@ -797,10 +798,22 @@ export function ErrorStreamCard({
         <span className="text-zinc-400 font-mono text-[10px]">POST /api/v1/event</span>
       </div>
 
-      {/* Sentry-Grade Issue Detail Modal */}
-      {selectedGroup && inspectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-3xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[90vh] flex flex-col">
+      {/* Sentry-Grade Issue Detail Modal (Portaled to document.body to escape grid stacking contexts) */}
+      {selectedGroup &&
+        inspectedEvent &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            onClick={() => {
+              setSelectedGroup(null);
+              setSelectedEvent(null);
+            }}
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-3xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[90vh] flex flex-col"
+            >
             <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-red-950 border border-red-800 flex items-center justify-center text-red-400">
@@ -1330,7 +1343,8 @@ export function ErrorStreamCard({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

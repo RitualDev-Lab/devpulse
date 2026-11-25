@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   GitBranch,
   GitPullRequest,
@@ -654,10 +655,18 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
         </div>
       </div>
 
-      {/* Issue / PR Thread Inspector Modal */}
-      {threadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl p-6 max-h-[85vh] flex flex-col">
+      {/* Issue / PR Thread Inspector Modal (Portaled to document.body) */}
+      {threadModal &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            onClick={() => setThreadModal(null)}
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl p-6 max-h-[85vh] flex flex-col"
+            >
             <div className="flex items-start justify-between gap-3 pb-3 border-b border-zinc-800">
               <div>
                 <div className="text-xs font-mono text-zinc-400">
@@ -707,7 +716,8 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </WorkspaceShell>
   );

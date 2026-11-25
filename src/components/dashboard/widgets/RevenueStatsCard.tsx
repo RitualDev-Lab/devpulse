@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   DollarSign,
   TrendingUp,
@@ -273,10 +274,18 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
         <span className="text-[10px] text-zinc-400 font-mono">Auto-Sync</span>
       </div>
 
-      {/* Connect Keys Modal */}
-      {isConfigOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative">
+      {/* Connect Keys Modal (Portaled to document.body to escape grid stacking contexts) */}
+      {isConfigOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            onClick={() => setIsConfigOpen(false)}
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative"
+            >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-800 flex items-center justify-center text-emerald-400">
@@ -386,7 +395,8 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
