@@ -244,6 +244,7 @@ export async function POST(req: NextRequest) {
     const os = body.os ? String(body.os).slice(0, 100) : null;
     const environment = String(body.environment || "production").slice(0, 50);
     // Reporter email is end-user PII. Telemetry ingest does not store it; contact details belong to the report form.
+    // Not collected: the public ingest path no longer stores reporter email (see fc245cf).
     const reporterEmail: string | null = null;
     const rawAttachment = body.attachmentKey || body.attachmentUrl || body.attachment_url;
     let attachmentUrl: string | null = null;
