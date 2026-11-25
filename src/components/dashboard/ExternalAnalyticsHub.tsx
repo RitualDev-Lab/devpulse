@@ -12,6 +12,7 @@ import {
   Loader2,
   BookOpen,
   Globe,
+  HeartPulse,
 } from "lucide-react";
 
 interface ExternalConnector {
@@ -61,6 +62,9 @@ export function ExternalAnalyticsHub({
 
   const [snippetTab, setSnippetTab] = useState<"web" | "oci">("web");
   const [copied, setCopied] = useState(false);
+  const [healthUrl, setHealthUrl] = useState("");
+  const [addingMonitor, setAddingMonitor] = useState(false);
+  const [monitorNotice, setMonitorNotice] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const loadConnectors = async () => {
     setLoading(true);
@@ -146,28 +150,59 @@ export function ExternalAnalyticsHub({
   const writeToken = publicWriteKey || projectSlug;
   const sdkKey = telemetryApiKey || "dp_live_your_api_key";
 
+  const handleAttachMonitor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isDemo) {
+      setMonitorNotice({ ok: false, msg: "Sign in with GitHub to attach live /health probes." });
+      return;
+    }
+    if (!healthUrl.trim()) return;
+    setAddingMonitor(true);
+    setMonitorNotice(null);
+    try {
+      const res = await fetch("/api/v1/monitors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          action: "create",
+          name: "OCI / External Health Check",
+          url: healthUrl.trim(),
+          method: "GET",
+          expectedStatus: 200,
+          intervalMinutes: 5,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to attach /health monitor");
+      setMonitorNotice({
+        ok: true,
+        msg: `Attached monitor for ${healthUrl.trim()}! Active on Uptime & 90-day Status / RSS.`,
+      });
+      setHealthUrl("");
+    } catch (err: any) {
+      setMonitorNotice({ ok: false, msg: err?.message || "Failed to add monitor" });
+    } finally {
+      setAddingMonitor(false);
+    }
+  };
+
   const snippet =
     snippetTab === "web"
-      ? `<!-- Drop into any HTML / OCI Nginx / Next.js app (uses public write key) -->
-<script>
-  fetch("https://devpulse.ritualdev.in/api/v1/analytics", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      project: "${writeToken}",
-      eventName: "pageview",
-      path: location.pathname,
-      referrer: document.referrer || "direct",
-      sourceType: "web"
-    })
-  });
-</script>`
-      : `# Run via cron / systemd on OCI Compute, AWS EC2, or Linux VPS
+      ? `<!-- 1-Line Ad-Blocker Resilient Tag (OCI Nginx, EC2, Netlify, Static HTML) -->
+<script defer src="https://devpulse.ritualdev.in/pulse/s.js"
+  data-project="${writeToken}"
+  data-endpoint="https://devpulse.ritualdev.in/pulse/e"></script>
+
+<!-- Or install @ritualdev/devpulse for auto Web Vitals (LCP, CLS, TTFB) + Errors: -->
+<!-- npm i @ritualdev/devpulse && init({ apiKey: "${sdkKey}" }) -->`
+      : `# Cron / systemd heartbeat on OCI Compute (Oracle Linux), AWS EC2, Docker, or VPS
+CPU_LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo "0.42")
 curl -s -X POST "https://devpulse.ritualdev.in/api/v1/analytics" \\
   -H "Content-Type: application/json" \\
-  -d '{"project":"${writeToken}","metricName":"oci_cpu_load","metricValue":0.42,"sourceType":"app","os":"Oracle Linux OCI"}'
+  -d "{\\"project\\":\\"${writeToken}\\",\\"metricName\\":\\"oci_cpu_load\\",\\"metricValue\\":\${CPU_LOAD},\\"sourceType\\":\\"app\\",\\"os\\":\\"Oracle Linux OCI\\"}"
 
-# Send server stderr crash logs directly to DevPulse (auto-offloads >4KB to R2):
+# Forward fatal server/systemd stderr dumps to DevPulse (>4KB auto-offloads to R2):
 curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
   -H "Content-Type: application/json" \\
   -d '{"apiKey":"${sdkKey}","errorName":"ServerException","message":"Worker restarted on OCI node-1","runtime":"linux-server"}'`;
@@ -471,6 +506,49 @@ curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
             {snippet}
           </pre>
         </div>
+
+        {/* Inline OCI / External /health URL Probe Attacher */}
+        <form
+          onSubmit={handleAttachMonitor}
+          className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2.5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+              <HeartPulse className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Attach Public HTTPS /health Endpoint (OCI / EC2 / Vercel / VPS)</span>
+            </span>
+            <span className="text-[10px] text-zinc-400">
+              Enables P95 latency, 90-day Status Page, RSS feed &amp; email alerts
+            </span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="url"
+              required
+              value={healthUrl}
+              onChange={(e) => setHealthUrl(e.target.value)}
+              placeholder="https://api.my-oci-server.com/health"
+              className="flex-1 px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-mono text-white placeholder-zinc-500"
+            />
+            <button
+              type="submit"
+              disabled={addingMonitor}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shrink-0"
+            >
+              {addingMonitor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              <span>Attach /health Monitor</span>
+            </button>
+          </div>
+          {monitorNotice && (
+            <div
+              className={`text-[11px] ${
+                monitorNotice.ok ? "text-emerald-300" : "text-red-300"
+              }`}
+            >
+              {monitorNotice.msg}
+            </div>
+          )}
+        </form>
       </div>
     </div>
   );
