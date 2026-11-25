@@ -143,7 +143,11 @@ export function SortableCard({
       style={style}
       data-widget-id={id}
       data-grid-rect={`${x},${y},${w},${h}`}
-      className={`devpulse-card relative group transition-shadow duration-200 h-full min-h-[340px] ${
+      className={`devpulse-card relative group h-full min-h-[340px] ${
+        !isDragging && !isResizing
+          ? "transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          : "scale-[1.015] shadow-2xl shadow-indigo-500/25"
+      } ${
         isCustomizing
           ? "ring-2 ring-indigo-500/60 rounded-2xl shadow-xl shadow-indigo-500/10"
           : ""

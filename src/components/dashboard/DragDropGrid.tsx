@@ -24,7 +24,7 @@ import { WebAnalyticsCard, type AnalyticsSummary } from "./widgets/WebAnalyticsC
 import { ErrorStreamCard, type ErrorEventItem } from "./widgets/ErrorStreamCard";
 import { TelemetrySetupCard } from "./widgets/TelemetrySetupCard";
 import { BugReportBadgeCard } from "./widgets/BugReportBadgeCard";
-import { Plus, Eye, Cloud } from "lucide-react";
+import { Plus, Eye, Cloud, Sparkles } from "lucide-react";
 import {
   buildDefaultLayout,
   resolveCollisionAndReflow,
@@ -466,6 +466,18 @@ export function DragDropGrid({
             <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 font-mono text-[11px] text-indigo-300">
               {activeCols}-Col Matrix
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                const packed = compactLayout(desktopLayout, 12);
+                setDesktopLayout(packed);
+                persistLayout(packed);
+              }}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-200 transition text-[11px] font-medium"
+            >
+              <Sparkles className="w-3 h-3 text-indigo-400" />
+              <span>Auto-Pack</span>
+            </button>
             {!isDemo && (
               <span className="flex items-center gap-1 text-[11px] text-zinc-400">
                 <Cloud className="w-3.5 h-3.5 text-emerald-400" />
@@ -511,6 +523,7 @@ export function DragDropGrid({
         <div
           ref={gridContainerRef}
           data-grid-cols={activeCols}
+          className={isCustomizing ? "devpulse-grid-customizing transition-all duration-300" : "transition-all duration-300"}
           style={{
             display: "grid",
             gridTemplateColumns: `repeat(${activeCols}, minmax(0, 1fr))`,
@@ -526,7 +539,7 @@ export function DragDropGrid({
                 gridColumn: `${dropPreview.x + 1} / span ${Math.min(dropPreview.w, activeCols)}`,
                 gridRow: `${dropPreview.y + 1} / span ${dropPreview.h}`,
               }}
-              className="rounded-2xl border-2 border-dashed border-indigo-400/80 bg-indigo-500/10 pointer-events-none z-10 transition-all duration-100"
+              className="rounded-2xl border-2 border-dashed border-indigo-400/90 bg-indigo-500/15 pointer-events-none z-10 transition-all duration-150 animate-pulse"
             />
           )}
 

@@ -168,7 +168,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
         )
       )
       .orderBy(desc(errorEvents.createdAt))
-      .limit(20)
+      .limit(60)
       .catch(() => []),
     db
       .select()
@@ -224,14 +224,27 @@ export default async function DashboardPage(props: DashboardPageProps) {
 
   const refMap: Record<string, number> = {};
   const countryMap: Record<string, number> = {};
+  const pathMap: Record<string, number> = {};
+  const osMap: Record<string, number> = {};
+  const dailyMap: Record<string, number> = {};
   let desktopCount = 0;
   let mobileCount = 0;
+  let webHits = 0;
+  let appHits = 0;
 
   for (const pv of rawPageviews) {
     refMap[pv.referrer] = (refMap[pv.referrer] || 0) + 1;
     countryMap[pv.country] = (countryMap[pv.country] || 0) + 1;
+    const pKey = pv.eventName && pv.eventName !== "pageview" ? `event:${pv.eventName}` : (pv.path || "/");
+    pathMap[pKey] = (pathMap[pKey] || 0) + 1;
+    const osKey = pv.os || "Unknown";
+    osMap[osKey] = (osMap[osKey] || 0) + 1;
+    const dayKey = String(pv.createdAt || "").slice(0, 10) || new Date().toISOString().slice(0, 10);
+    dailyMap[dayKey] = (dailyMap[dayKey] || 0) + 1;
     if (pv.device === "mobile" || pv.device === "tablet") mobileCount++;
     else desktopCount++;
+    if (pv.sourceType && pv.sourceType !== "web") appHits++;
+    else webHits++;
   }
 
   const analyticsSummary = {
@@ -243,6 +256,17 @@ export default async function DashboardPage(props: DashboardPageProps) {
     topCountries: Object.entries(countryMap)
       .map(([country, count]) => ({ country, count }))
       .sort((a, b) => b.count - a.count),
+    topPaths: Object.entries(pathMap)
+      .map(([path, count]) => ({ path, count }))
+      .sort((a, b) => b.count - a.count),
+    topOs: Object.entries(osMap)
+      .map(([os, count]) => ({ os, count }))
+      .sort((a, b) => b.count - a.count),
+    dailySeries: Object.entries(dailyMap)
+      .map(([date, hits]) => ({ date, hits }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-14),
+    sources: { web: webHits, app: appHits },
     devices: { desktop: desktopCount, mobile: mobileCount },
   };
 

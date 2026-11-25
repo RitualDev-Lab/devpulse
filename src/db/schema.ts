@@ -166,6 +166,10 @@ export const pageviews = sqliteTable("pageviews", {
   country: text("country").default("Global").notNull(),
   device: text("device").default("desktop").notNull(),
   browser: text("browser").default("other").notNull(),
+  sourceType: text("source_type").default("web").notNull(), // 'web' | 'app' | 'desktop' | 'cli'
+  eventName: text("event_name").default("pageview").notNull(),
+  os: text("os").default("Unknown").notNull(),
+  appVersion: text("app_version"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

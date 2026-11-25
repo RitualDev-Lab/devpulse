@@ -2,18 +2,25 @@
 
 import React, { useState } from "react";
 import { Copy, Check, Code2, Terminal, Key } from "lucide-react";
-import { getPythonSnippet, getNodeSnippet, getRustSnippet, getCliSnippet } from "@/lib/sdk-generator";
+import {
+  getPythonSnippet,
+  getNodeSnippet,
+  getRustSnippet,
+  getCliSnippet,
+  getWebAppSnippet,
+} from "@/lib/sdk-generator";
 
 interface TelemetrySetupCardProps {
   apiKey: string;
 }
 
 export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
-  const [tab, setTab] = useState<"python" | "node" | "rust" | "cli">("python");
+  const [tab, setTab] = useState<"web" | "python" | "node" | "rust" | "cli">("web");
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  const snippets: Record<"python" | "node" | "rust" | "cli", { file: string; code: string }> = {
+  const snippets: Record<"web" | "python" | "node" | "rust" | "cli", { file: string; code: string }> = {
+    web: { file: "devpulse-browser.ts", code: getWebAppSnippet(apiKey) },
     python: { file: "tracker.py", code: getPythonSnippet(apiKey) },
     node: { file: "tracker.js", code: getNodeSnippet(apiKey) },
     rust: { file: "panic_hook.rs", code: getRustSnippet(apiKey) },
@@ -52,6 +59,7 @@ export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
           <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-[11px]">
             {(
               [
+                { id: "web", label: "Web/App", active: "bg-emerald-600 text-white" },
                 { id: "python", label: "Python", active: "bg-blue-600 text-white" },
                 { id: "node", label: "Node", active: "bg-red-600 text-white" },
                 { id: "rust", label: "Rust", active: "bg-orange-600 text-white" },

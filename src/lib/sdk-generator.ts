@@ -130,3 +130,29 @@ curl -X POST "${hostUrl}/api/v1/event" \\
   }'
 `;
 }
+
+export function getWebAppSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
+  return `// Browser / React / Next.js / Electron Sentry-Style Tracker
+export function initDevPulseWebApp() {
+  const endpoint = "${hostUrl}/api/v1/event";
+  const send = (errorName, message, stackTrace) =>
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        apiKey: "${apiKey}",
+        errorName,
+        message,
+        stackTrace,
+        runtime: "browser",
+        os: navigator.platform || "Web",
+        environment: "production"
+      }),
+      keepalive: true
+    }).catch(() => {});
+
+  window.addEventListener("error", (e) => send(e.error?.name || "UncaughtError", e.message, e.error?.stack));
+  window.addEventListener("unhandledrejection", (e) => send("UnhandledRejection", String(e.reason), e.reason?.stack));
+}
+`;
+}

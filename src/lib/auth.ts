@@ -86,16 +86,6 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
               updatedAt: sql`(CURRENT_TIMESTAMP)`,
             },
           });
-
-        // Special claim: if maintainer logs in as ritualdev-lab or ritual-dev-git,
-        // claim prj_ritual_core if it was created under demo id
-        const lowerUser = githubUsername.toLowerCase();
-        if (lowerUser === "ritualdev-lab" || lowerUser === "ritual-dev-git") {
-          await db
-            .update(projects)
-            .set({ userId: user.id })
-            .where(eq(projects.userId, "usr_ritualdev_demo"));
-        }
       } catch (dbErr) {
         console.error("Error upserting user into Turso:", dbErr);
       }

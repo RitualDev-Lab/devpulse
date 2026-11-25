@@ -84,6 +84,10 @@ export async function initDb() {
     "ALTER TABLE users ADD COLUMN current_period_end TEXT;",
     "ALTER TABLE projects ADD COLUMN pagerduty_routing_key TEXT;",
     "ALTER TABLE projects ADD COLUMN organization_id TEXT;",
+    "ALTER TABLE pageviews ADD COLUMN source_type TEXT DEFAULT 'web' NOT NULL;",
+    "ALTER TABLE pageviews ADD COLUMN event_name TEXT DEFAULT 'pageview' NOT NULL;",
+    "ALTER TABLE pageviews ADD COLUMN os TEXT DEFAULT 'Unknown' NOT NULL;",
+    "ALTER TABLE pageviews ADD COLUMN app_version TEXT;",
   ];
 
   for (const query of optionalColumns) {
@@ -168,6 +172,10 @@ export async function initDb() {
       country TEXT DEFAULT 'Global' NOT NULL,
       device TEXT DEFAULT 'desktop' NOT NULL,
       browser TEXT DEFAULT 'other' NOT NULL,
+      source_type TEXT DEFAULT 'web' NOT NULL,
+      event_name TEXT DEFAULT 'pageview' NOT NULL,
+      os TEXT DEFAULT 'Unknown' NOT NULL,
+      app_version TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
