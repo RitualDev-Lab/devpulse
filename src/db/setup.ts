@@ -782,6 +782,57 @@ export async function initDb() {
     ON daily_metrics(project_id, date);
   `).catch(() => {});
 
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS status_subscribers (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1 NOT NULL,
+      unsubscribe_token TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_status_subscribers_proj_email
+    ON status_subscribers(project_id, email);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS feature_requests (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      category TEXT DEFAULT 'feature' NOT NULL,
+      status TEXT DEFAULT 'open' NOT NULL,
+      target_version TEXT,
+      vote_count INTEGER DEFAULT 1 NOT NULL,
+      author_name TEXT,
+      author_email TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_feature_requests_proj_votes
+    ON feature_requests(project_id, vote_count);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS feature_votes (
+      id TEXT PRIMARY KEY,
+      feature_id TEXT NOT NULL REFERENCES feature_requests(id) ON DELETE CASCADE,
+      voter_hash TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_feature_votes_unique
+    ON feature_votes(feature_id, voter_hash);
+  `).catch(() => {});
+
   // Backfill public_write_key cleanly for any existing projects missing one
   const missingPubKeys = await client
     .execute(`SELECT id FROM projects WHERE public_write_key IS NULL OR public_write_key = '';`)

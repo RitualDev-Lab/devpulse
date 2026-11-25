@@ -25,9 +25,13 @@ class TestDevPulseSDK(unittest.TestCase):
                     queue_path=qfile,
                     auto_hook=False,
                 )
-                client.add_breadcrumb(category="http", message="GET /api/data -> 500")
+                client.add_breadcrumb(
+                    category="http",
+                    message="GET /api/data?user=alice@example.com -> 500 Bearer top_secret_jwt_123",
+                    data={"api_key": "dp_live_1234567890", "safe": True},
+                )
                 try:
-                    raise RuntimeError("Boom offline")
+                    raise RuntimeError("Boom offline for bob@example.com")
                 except RuntimeError as e:
                     ok = client.capture_exception(e)
                     self.assertFalse(ok)
@@ -50,6 +54,10 @@ class TestDevPulseSDK(unittest.TestCase):
                 self.assertEqual(crash_payloads[0]["version"], "v2.0.0")
                 self.assertEqual(crash_payloads[0]["commitSha"], "deadbeef")
                 self.assertEqual(len(crash_payloads[0]["breadcrumbs"]), 1)
+                self.assertNotIn("bob@example.com", crash_payloads[0]["message"])
+                self.assertIn("[REDACTED_EMAIL]", crash_payloads[0]["breadcrumbs"][0]["message"])
+                self.assertIn("[REDACTED_TOKEN]", crash_payloads[0]["breadcrumbs"][0]["message"])
+                self.assertEqual(crash_payloads[0]["breadcrumbs"][0]["data"]["api_key"], "[REDACTED]")
 
 
 if __name__ == "__main__":

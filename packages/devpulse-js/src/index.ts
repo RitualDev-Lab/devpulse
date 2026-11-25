@@ -18,7 +18,35 @@ export interface DevPulseConfig {
   maxBreadcrumbs?: number;
   maxRetries?: number;
   autoCapture?: boolean;
+  scrubPii?: boolean;
+  captureWebVitals?: boolean;
   offlineStorageKey?: string;
+}
+
+const SENSITIVE_KEY_RE = /^(password|passwd|secret|token|authorization|auth|cookie|set-cookie|api_key|apikey|access_token|refresh_token|ssn|credit_card|card_number)$/i;
+const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const BEARER_RE = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi;
+const SECRET_TOKEN_RE = /\b(dp_live|dp_pub|sk_live|sk_test|ghp|gho)_[A-Za-z0-9_-]{8,}\b/g;
+
+export function redactPiiString(input: string): string {
+  return input
+    .replace(BEARER_RE, "$1 [REDACTED_TOKEN]")
+    .replace(SECRET_TOKEN_RE, "$1_[REDACTED]")
+    .replace(EMAIL_RE, "[REDACTED_EMAIL]");
+}
+
+export function redactPiiValue(value: unknown, depth = 0): unknown {
+  if (depth > 5 || value === null || value === undefined) return value;
+  if (typeof value === "string") return redactPiiString(value);
+  if (Array.isArray(value)) return value.map((item) => redactPiiValue(item, depth + 1));
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = SENSITIVE_KEY_RE.test(k) ? "[REDACTED]" : redactPiiValue(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
 }
 
 interface QueuedBeacon {
@@ -54,6 +82,8 @@ export class DevPulseClient {
       environment: config.environment || "production",
       maxBreadcrumbs: config.maxBreadcrumbs ?? 40,
       maxRetries: config.maxRetries ?? 4,
+      scrubPii: config.scrubPii ?? true,
+      captureWebVitals: config.captureWebVitals ?? true,
       offlineStorageKey: config.offlineStorageKey || "__devpulse_offline_queue__",
     };
   }
@@ -69,6 +99,10 @@ export class DevPulseClient {
       this.installCrashHooks();
     }
 
+    if (this.config.captureWebVitals !== false) {
+      this.installWebVitalsHooks();
+    }
+
     if (this.config.release) {
       void this.trackReleaseSession(this.config.release, this.config.commitSha);
     }
@@ -78,12 +112,21 @@ export class DevPulseClient {
   }
 
   public addBreadcrumb(crumb: Omit<Breadcrumb, "timestamp"> & { timestamp?: string }): void {
+    const shouldScrub = this.config.scrubPii !== false;
+    const rawMsg = String(crumb.message || "").slice(0, 300);
     const entry: Breadcrumb = {
       timestamp: crumb.timestamp || new Date().toISOString(),
       category: crumb.category,
       level: crumb.level || "info",
-      message: String(crumb.message || "").slice(0, 300),
-      ...(crumb.data ? { data: crumb.data } : {}),
+      message: shouldScrub ? redactPiiString(rawMsg) : rawMsg,
+      ...(crumb.data
+        ? {
+            data: (shouldScrub ? redactPiiValue(crumb.data) : crumb.data) as Record<
+              string,
+              unknown
+            >,
+          }
+        : {}),
     };
     this.breadcrumbs.push(entry);
     if (this.breadcrumbs.length > this.config.maxBreadcrumbs) {
@@ -124,14 +167,42 @@ export class DevPulseClient {
     metricValue: number,
     opts?: { properties?: Record<string, unknown>; sourceType?: "web" | "app" | "desktop" | "cli"; os?: string }
   ): Promise<boolean> {
+    const cleanProps =
+      opts?.properties && this.config.scrubPii !== false
+        ? (redactPiiValue(opts.properties) as Record<string, unknown>)
+        : opts?.properties || null;
     return this.sendOrQueue(`${this.config.endpoint}/api/v1/analytics`, {
       project: this.config.apiKey,
       metricName,
       metricValue,
-      properties: opts?.properties || null,
+      properties: cleanProps,
       sourceType: opts?.sourceType || (typeof window !== "undefined" ? "web" : "app"),
       os: opts?.os || this.detectOs(),
       appVersion: this.config.release || null,
+    });
+  }
+
+  public async trackWebVital(
+    metric: "LCP" | "CLS" | "INP" | "TTFB" | "FCP",
+    value: number,
+    path?: string
+  ): Promise<boolean> {
+    const rounded = metric === "CLS" ? Math.round(value * 1000) / 1000 : Math.round(value);
+    const rating =
+      (metric === "LCP" && value <= 2500) ||
+      (metric === "CLS" && value <= 0.1) ||
+      (metric === "INP" && value <= 200) ||
+      (metric === "TTFB" && value <= 800) ||
+      (metric === "FCP" && value <= 1800)
+        ? "good"
+        : "needs_improvement";
+    return this.trackMetric(`web_vital_${metric.toLowerCase()}`, rounded, {
+      sourceType: "web",
+      properties: {
+        metric,
+        rating,
+        path: path || (typeof window !== "undefined" ? window.location.pathname : "/"),
+      },
     });
   }
 
@@ -140,16 +211,18 @@ export class DevPulseClient {
     extra?: { errorName?: string; extraMessage?: string; terminalLogs?: string }
   ): Promise<boolean> {
     const errObj = error instanceof Error ? error : null;
+    const shouldScrub = this.config.scrubPii !== false;
     const errorName = extra?.errorName || errObj?.name || "UnhandledError";
-    const message = extra?.extraMessage || errObj?.message || String(error);
-    const stackTrace = errObj?.stack || null;
+    const rawMessage = extra?.extraMessage || errObj?.message || String(error);
+    const rawStack = errObj?.stack || null;
+    const rawLogs = extra?.terminalLogs || null;
 
     return this.sendOrQueue(`${this.config.endpoint}/api/v1/event`, {
       apiKey: this.config.apiKey,
       errorName,
-      message,
-      stackTrace,
-      terminalLogs: extra?.terminalLogs || null,
+      message: shouldScrub ? redactPiiString(rawMessage) : rawMessage,
+      stackTrace: rawStack && shouldScrub ? redactPiiString(rawStack) : rawStack,
+      terminalLogs: rawLogs && shouldScrub ? redactPiiString(rawLogs) : rawLogs,
       runtime: this.detectRuntime(),
       version: this.config.release || null,
       commitSha: this.config.commitSha || null,
@@ -160,11 +233,13 @@ export class DevPulseClient {
   }
 
   public async captureMessage(message: string, level: BreadcrumbLevel = "error"): Promise<boolean> {
-    this.addBreadcrumb({ category: "custom", level, message });
+    const shouldScrub = this.config.scrubPii !== false;
+    const cleanMessage = shouldScrub ? redactPiiString(message) : message;
+    this.addBreadcrumb({ category: "custom", level, message: cleanMessage });
     return this.sendOrQueue(`${this.config.endpoint}/api/v1/event`, {
       apiKey: this.config.apiKey,
       errorName: level === "error" ? "CapturedErrorMessage" : "CapturedEvent",
-      message,
+      message: cleanMessage,
       runtime: this.detectRuntime(),
       version: this.config.release || null,
       commitSha: this.config.commitSha || null,
@@ -353,6 +428,41 @@ export class DevPulseClient {
       process.on("unhandledRejection", (reason) => {
         void this.captureException(reason, { errorName: "UnhandledRejection" });
       });
+    }
+  }
+
+  private installWebVitalsHooks(): void {
+    if (typeof window === "undefined" || typeof PerformanceObserver === "undefined") return;
+    try {
+      const lcpObs = new PerformanceObserver((list) => {
+        const entries = list.getEntries();
+        const last = entries[entries.length - 1];
+        if (last) void this.trackWebVital("LCP", last.startTime);
+      });
+      lcpObs.observe({ type: "largest-contentful-paint", buffered: true });
+
+      let clsScore = 0;
+      const clsObs = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as Array<PerformanceEntry & { hadRecentInput?: boolean; value?: number }>) {
+          if (!entry.hadRecentInput && typeof entry.value === "number") {
+            clsScore += entry.value;
+          }
+        }
+      });
+      clsObs.observe({ type: "layout-shift", buffered: true });
+
+      const navEntries = performance.getEntriesByType?.("navigation") as Array<PerformanceNavigationTiming> | undefined;
+      if (navEntries && navEntries[0]?.responseStart > 0) {
+        void this.trackWebVital("TTFB", navEntries[0].responseStart);
+      }
+
+      window.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden" && clsScore > 0) {
+          void this.trackWebVital("CLS", clsScore);
+        }
+      });
+    } catch {
+      // Unsupported browser PerformanceObserver types fail silently
     }
   }
 

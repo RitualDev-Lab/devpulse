@@ -3,6 +3,7 @@ import logging
 import os
 from pathlib import Path
 import platform
+import re
 import sys
 import threading
 import time
@@ -14,6 +15,39 @@ from .breadcrumbs import BreadcrumbBuffer, DevPulseLoggingHandler
 
 
 DEFAULT_ENDPOINT = "https://devpulse.ritualdev.in"
+
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+_BEARER_RE = re.compile(r"\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE)
+_SECRET_TOKEN_RE = re.compile(r"\b(dp_live|dp_pub|sk_live|sk_test|ghp|gho)_[A-Za-z0-9_-]{8,}\b")
+_SENSITIVE_KEYS = {
+    "password", "passwd", "secret", "token", "authorization", "auth",
+    "cookie", "set-cookie", "api_key", "apikey", "access_token", "refresh_token",
+    "ssn", "credit_card", "card_number",
+}
+
+
+def redact_pii_string(text: str) -> str:
+    text = _BEARER_RE.sub(r"\1 [REDACTED_TOKEN]", text)
+    text = _SECRET_TOKEN_RE.sub(r"\1_[REDACTED]", text)
+    return _EMAIL_RE.sub("[REDACTED_EMAIL]", text)
+
+
+def redact_pii_value(value: Any, depth: int = 0) -> Any:
+    if depth > 5 or value is None:
+        return value
+    if isinstance(value, str):
+        return redact_pii_string(value)
+    if isinstance(value, list):
+        return [redact_pii_value(v, depth + 1) for v in value]
+    if isinstance(value, dict):
+        out: Dict[str, Any] = {}
+        for k, v in value.items():
+            if str(k).lower() in _SENSITIVE_KEYS:
+                out[k] = "[REDACTED]"
+            else:
+                out[k] = redact_pii_value(v, depth + 1)
+        return out
+    return value
 
 
 class DevPulseClient:
@@ -29,6 +63,7 @@ class DevPulseClient:
         queue_path: Optional[str] = None,
         auto_hook: bool = True,
         attach_logging: bool = False,
+        scrub_pii: bool = True,
     ):
         if not api_key:
             raise ValueError("devpulse-sdk: api_key is required")
@@ -39,6 +74,7 @@ class DevPulseClient:
         self.commit_sha = commit_sha
         self.environment = environment
         self.max_retries = max_retries
+        self.scrub_pii = scrub_pii
         self.breadcrumbs = BreadcrumbBuffer(max_len=max_breadcrumbs)
         self.queue_path = Path(
             queue_path or os.path.join(Path.home(), ".devpulse_offline_queue.json")
@@ -82,7 +118,9 @@ class DevPulseClient:
         message: str = "",
         data: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.breadcrumbs.add(category=category, level=level, message=message, data=data)
+        clean_msg = redact_pii_string(message) if self.scrub_pii else message
+        clean_data = redact_pii_value(data) if (self.scrub_pii and data) else data
+        self.breadcrumbs.add(category=category, level=level, message=clean_msg, data=clean_data)
 
     def track_release_session(
         self, version: str, commit_sha: Optional[str] = None, sessions: int = 1
@@ -120,13 +158,16 @@ class DevPulseClient:
         properties: Optional[Dict[str, Any]] = None,
         source_type: str = "app",
     ) -> bool:
+        clean_props = (
+            redact_pii_value(properties) if (self.scrub_pii and properties) else properties
+        )
         return self._send_or_queue(
             f"{self.endpoint}/api/v1/analytics",
             {
                 "project": self.api_key,
                 "metricName": metric_name,
                 "metricValue": metric_value,
-                "properties": properties,
+                "properties": clean_props,
                 "sourceType": source_type,
                 "os": f"{platform.system()} {platform.release()}",
                 "appVersion": self.release,
@@ -144,11 +185,13 @@ class DevPulseClient:
             exc_type, exc_val, exc_tb = exc_info
 
         tb_lines = traceback.format_exception(exc_type, exc_val, exc_tb)
+        raw_msg = str(exc_val)
+        raw_stack = "".join(tb_lines)
         payload = {
             "apiKey": self.api_key,
             "errorName": getattr(exc_type, "__name__", "PythonException"),
-            "message": str(exc_val),
-            "stackTrace": "".join(tb_lines),
+            "message": redact_pii_string(raw_msg) if self.scrub_pii else raw_msg,
+            "stackTrace": redact_pii_string(raw_stack) if self.scrub_pii else raw_stack,
             "runtime": f"python {platform.python_version()}",
             "os": f"{platform.system()} {platform.release()}",
             "version": self.release,

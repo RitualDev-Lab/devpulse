@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projects, uptimeChecks, uptimeMonitors } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { projects, statusSubscribers, uptimeChecks, uptimeMonitors } from "@/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { decryptSecret } from "@/lib/security/crypto";
 import { buildDowntimeEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
@@ -168,6 +168,37 @@ async function persistCheckResult(
           provider: project.emailProvider,
           apiKey: emailKey,
         }).catch(() => {});
+      }
+
+      // Notify confirmed public status page subscribers
+      const subscribers = await db
+        .select()
+        .from(statusSubscribers)
+        .where(and(eq(statusSubscribers.projectId, project.id), eq(statusSubscribers.isActive, true)))
+        .limit(25)
+        .catch(() => []);
+
+      if (subscribers.length > 0) {
+        const emailKey = await decryptSecret(project.emailApiKeyEncrypted).catch(() => null);
+        const baseHtml = buildDowntimeEmailHtml({
+          projectName: project.name,
+          monitorName: monitor.name,
+          url: monitor.url,
+          statusCode,
+          latencyMs,
+          errorMessage,
+        });
+        await Promise.allSettled(
+          subscribers.map((sub) =>
+            sendTransactionalEmail({
+              to: sub.email,
+              subject: `[Status Update] ${project.name}: ${monitor.name} Disruption Detected`,
+              html: `${baseHtml}<p style="font-size:12px;color:#71717a;margin-top:16px;"><a href="https://devpulse.ritualdev.in/api/v1/status/subscribe?token=${encodeURIComponent(sub.unsubscribeToken)}">Unsubscribe from ${project.name} status notifications</a></p>`,
+              provider: project.emailProvider,
+              apiKey: emailKey,
+            })
+          )
+        );
       }
     }
   }

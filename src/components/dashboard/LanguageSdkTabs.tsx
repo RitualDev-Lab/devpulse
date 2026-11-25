@@ -47,7 +47,7 @@ function buildLanguageSnippet(tab: LangTabId, apiKey?: string | null): string {
     case "python":
       return `# pip install devpulse-sdk\nfrom devpulse_sdk import DevPulse\n\npulse = DevPulse(api_key="${key}", release="1.0.0")\npulse.track_event("worker_tick", source_type="app")\npulse.track_metric("active_jobs", 42, properties={"worker": "eu-1"})`;
     case "rust":
-      return `// Cargo.toml: reqwest + serde_json (or std/ureq)\nlet client = reqwest::Client::new();\nclient.post("https://devpulse.ritualdev.in/api/v1/analytics")\n  .json(&serde_json::json!({\n    "project": "${key}",\n    "metricName": "active_jobs",\n    "metricValue": 42,\n    "sourceType": "desktop",\n    "os": std::env::consts::OS\n  }))\n  .send().await?;`;
+      return `// packages/devpulse-rs (Cargo.toml: devpulse-rs = "0.2.0")\nuse devpulse_rs::{DevPulseClient, DevPulseConfig};\n\nlet pulse = DevPulseClient::new(DevPulseConfig {\n  api_key: "${key}".into(),\n  release: Some("v1.0.0".into()),\n  scrub_pii: true,\n  ..Default::default()\n});\npulse.clone().install_panic_hook();\npulse.track_metric("active_jobs", 42.0);`;
     case "go":
       return `// Standard library net/http — zero third-party deps\npayload := []byte(\`{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"app","os":"linux"}\`)\nhttp.Post("https://devpulse.ritualdev.in/api/v1/analytics", "application/json", bytes.NewBuffer(payload))`;
     case "desktop":

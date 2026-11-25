@@ -2,7 +2,7 @@ import React from "react";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { BugReportClientForm } from "./BugReportClientForm";
+import { ReportPortalTabsClient } from "./ReportPortalTabsClient";
 import { notFound } from "next/navigation";
 import { AlertCircle, ShieldCheck } from "lucide-react";
 
@@ -10,10 +10,13 @@ export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ tab?: string }>;
 }
 
-export default async function BugReportPage({ params }: PageProps) {
+export default async function BugReportPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
+  const sp = (await searchParams) || {};
+  const initialTab = sp.tab === "feedback" ? "feedback" : "bug";
 
   // Find project by slug (never expose private telemetryApiKey in public HTML)
   const [project] = await db
@@ -53,12 +56,13 @@ export default async function BugReportPage({ params }: PageProps) {
           </p>
         </div>
 
-        {/* Client submission form */}
+        {/* Client submission & feature voting portal */}
         <div className="bg-zinc-900/90 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
-          <BugReportClientForm
+          <ReportPortalTabsClient
             projectSlug={project.slug}
             projectName={project.name}
             turnstileSiteKey={turnstileSiteKey}
+            initialTab={initialTab}
           />
         </div>
 

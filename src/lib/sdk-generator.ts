@@ -37,22 +37,20 @@ trackEvent("app_launch");
 }
 
 export function getRustSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
-  return `// DevPulse Rust Panic Hook (std::panic + ureq)
-use std::panic;
+  return `// Official Rust crate: packages/devpulse-rs (Cargo.toml: devpulse-rs = "0.2.0")
+use devpulse_rs::{DevPulseClient, DevPulseConfig};
 
-pub fn init_devpulse() {
-    let default_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |info| {
-        let payload = format!(
-            r#"{{"apiKey":"${apiKey}","errorName":"RustPanic","message":"{}","runtime":"rust","os":"{}"}}"#,
-            info.to_string().replace('"', "'"),
-            std::env::consts::OS
-        );
-        let _ = ureq::post("${hostUrl}/api/v1/event")
-            .set("Content-Type", "application/json")
-            .send_string(&payload);
-        default_hook(info);
-    }));
+pub fn init_devpulse() -> DevPulseClient {
+    let pulse = DevPulseClient::new(DevPulseConfig {
+        api_key: "${apiKey}".into(),
+        endpoint: "${hostUrl}".into(),
+        release: Some("v1.0.0".into()),
+        scrub_pii: true,
+        ..Default::default()
+    });
+    pulse.clone().install_panic_hook();
+    pulse.add_breadcrumb("custom", "info", "Worker booted");
+    pulse
 }
 `;
 }

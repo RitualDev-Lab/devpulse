@@ -12,6 +12,7 @@ import {
   extractCountryCode,
 } from "@/lib/crashes/impact";
 import { recordCrashIssueOccurrence } from "@/lib/crashes/issues";
+import { maybeAutoEscalateGitHubIssue } from "@/lib/crashes/github-auto";
 import { checkAndReserveStorageQuota, confirmPendingUpload } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
 import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
@@ -463,14 +464,29 @@ export async function POST(req: NextRequest) {
       }).catch((err) => console.error("Email alert error:", err));
     }
 
-    // Run Smart Alert Rules & Z-Score Anomaly Detector + Feature Flag Crash Auto-Rollback
-    await Promise.all([
+    // Run Smart Alert Rules & Z-Score Anomaly Detector + Feature Flag Crash Auto-Rollback + GitHub Auto-Issue Escalation
+    const [, , githubEscalation] = await Promise.all([
       evaluateProjectAlertRules(project.id).catch((err) =>
         console.error("Smart alert rule evaluation warning:", err)
       ),
       checkAndAutoRollbackFlags(project.id).catch((err) =>
         console.error("Flag rollback guard warning:", err)
       ),
+      maybeAutoEscalateGitHubIssue({
+        project,
+        eventId,
+        fingerprint: issueSummary.fingerprint,
+        occurrenceCount: issueSummary.occurrenceCount,
+        isRegression: issueSummary.isRegression,
+        errorName,
+        message,
+        stackPreview: storedInlinePreview,
+        runtime,
+        version,
+        environment,
+        routePath,
+        r2ObjectKey,
+      }).catch(() => ({ created: false })),
     ]);
 
     return NextResponse.json(
@@ -480,6 +496,7 @@ export async function POST(req: NextRequest) {
         fingerprint: issueSummary.fingerprint,
         occurrenceCount: issueSummary.occurrenceCount,
         alertDispatched: issueSummary.shouldAlert,
+        githubAutoIssue: githubEscalation,
         project: project.name,
         storage: {
           provider: storageProvider,

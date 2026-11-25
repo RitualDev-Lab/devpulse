@@ -1,0 +1,12 @@
+[package]
+name = "devpulse-rs"
+version = "0.2.0"
+edition = "2021"
+description = "Official DevPulse SDK for Rust — panic capture, breadcrumbs, PII scrubbing, release tagging, and bounded offline retry queue."
+license = "MIT"
+repository = "https://github.com/RitualDev/DevPulse"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ureq = { version = "2.10", features = ["json"] }

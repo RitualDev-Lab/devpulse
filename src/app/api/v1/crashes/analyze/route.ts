@@ -6,6 +6,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { analyzeCrashWithGemini } from "@/lib/ai/crash-analyzer";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { resolveUserStorageContext } from "@/lib/storage/quota";
+import { getR2ObjectText } from "@/lib/storage/r2";
+import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 
 export const dynamic = "force-dynamic";
 
@@ -68,14 +71,34 @@ export async function POST(req: NextRequest) {
     );
     const resolvedNames = new Set(resolvedRows.map((r) => r.errorName.split(":")[0].trim()));
 
-    const results: Array<{ errorId: string; analysis: any; isRegression: boolean }> = [];
+    const results: Array<{ errorId: string; analysis: any; isRegression: boolean; r2Hydrated: boolean }> = [];
+    const hasR2Targets = targets.some((t) => Boolean(t.r2ObjectKey));
+    const storageCtx = hasR2Targets
+      ? await resolveUserStorageContext(access.project.userId).catch(() => null)
+      : null;
 
     for (const err of targets) {
+      let fullStackTrace = err.stackTrace || "";
+      let r2Hydrated = false;
+      if (
+        err.r2ObjectKey &&
+        storageCtx?.credentials &&
+        isValidProjectR2ObjectKey(err.r2ObjectKey, projectId, access.project.userId)
+      ) {
+        const r2Text = await getR2ObjectText(storageCtx.credentials, err.r2ObjectKey).catch(
+          () => null
+        );
+        if (r2Text) {
+          fullStackTrace = r2Text.slice(0, 12_000);
+          r2Hydrated = true;
+        }
+      }
+
       const analysis = await analyzeCrashWithGemini(
         {
           errorName: err.errorName,
           message: err.message,
-          stackTrace: err.stackTrace,
+          stackTrace: fullStackTrace,
           runtime: err.runtime,
           version: err.version,
           routePath: err.routePath,
@@ -100,7 +123,7 @@ export async function POST(req: NextRequest) {
         })
         .where(eq(errorEvents.id, err.id));
 
-      results.push({ errorId: err.id, analysis, isRegression });
+      results.push({ errorId: err.id, analysis, isRegression, r2Hydrated });
     }
 
     await recordAuditEvent({

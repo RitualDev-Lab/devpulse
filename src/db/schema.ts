@@ -740,3 +740,42 @@ export const pendingUploads = sqliteTable("pending_uploads", {
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
+/**
+ * Public Status Page Email Subscribers (notified on monitor downtime / incident transitions)
+ */
+export const statusSubscribers = sqliteTable("status_subscribers", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  email: text("email").notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  unsubscribeToken: text("unsubscribe_token").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Public Feature Requests & Roadmap Voting (tied to Release versions)
+ */
+export const featureRequests = sqliteTable("feature_requests", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  category: text("category", { enum: ["feature", "improvement", "integration", "sdk"] }).default("feature").notNull(),
+  status: text("status", { enum: ["open", "planned", "in_progress", "shipped"] }).default("open").notNull(),
+  targetVersion: text("target_version"),
+  voteCount: integer("vote_count").default(1).notNull(),
+  authorName: text("author_name"),
+  authorEmail: text("author_email"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Deduplicated Upvotes per Feature Request
+ */
+export const featureVotes = sqliteTable("feature_votes", {
+  id: text("id").primaryKey(),
+  featureId: text("feature_id").references(() => featureRequests.id, { onDelete: "cascade" }).notNull(),
+  voterHash: text("voter_hash").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+

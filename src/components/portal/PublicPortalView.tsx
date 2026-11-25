@@ -140,6 +140,14 @@ export function PublicPortalView({
                   Changelog
                 </a>
                 <a
+                  href={`https://devpulse.ritualdev.in/report/${activeProject.slug}?tab=feedback`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-cyan-300 transition"
+                >
+                  Feature Voting
+                </a>
+                <a
                   href={`https://devpulse.ritualdev.in/report/${activeProject.slug}`}
                   target="_blank"
                   rel="noreferrer"

@@ -10,6 +10,7 @@ import {
   FileText,
 } from "lucide-react";
 import { loadPortalStatusHistory } from "@/lib/domains/status-loader";
+import { StatusSubscribeWidget } from "@/components/portal/StatusSubscribeWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,14 @@ export default async function PortalStatusHistoryPage(props: {
             Last 90 Days • Updated Live
           </div>
         </div>
+
+        <StatusSubscribeWidget
+          projectId={project?.id}
+          projectSlug={project?.slug}
+          rssHref={`/portal/${encodeURIComponent(hostKey)}/status/rss.xml${
+            project ? `?project=${encodeURIComponent(project.slug)}` : ""
+          }`}
+        />
 
         {/* 90-Day Daily Uptime Strip Per Monitor */}
         <section className="space-y-4">
