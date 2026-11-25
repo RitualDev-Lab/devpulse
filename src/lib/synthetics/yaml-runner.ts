@@ -5,14 +5,9 @@ import { computeP95Latency, isValidPublicMonitorUrl } from "@/lib/monitors/check
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { decryptSecret } from "@/lib/security/crypto";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { resolveSyntheticRegions } from "@/lib/synthetics/regions";
 
-export const EDGE_REGIONS = [
-  { id: "iad", label: "US-East (Virginia)" },
-  { id: "fra", label: "EU-Central (Frankfurt)" },
-  { id: "sin", label: "AP-South (Singapore)" },
-  { id: "syd", label: "OC-East (Sydney)" },
-  { id: "gru", label: "SA-East (Sao Paulo)" },
-] as const;
+export { EDGE_REGIONS } from "@/lib/synthetics/regions";
 
 export interface SyntheticStep {
   action: "goto" | "fetch" | "submitForm";
@@ -265,8 +260,9 @@ async function executeStepsOnce(parsed: ParsedSyntheticYaml, region: string): Pr
 }
 
 /**
- * Runs a Synthetic Test across all 5 global edge regions (iad, fra, sin, syd, gru),
- * stores regional latency & step assertions, and triggers failure alerts if needed.
+ * Runs a Synthetic Test once per region label (default: iad, fra, sin, syd, gru), stores
+ * latency & step assertions per label, and triggers failure alerts if needed.
+ * All probes originate from this Worker, so labels do not describe measured origins.
  */
 export async function executeSyntheticTestAcrossRegions(testId: string) {
   const [test] = await db
@@ -277,18 +273,12 @@ export async function executeSyntheticTestAcrossRegions(testId: string) {
   if (!test) throw new Error("Synthetic test not found");
 
   const parsed = parseSyntheticYaml(test.yamlSpec);
-  let regions: string[] = EDGE_REGIONS.map((r) => r.id);
-  try {
-    const raw = JSON.parse(test.regionsJson);
-    if (Array.isArray(raw) && raw.length > 0) regions = raw.map(String);
-  } catch {
-    // fallback default 5 regions
-  }
+  const regions = resolveSyntheticRegions(test.regionsJson);
 
   const runsOut: Array<{ region: string; status: "pass" | "fail"; totalLatencyMs: number; errorMessage: string | null }> = [];
   const nowIso = new Date().toISOString();
 
-  for (const region of regions.slice(0, 5)) {
+  for (const region of regions) {
     const res = await executeStepsOnce(parsed, region);
     await db.insert(syntheticRuns).values({
       id: `synr_${crypto.randomUUID().replace(/-/g, "").slice(0, 14)}`,

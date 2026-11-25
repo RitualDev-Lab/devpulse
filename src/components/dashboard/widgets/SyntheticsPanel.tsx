@@ -27,7 +27,7 @@ interface RegionMetric {
   region: string;
   label: string;
   totalRuns: number;
-  passRate: number;
+  passRate: number | null;
   p95LatencyMs: number;
 }
 
@@ -96,7 +96,7 @@ export function SyntheticsPanel({
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Failed to save synthetic test");
       setShowBuilder(false);
-      setMsg(`Synthetic E2E test saved & ran across 5 global edge regions.`);
+      setMsg(`Synthetic E2E test saved & ran once per region label (single Worker origin).`);
       await loadSynthetics();
     } catch (err: any) {
       setMsg(err.message);
@@ -160,7 +160,10 @@ export function SyntheticsPanel({
         </div>
       )}
 
-      {/* 5 Global Edge Regions P95 Grid */}
+      {/* Per-label P95 grid. Runs execute from one Worker origin; labels are sent as X-DevPulse-Region. */}
+      <p className="text-[10px] text-zinc-500 mb-2">
+        Region labels are sent to the target as X-DevPulse-Region. All probes run from one Worker origin, so these are not measured per-region latencies.
+      </p>
       {regionP95.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
           {regionP95.map((r) => (
@@ -170,7 +173,7 @@ export function SyntheticsPanel({
             >
               <div className="flex items-center justify-between">
                 <span className="font-mono font-bold uppercase text-cyan-300">{r.region}</span>
-                <span className="text-[10px] font-mono text-emerald-400">{r.passRate}%</span>
+                <span className="text-[10px] font-mono text-emerald-400">{r.passRate === null ? "—" : `${r.passRate}%`}</span>
               </div>
               <div className="text-[11px] text-zinc-400 truncate">{r.label}</div>
               <div className="font-mono text-sm font-bold text-white">

@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         region: reg.id,
         label: reg.label,
         totalRuns: regRuns.length,
-        passRate: regRuns.length > 0 ? Math.round((passCount / regRuns.length) * 100) : 100,
+        passRate: regRuns.length > 0 ? Math.round((passCount / regRuns.length) * 100) : null,
         p95LatencyMs: computeP95Latency(regRuns.map((r) => r.totalLatencyMs)),
       };
     });
