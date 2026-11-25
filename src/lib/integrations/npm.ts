@@ -40,11 +40,25 @@ export async function fetchNpmStats(
       registryHeaders.Authorization = `Bearer ${npmToken}`;
     }
 
-    // 1. Fetch range for the last 30 days
-    const rangeRes = await fetch(`https://api.npmjs.org/downloads/range/last-month/${encodedPkg}`, {
-      headers: registryHeaders,
-      next: { revalidate: 3600 },
-    }).catch(() => null);
+    // Fetch 30-day downloads, week/day points, and package metadata in ONE parallel wave
+    const [rangeRes, weekRes, dayRes, metaRes] = await Promise.all([
+      fetch(`https://api.npmjs.org/downloads/range/last-month/${encodedPkg}`, {
+        headers: registryHeaders,
+        next: { revalidate: 3600 },
+      }).catch(() => null),
+      fetch(`https://api.npmjs.org/downloads/point/last-week/${encodedPkg}`, {
+        headers: registryHeaders,
+        next: { revalidate: 3600 },
+      }).catch(() => null),
+      fetch(`https://api.npmjs.org/downloads/point/last-day/${encodedPkg}`, {
+        headers: registryHeaders,
+        next: { revalidate: 3600 },
+      }).catch(() => null),
+      fetch(`https://registry.npmjs.org/${encodedPkg}`, {
+        headers: registryHeaders,
+        next: { revalidate: 86400 },
+      }).catch(() => null),
+    ]);
 
     let dailyHistory: Array<{ date: string; downloads: number }> = [];
     let downloadsLastMonth = 0;
@@ -59,22 +73,6 @@ export async function fetchNpmStats(
         downloadsLastMonth = dailyHistory.reduce((acc, curr) => acc + curr.downloads, 0);
       }
     }
-
-    // 2. Fetch point stats for last week and last day
-    const [weekRes, dayRes, metaRes] = await Promise.all([
-      fetch(`https://api.npmjs.org/downloads/point/last-week/${encodedPkg}`, {
-        headers: registryHeaders,
-        next: { revalidate: 3600 },
-      }).catch(() => null),
-      fetch(`https://api.npmjs.org/downloads/point/last-day/${encodedPkg}`, {
-        headers: registryHeaders,
-        next: { revalidate: 3600 },
-      }).catch(() => null),
-      fetch(`https://registry.npmjs.org/${encodedPkg}`, {
-        headers: registryHeaders,
-        next: { revalidate: 86400 },
-      }).catch(() => null),
-    ]);
 
     const weekData = weekRes && weekRes.ok ? await weekRes.json() : { downloads: 0 };
     const dayData = dayRes && dayRes.ok ? await dayRes.json() : { downloads: 0 };

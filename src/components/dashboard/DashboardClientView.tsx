@@ -160,7 +160,7 @@ export function DashboardClientView({
   return (
     <div
       data-theme={activeThemeId}
-      className="devpulse-shell min-h-screen bg-zinc-950 text-zinc-100 transition-colors duration-300"
+      className="devpulse-shell text-zinc-100 transition-colors duration-300"
     >
       {/* Dynamic Preset Theme + Scoped Custom CSS injection */}
       {combinedDynamicCss && <style dangerouslySetInnerHTML={{ __html: combinedDynamicCss }} />}

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { db } from "@/db";
 import { projects, organizations, organizationMembers } from "@/db/schema";
 import { eq, and, or, desc, inArray, sql } from "drizzle-orm";
@@ -135,29 +136,30 @@ export async function resolveProjectAccess(
 /**
  * Lists all projects accessible to a user across multi-org / workspace memberships.
  */
-export async function listAccessibleProjects(user: AuthenticatedUser) {
+export const listAccessibleProjects = cache(async function listAccessibleProjects(user: AuthenticatedUser) {
   const normalizedHandle = user.githubUsername.toLowerCase();
   const normalizedEmail = user.email ? user.email.toLowerCase() : null;
 
-  const memberships = await db
-    .select({
-      organizationId: organizationMembers.organizationId,
-      role: organizationMembers.role,
-      status: organizationMembers.status,
-    })
-    .from(organizationMembers)
-    .where(
-      or(
-        eq(organizationMembers.userId, user.id),
-        eq(organizationMembers.githubUsername, normalizedHandle),
-        normalizedEmail ? sql`lower(${organizationMembers.email}) = ${normalizedEmail}` : sql`0`
-      )
-    );
-
-  const ownedOrgs = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(eq(organizations.ownerUserId, user.id));
+  const [memberships, ownedOrgs] = await Promise.all([
+    db
+      .select({
+        organizationId: organizationMembers.organizationId,
+        role: organizationMembers.role,
+        status: organizationMembers.status,
+      })
+      .from(organizationMembers)
+      .where(
+        or(
+          eq(organizationMembers.userId, user.id),
+          eq(organizationMembers.githubUsername, normalizedHandle),
+          normalizedEmail ? sql`lower(${organizationMembers.email}) = ${normalizedEmail}` : sql`0`
+        )
+      ),
+    db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.ownerUserId, user.id)),
+  ]);
 
   const orgRoleMap = new Map<string, OrgRole>();
   for (const m of memberships) {
@@ -190,4 +192,4 @@ export async function listAccessibleProjects(user: AuthenticatedUser) {
         : (p.organizationId && orgRoleMap.get(p.organizationId)) || "viewer";
     return { ...p, accessRole: role };
   });
-}
+});

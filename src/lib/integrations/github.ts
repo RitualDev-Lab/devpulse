@@ -86,30 +86,55 @@ export async function fetchGitHubRepoStats(
       headers.Authorization = `Basic ${basic}`;
     }
 
-    // 1. Fetch Repo Info
-    const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers,
-      next: { revalidate: 1800 }, // 30 min cache
-    });
+    // Parallelize all GitHub API requests instead of 6 sequential roundtrips
+    const [repoRes, prsRes, relRes, issuesRes, depRes, clonesRes, viewsRes] = await Promise.all([
+      fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers,
+        next: { revalidate: 1800 },
+      }).catch(() => null),
+      fetch(`https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=30`, {
+        headers,
+        next: { revalidate: 600 },
+      }).catch(() => null),
+      fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+        headers,
+        next: { revalidate: 3600 },
+      }).catch(() => null),
+      fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=open&sort=updated&per_page=15`, {
+        headers,
+        next: { revalidate: 600 },
+      }).catch(() => null),
+      fetch(`https://api.github.com/repos/${owner}/${repo}/dependabot/alerts?state=open&per_page=100`, {
+        headers,
+        next: { revalidate: 1800 },
+      }).catch(() => null),
+      userToken
+        ? fetch(`https://api.github.com/repos/${owner}/${repo}/traffic/clones`, {
+            headers,
+            next: { revalidate: 900 },
+          }).catch(() => null)
+        : Promise.resolve(null),
+      userToken
+        ? fetch(`https://api.github.com/repos/${owner}/${repo}/traffic/views`, {
+            headers,
+            next: { revalidate: 900 },
+          }).catch(() => null)
+        : Promise.resolve(null),
+    ]);
 
-    if (!repoRes.ok) {
-      console.warn(`GitHub API returned ${repoRes.status} for ${repoFullName}`);
+    if (!repoRes || !repoRes.ok) {
+      console.warn(`GitHub API returned ${repoRes?.status ?? "network_err"} for ${repoFullName}`);
       return null;
     }
 
     const repoData = await repoRes.json();
     const totalOpen = repoData.open_issues_count || 0;
 
-    // 2. Fetch Open PRs & Calculate PR Review Velocity
     let openPrCount = 0;
     let prReviewVelocityHours = 0;
     const pulls: NonNullable<GitHubRepoStats["pulls"]> = [];
-    try {
-      const prsRes = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=30`,
-        { headers, next: { revalidate: 600 } }
-      );
-      if (prsRes.ok) {
+    if (prsRes?.ok) {
+      try {
         const prsData = await prsRes.json();
         if (Array.isArray(prsData)) {
           openPrCount = prsData.length;
@@ -137,40 +162,30 @@ export async function fetchGitHubRepoStats(
             });
           }
         }
+      } catch {
+        // PRs optional
       }
-    } catch {
-      // PRs optional
     }
 
-    // 3. Fetch Latest Release
     let latestRelease: GitHubRepoStats["latestRelease"] | undefined;
-    try {
-      const relRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
-        headers,
-        next: { revalidate: 3600 },
-      });
-      if (relRes.ok) {
+    if (relRes?.ok) {
+      try {
         const relData = await relRes.json();
         latestRelease = {
           tagName: relData.tag_name,
           publishedAt: relData.published_at,
           name: relData.name || relData.tag_name,
         };
+      } catch {
+        // Release optional
       }
-    } catch {
-      // Release is optional
     }
 
-    // 4. Fetch Recent Issues & Triage Aging
     const recentIssues: GitHubRepoStats["recentIssues"] = [];
     let staleIssuesCount = 0;
     let freshIssuesCount = 0;
-    try {
-      const issuesRes = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/issues?state=open&sort=updated&per_page=15`,
-        { headers, next: { revalidate: 600 } }
-      );
-      if (issuesRes.ok) {
+    if (issuesRes?.ok) {
+      try {
         const issuesData = await issuesRes.json();
         if (Array.isArray(issuesData)) {
           const now = Date.now();
@@ -201,70 +216,57 @@ export async function fetchGitHubRepoStats(
             });
           }
         }
+      } catch {
+        // Issues optional
       }
-    } catch {
-      // Issues optional
     }
 
-    // 5. Dependabot security alerts count
     let dependabotAlertsCount = 0;
-    try {
-      const depRes = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/dependabot/alerts?state=open&per_page=100`,
-        { headers, next: { revalidate: 1800 } }
-      );
-      if (depRes.ok) {
+    if (depRes?.ok) {
+      try {
         const depData = await depRes.json();
         if (Array.isArray(depData)) {
           dependabotAlertsCount = depData.length;
         }
+      } catch {
+        // Dependabot optional
       }
-    } catch {
-      // Dependabot optional
     }
 
-    // 6. Optional Traffic (Clones & Views) when user/PAT token has push/read permissions
     let trafficClones: GitHubRepoStats["trafficClones"];
     let trafficViews: GitHubRepoStats["trafficViews"];
     if (userToken) {
-      const [clonesRes, viewsRes] = await Promise.all([
-        fetch(`https://api.github.com/repos/${owner}/${repo}/traffic/clones`, {
-          headers,
-          next: { revalidate: 900 },
-        }).catch(() => null),
-        fetch(`https://api.github.com/repos/${owner}/${repo}/traffic/views`, {
-          headers,
-          next: { revalidate: 900 },
-        }).catch(() => null),
-      ]);
-
       if (clonesRes?.ok) {
-        const c = await clonesRes.json();
-        trafficClones = {
-          count: c.count || 0,
-          uniques: c.uniques || 0,
-          daily: Array.isArray(c.clones)
-            ? c.clones.map((d: any) => ({
-                date: String(d.timestamp || "").slice(0, 10),
-                count: d.count || 0,
-                uniques: d.uniques || 0,
-              }))
-            : [],
-        };
+        const c = await clonesRes.json().catch(() => null);
+        if (c) {
+          trafficClones = {
+            count: c.count || 0,
+            uniques: c.uniques || 0,
+            daily: Array.isArray(c.clones)
+              ? c.clones.map((d: any) => ({
+                  date: String(d.timestamp || "").slice(0, 10),
+                  count: d.count || 0,
+                  uniques: d.uniques || 0,
+                }))
+              : [],
+          };
+        }
       }
       if (viewsRes?.ok) {
-        const v = await viewsRes.json();
-        trafficViews = {
-          count: v.count || 0,
-          uniques: v.uniques || 0,
-          daily: Array.isArray(v.views)
-            ? v.views.map((d: any) => ({
-                date: String(d.timestamp || "").slice(0, 10),
-                count: d.count || 0,
-                uniques: d.uniques || 0,
-              }))
-            : [],
-        };
+        const v = await viewsRes.json().catch(() => null);
+        if (v) {
+          trafficViews = {
+            count: v.count || 0,
+            uniques: v.uniques || 0,
+            daily: Array.isArray(v.views)
+              ? v.views.map((d: any) => ({
+                  date: String(d.timestamp || "").slice(0, 10),
+                  count: d.count || 0,
+                  uniques: d.uniques || 0,
+                }))
+              : [],
+          };
+        }
       }
     }
 

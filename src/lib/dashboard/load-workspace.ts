@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { db } from "@/db";
 import {
   projects,
@@ -99,10 +100,98 @@ export type LoadedWorkspaceResult =
   | { status: "onboarding"; user: any }
   | LoadedWorkspaceReady;
 
-export async function loadDashboardWorkspace(searchParams?: {
-  project?: string;
-  demo?: string;
-}): Promise<LoadedWorkspaceResult> {
+export type DashboardLoadScope =
+  | "full"
+  | "overview"
+  | "github"
+  | "packages"
+  | "analytics"
+  | "crashes"
+  | "uptime"
+  | "revenue"
+  | "settings"
+  | "minimal";
+
+export interface DashboardShellMeta {
+  user: {
+    id: string;
+    githubUsername: string;
+    storageTier: string;
+    customDomain: string | null;
+    customDomainVerified: boolean;
+  } | null;
+  projects: ProjectSummary[];
+  demoProject: ProjectSummary | null;
+  storageTier: string;
+  customDomain: string | null;
+}
+
+function toProjectSummary(p: any): ProjectSummary {
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    githubRepo: p.githubRepo,
+    npmPackage: p.npmPackage,
+    pypiPackage: p.pypiPackage,
+    rustCrate: p.rustCrate,
+    goModule: p.goModule,
+    dockerImage: p.dockerImage,
+    telemetryApiKey: p.telemetryApiKey,
+  };
+}
+
+/**
+ * Lightweight per-request deduplicated loader for `dashboard/layout.tsx`.
+ * Zero external API calls and zero heavy telemetry queries so switching
+ * sidebar tabs keeps the sidebar mounted with minimal latency.
+ */
+export const loadDashboardShellMeta = cache(async (): Promise<DashboardShellMeta> => {
+  const user = await getCurrentUser();
+
+  if (user) {
+    const userProjects = await listAccessibleProjects(user).catch(() => []);
+    return {
+      user: {
+        id: user.id,
+        githubUsername: user.githubUsername,
+        storageTier: user.storageTier || "free",
+        customDomain: user.customDomain,
+        customDomainVerified: user.customDomainVerified,
+      },
+      projects: userProjects.map(toProjectSummary),
+      demoProject: null,
+      storageTier: user.storageTier || "free",
+      customDomain: user.customDomainVerified ? user.customDomain : null,
+    };
+  }
+
+  const demoRows = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.id, "prj_ritual_core"))
+    .limit(1)
+    .catch(() => []);
+
+  return {
+    user: null,
+    projects: [],
+    demoProject: demoRows[0] ? toProjectSummary(demoRows[0]) : null,
+    storageTier: "free",
+    customDomain: null,
+  };
+});
+
+export async function loadDashboardWorkspace(
+  searchParams?: {
+    project?: string;
+    demo?: string;
+  },
+  options?: {
+    scope?: DashboardLoadScope;
+  }
+): Promise<LoadedWorkspaceResult> {
+  const scope: DashboardLoadScope = options?.scope || "full";
   const requestedProject = searchParams?.project;
   const isDemoRequested = searchParams?.demo === "1";
 
@@ -161,39 +250,67 @@ export async function loadDashboardWorkspace(searchParams?: {
     Date.now() - planDef.historyDays * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  const userGhToken = user ? await getUserGitHubAccessToken(user.id).catch(() => null) : null;
-  const projectGhToken = await decryptSecret(activeProject.githubTokenEncrypted).catch(() => null);
+  const needAll = scope === "full" || scope === "overview";
+  const needGithub = needAll || scope === "github";
+  const needPackages = needAll || scope === "packages";
+  const needAnalytics = needAll || scope === "analytics";
+  const needCrashes = needAll || scope === "crashes";
+  const needUptime = needAll || scope === "uptime";
+  const needRevenue = needAll || scope === "revenue";
+  const needSettings = needAll || scope === "settings";
+  const needConnectors = needRevenue || needPackages || needSettings;
+  const needDailyMetrics = needGithub || needPackages || needRevenue;
+
+  const [
+    userGhToken,
+    projectGhToken,
+    decryptedNpmToken,
+    decryptedStripeKey,
+    decryptedDodoKey,
+    rawConnectors,
+  ] = await Promise.all([
+    needGithub && user ? getUserGitHubAccessToken(user.id).catch(() => null) : Promise.resolve(null),
+    needGithub ? decryptSecret(activeProject.githubTokenEncrypted).catch(() => null) : Promise.resolve(null),
+    needPackages ? decryptSecret(activeProject.npmTokenEncrypted).catch(() => null) : Promise.resolve(null),
+    needRevenue ? decryptSecret(activeProject.stripeApiKey).catch(() => null) : Promise.resolve(null),
+    needRevenue ? decryptSecret(activeProject.dodoPaymentsApiKey).catch(() => null) : Promise.resolve(null),
+    needConnectors
+      ? db
+          .select()
+          .from(projectConnectors)
+          .where(eq(projectConnectors.projectId, activeProject.id))
+          .orderBy(desc(projectConnectors.createdAt))
+          .limit(30)
+          .catch(() => [])
+      : Promise.resolve([]),
+  ]);
+
   const effectiveGhToken = projectGhToken || userGhToken;
-  const decryptedNpmToken = await decryptSecret(activeProject.npmTokenEncrypted).catch(() => null);
-  const decryptedStripeKey = await decryptSecret(activeProject.stripeApiKey).catch(() => null);
-  const decryptedDodoKey = await decryptSecret(activeProject.dodoPaymentsApiKey).catch(() => null);
 
-  const rawConnectors = await db
-    .select()
-    .from(projectConnectors)
-    .where(eq(projectConnectors.projectId, activeProject.id))
-    .orderBy(desc(projectConnectors.createdAt))
-    .limit(30)
-    .catch(() => []);
-
-  const decryptedPaymentConnectors = await Promise.all(
-    rawConnectors
-      .filter((c) => c.category === "payment")
-      .map(async (c) => ({
-        id: c.id,
-        provider: c.provider,
-        label: c.label,
-        targetUrl: c.targetUrl,
-        apiKey: await decryptSecret(c.credentialsEncrypted).catch(() => null),
-      }))
-  );
-
-  const dockerTokenConn = rawConnectors.find(
-    (c) => c.category === "package" && c.provider === "docker" && c.credentialsEncrypted
-  );
-  const decryptedDockerToken = dockerTokenConn
-    ? await decryptSecret(dockerTokenConn.credentialsEncrypted).catch(() => null)
-    : null;
+  const [decryptedPaymentConnectors, decryptedDockerToken] = await Promise.all([
+    needRevenue
+      ? Promise.all(
+          rawConnectors
+            .filter((c) => c.category === "payment")
+            .map(async (c) => ({
+              id: c.id,
+              provider: c.provider,
+              label: c.label,
+              targetUrl: c.targetUrl,
+              apiKey: await decryptSecret(c.credentialsEncrypted).catch(() => null),
+            }))
+        )
+      : Promise.resolve([]),
+    (() => {
+      if (!needPackages) return Promise.resolve(null);
+      const dockerTokenConn = rawConnectors.find(
+        (c) => c.category === "package" && c.provider === "docker" && c.credentialsEncrypted
+      );
+      return dockerTokenConn
+        ? decryptSecret(dockerTokenConn.credentialsEncrypted).catch(() => null)
+        : Promise.resolve(null);
+    })(),
+  ]);
 
   const [
     githubStats,
@@ -214,121 +331,139 @@ export async function loadDashboardWorkspace(searchParams?: {
     rawPageviews,
     rawSourceMaps,
   ] = await Promise.all([
-    activeProject.githubRepo
-      ? withEdgeCache(`gh:${activeProject.githubRepo}:${Boolean(effectiveGhToken)}`, 300, 2600, () =>
+    needGithub && activeProject.githubRepo
+      ? withEdgeCache(`gh:${activeProject.githubRepo}:${Boolean(effectiveGhToken)}`, 300, 1400, () =>
           fetchGitHubRepoStats(activeProject.githubRepo!, effectiveGhToken || undefined)
         )
       : Promise.resolve(null),
-    activeProject.npmPackage
-      ? withEdgeCache(`npm:${activeProject.npmPackage}:${Boolean(decryptedNpmToken)}`, 300, 2600, () =>
+    needPackages && activeProject.npmPackage
+      ? withEdgeCache(`npm:${activeProject.npmPackage}:${Boolean(decryptedNpmToken)}`, 300, 1400, () =>
           fetchNpmStats(activeProject.npmPackage!, decryptedNpmToken)
         )
       : Promise.resolve(null),
-    activeProject.pypiPackage
-      ? withEdgeCache(`pypi:${activeProject.pypiPackage}`, 300, 2600, () =>
+    needPackages && activeProject.pypiPackage
+      ? withEdgeCache(`pypi:${activeProject.pypiPackage}`, 300, 1400, () =>
           fetchPyPiStats(activeProject.pypiPackage!)
         )
       : Promise.resolve(null),
-    activeProject.rustCrate
-      ? withEdgeCache(`crates:${activeProject.rustCrate}`, 300, 2600, () =>
+    needPackages && activeProject.rustCrate
+      ? withEdgeCache(`crates:${activeProject.rustCrate}`, 300, 1400, () =>
           fetchRustCrateStats(activeProject.rustCrate!)
         )
       : Promise.resolve(null),
-    activeProject.goModule
-      ? withEdgeCache(`go:${activeProject.goModule}`, 300, 2600, () =>
+    needPackages && activeProject.goModule
+      ? withEdgeCache(`go:${activeProject.goModule}`, 300, 1400, () =>
           fetchGoModuleStats(activeProject.goModule!)
         )
       : Promise.resolve(null),
-    activeProject.dockerImage
-      ? withEdgeCache(`docker:${activeProject.dockerImage}:${Boolean(decryptedDockerToken)}`, 300, 2600, () =>
+    needPackages && activeProject.dockerImage
+      ? withEdgeCache(`docker:${activeProject.dockerImage}:${Boolean(decryptedDockerToken)}`, 300, 1400, () =>
           fetchDockerRepoStats(activeProject.dockerImage!, decryptedDockerToken)
         )
       : Promise.resolve(null),
-    activeProject.vscodeExtension
-      ? withEdgeCache(`vscode:${activeProject.vscodeExtension}`, 300, 2600, () =>
+    needPackages && activeProject.vscodeExtension
+      ? withEdgeCache(`vscode:${activeProject.vscodeExtension}`, 300, 1400, () =>
           fetchVsCodeStats(activeProject.vscodeExtension!)
         )
       : Promise.resolve(null),
-    activeProject.mcpServerName
+    needPackages && activeProject.mcpServerName
       ? withEdgeCache(
           `mcp:${activeProject.mcpServerName}:${activeProject.githubRepo || ""}`,
           300,
-          2600,
+          1400,
           () => fetchMcpStats(activeProject.mcpServerName!, activeProject.githubRepo)
         )
       : Promise.resolve(null),
-    withEdgeCache(`rev:${activeProject.id}:${decryptedPaymentConnectors.length}`, 120, 2600, () =>
-      fetchRevenueStats({
-        stripeKey: decryptedStripeKey,
-        dodoKey: decryptedDodoKey,
-        dodoEnv: activeProject.dodoPaymentsEnvironment,
-        githubSponsorsUsername: activeProject.githubSponsorsUsername,
-        modularConnectors: decryptedPaymentConnectors,
-      })
-    ),
-    db
-      .select()
-      .from(errorEvents)
-      .where(
-        and(
-          eq(errorEvents.projectId, activeProject.id),
-          gte(errorEvents.createdAt, retentionCutoffIso)
+    needRevenue
+      ? withEdgeCache(`rev:${activeProject.id}:${decryptedPaymentConnectors.length}`, 180, 1400, () =>
+          fetchRevenueStats({
+            stripeKey: decryptedStripeKey,
+            dodoKey: decryptedDodoKey,
+            dodoEnv: activeProject.dodoPaymentsEnvironment,
+            githubSponsorsUsername: activeProject.githubSponsorsUsername,
+            modularConnectors: decryptedPaymentConnectors,
+          })
         )
-      )
-      .orderBy(desc(errorEvents.createdAt))
-      .limit(60)
-      .catch(() => []),
-    db
-      .select()
-      .from(dashboardWidgets)
-      .where(eq(dashboardWidgets.projectId, activeProject.id))
-      .catch(() => []),
-    db
-      .select()
-      .from(projectReleases)
-      .where(eq(projectReleases.projectId, activeProject.id))
-      .orderBy(desc(projectReleases.releasedAt))
-      .limit(10)
-      .catch(() => []),
-    db
-      .select()
-      .from(uptimeMonitors)
-      .where(eq(uptimeMonitors.projectId, activeProject.id))
-      .orderBy(desc(uptimeMonitors.createdAt))
-      .limit(15)
-      .catch(() => []),
-    db
-      .select()
-      .from(uptimeChecks)
-      .where(eq(uptimeChecks.projectId, activeProject.id))
-      .orderBy(desc(uptimeChecks.checkedAt))
-      .limit(120)
-      .catch(() => []),
-    db
-      .select()
-      .from(dailyMetrics)
-      .where(eq(dailyMetrics.projectId, activeProject.id))
-      .orderBy(desc(dailyMetrics.date))
-      .limit(180)
-      .catch(() => []),
-    db
-      .select()
-      .from(pageviews)
-      .where(
-        and(
-          eq(pageviews.projectId, activeProject.id),
-          gte(pageviews.createdAt, retentionCutoffIso)
-        )
-      )
-      .limit(500)
-      .catch(() => []),
-    db
-      .select()
-      .from(sourceMaps)
-      .where(eq(sourceMaps.projectId, activeProject.id))
-      .orderBy(desc(sourceMaps.createdAt))
-      .limit(40)
-      .catch(() => []),
+      : Promise.resolve(null),
+    needCrashes
+      ? db
+          .select()
+          .from(errorEvents)
+          .where(
+            and(
+              eq(errorEvents.projectId, activeProject.id),
+              gte(errorEvents.createdAt, retentionCutoffIso)
+            )
+          )
+          .orderBy(desc(errorEvents.createdAt))
+          .limit(60)
+          .catch(() => [])
+      : Promise.resolve([]),
+    needAll
+      ? db
+          .select()
+          .from(dashboardWidgets)
+          .where(eq(dashboardWidgets.projectId, activeProject.id))
+          .catch(() => [])
+      : Promise.resolve([]),
+    needGithub || needCrashes
+      ? db
+          .select()
+          .from(projectReleases)
+          .where(eq(projectReleases.projectId, activeProject.id))
+          .orderBy(desc(projectReleases.releasedAt))
+          .limit(10)
+          .catch(() => [])
+      : Promise.resolve([]),
+    needUptime
+      ? db
+          .select()
+          .from(uptimeMonitors)
+          .where(eq(uptimeMonitors.projectId, activeProject.id))
+          .orderBy(desc(uptimeMonitors.createdAt))
+          .limit(15)
+          .catch(() => [])
+      : Promise.resolve([]),
+    needUptime
+      ? db
+          .select()
+          .from(uptimeChecks)
+          .where(eq(uptimeChecks.projectId, activeProject.id))
+          .orderBy(desc(uptimeChecks.checkedAt))
+          .limit(120)
+          .catch(() => [])
+      : Promise.resolve([]),
+    needDailyMetrics
+      ? db
+          .select()
+          .from(dailyMetrics)
+          .where(eq(dailyMetrics.projectId, activeProject.id))
+          .orderBy(desc(dailyMetrics.date))
+          .limit(180)
+          .catch(() => [])
+      : Promise.resolve([]),
+    needAnalytics
+      ? db
+          .select()
+          .from(pageviews)
+          .where(
+            and(
+              eq(pageviews.projectId, activeProject.id),
+              gte(pageviews.createdAt, retentionCutoffIso)
+            )
+          )
+          .limit(500)
+          .catch(() => [])
+      : Promise.resolve([]),
+    needCrashes || needSettings
+      ? db
+          .select()
+          .from(sourceMaps)
+          .where(eq(sourceMaps.projectId, activeProject.id))
+          .orderBy(desc(sourceMaps.createdAt))
+          .limit(40)
+          .catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   const initialLayout = (rawWidgets || []).map((w) => ({

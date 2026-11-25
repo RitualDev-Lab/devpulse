@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "./supabase/server";
 import { db } from "@/db";
 import { users, organizationMembers, organizations } from "@/db/schema";
@@ -22,7 +23,7 @@ export interface AuthenticatedUser {
  * Get current authenticated user bound to real GitHub identity
  * Ensures row-level synchronization with the Turso users table
  */
-export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   try {
     const supabase = await createClient();
     const {
@@ -144,7 +145,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     console.error("getCurrentUser error:", err);
     return await getSsoAuthenticatedUser();
   }
-}
+});
 
 async function getSsoAuthenticatedUser(): Promise<AuthenticatedUser | null> {
   try {

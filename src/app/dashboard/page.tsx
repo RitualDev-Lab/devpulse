@@ -14,7 +14,7 @@ interface DashboardPageProps {
 
 export default async function DashboardPage(props: DashboardPageProps) {
   const params = (await props.searchParams) || {};
-  const loaded = await loadDashboardWorkspace(params);
+  const loaded = await loadDashboardWorkspace(params, { scope: "overview" });
 
   if (loaded.status === "auth_gate") {
     return <DashboardAuthGate />;

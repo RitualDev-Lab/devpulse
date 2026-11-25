@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, createContext, useContext, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -46,6 +46,16 @@ interface WorkspaceShellProps {
   children: React.ReactNode;
 }
 
+interface WorkspaceShellContextValue {
+  isInsideShell: boolean;
+  setHeaderActions: (node: React.ReactNode) => void;
+}
+
+const WorkspaceShellContext = createContext<WorkspaceShellContextValue>({
+  isInsideShell: false,
+  setHeaderActions: () => {},
+});
+
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid, exact: true },
   { href: "/dashboard/github", label: "GitHub & PRs", icon: GitBranch },
@@ -69,14 +79,23 @@ export function WorkspaceShell({
   rightActions,
   children,
 }: WorkspaceShellProps) {
+  const { isInsideShell, setHeaderActions } = useContext(WorkspaceShellContext);
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [childHeaderActions, setChildHeaderActions] = useState<React.ReactNode>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isQuickConnectOpen, setIsQuickConnectOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
 
   useEffect(() => {
+    if (!isInsideShell) return;
+    setHeaderActions(rightActions ?? null);
+    return () => setHeaderActions(null);
+  }, [isInsideShell, setHeaderActions, rightActions]);
+
+  useEffect(() => {
+    if (isInsideShell) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -85,7 +104,16 @@ export function WorkspaceShell({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [isInsideShell]);
+
+  const providerValue = useMemo(
+    () => ({ isInsideShell: true, setHeaderActions: setChildHeaderActions }),
+    []
+  );
+
+  if (isInsideShell) {
+    return <>{children}</>;
+  }
 
   const projectList = projects.length > 0 ? projects : [currentProject];
 
@@ -128,7 +156,10 @@ export function WorkspaceShell({
     </nav>
   );
 
+  const effectiveRightActions = rightActions ?? childHeaderActions;
+
   return (
+    <WorkspaceShellContext.Provider value={providerValue}>
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex selection:bg-indigo-500/30 selection:text-white">
       {/* Desktop Left Sidebar */}
       <aside className="hidden lg:flex lg:w-60 lg:flex-col lg:fixed lg:inset-y-0 border-r border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl z-40">
@@ -268,7 +299,7 @@ export function WorkspaceShell({
                 ⌘K
               </kbd>
             </button>
-            {rightActions}
+            {effectiveRightActions}
             <button
               type="button"
               onClick={() => setIsQuickConnectOpen(true)}
@@ -324,5 +355,6 @@ export function WorkspaceShell({
         </div>
       )}
     </div>
+    </WorkspaceShellContext.Provider>
   );
 }
