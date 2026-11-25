@@ -3,10 +3,14 @@ import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
+import {
+  checkPendingUploadCapacity,
+  recordPendingUpload,
+  releasePendingUpload,
+} from "@/lib/storage/quota";
 import { createPresignedUrl } from "@/lib/storage/r2";
 import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
-import { verifyTurnstileToken, getClientIp } from "@/lib/security/rate-limit";
+import { checkRateLimit, verifyTurnstileToken, getClientIp } from "@/lib/security/rate-limit";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +19,19 @@ const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024; // 15 MB per crash attachment
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req.headers);
+    const rl = await checkRateLimit({
+      key: `presign:${ip}`,
+      limit: 20,
+      windowSeconds: 60,
+    });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many attachment presign requests. Retry in a minute." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
+      );
+    }
+
     const body = await req.json();
     const { apiKey, projectId, projectSlug, turnstileToken, filename, contentType, sizeBytes } = body;
 
@@ -34,7 +51,7 @@ export async function POST(req: NextRequest) {
         targetProject = { id: verified.id, userId: verified.userId, name: verified.name };
       }
     } else if (projectSlug) {
-      const turnstile = await verifyTurnstileToken(turnstileToken, getClientIp(req.headers));
+      const turnstile = await verifyTurnstileToken(turnstileToken, ip);
       if (!turnstile.ok) {
         return NextResponse.json({ error: turnstile.error || "Turnstile failed" }, { status: 403 });
       }
@@ -59,8 +76,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid project or telemetry apiKey" }, { status: 403 });
     }
 
-    // Enforce Storage Quota & Metering Guard
-    const quota = await checkAndReserveStorageQuota(targetProject.userId, bytes);
+    // Check available capacity (including unexpired pending uploads) without permanently debiting quota before upload confirmation
+    const quota = await checkPendingUploadCapacity(targetProject.userId, bytes);
     if (!quota.allowed || !quota.context.credentials) {
       return NextResponse.json(
         {
@@ -80,10 +97,18 @@ export async function POST(req: NextRequest) {
     const uid = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
     const objectKey = `${quota.context.prefix}/${targetProject.userId}/${targetProject.id}/attachments/${uid}-${safeName}`;
 
+    await recordPendingUpload({
+      objectKey,
+      userId: targetProject.userId,
+      projectId: targetProject.id,
+      sizeBytes: bytes,
+      ttlSeconds: 900,
+    });
+
     const uploadUrl = await createPresignedUrl(quota.context.credentials, {
       method: "PUT",
       objectKey,
-      expiresInSeconds: 600, // 10 minutes
+      expiresInSeconds: 600,
     });
 
     return NextResponse.json({
@@ -103,4 +128,13 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function DELETE(req: NextRequest) {
+  const objectKey = req.nextUrl.searchParams.get("objectKey");
+  if (!objectKey) {
+    return NextResponse.json({ error: "Missing objectKey" }, { status: 400 });
+  }
+  await releasePendingUpload(objectKey);
+  return NextResponse.json({ released: true });
 }

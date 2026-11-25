@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects, pageviews, dailyMetrics } from "@/db/schema";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
+import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
+
+const BOT_UA_REGEX =
+  /\b(bot|crawler|spider|slurp|headlesschrome|puppeteer|playwright|selenium|lighthouse|pagespeed|gtmetrix|pingdom|uptimerobot|bingpreview|facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|bytespider|gptbot|claudebot|anthropic-ai|ccbot|semrush|ahrefs|mj12bot|dotbot|petalbot|yandex)\b|^(curl|wget|python-requests|python-urllib|go-http-client|node-fetch|undici|axios)\b/i;
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -40,6 +44,28 @@ function detectOs(userAgent: string, explicitOs?: string): string {
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req.headers);
+    const userAgent = req.headers.get("user-agent") || "";
+
+    // 1. Per-IP Rate Limit (120 beacons/min) to stop spam/flood abuse
+    const rl = await checkRateLimit({
+      key: `analytics:${ip}`,
+      limit: 120,
+      windowSeconds: 60,
+    });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Analytics rate limit exceeded", retryAfterSeconds: rl.retryAfterSeconds },
+        {
+          status: 429,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Retry-After": String(rl.retryAfterSeconds),
+          },
+        }
+      );
+    }
+
     let body: any = {};
     try {
       body = await req.json();
@@ -47,20 +73,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
 
-    const projectIdentifier = body.project || body.projectId || body.apiKey;
-    if (!projectIdentifier) {
-      return NextResponse.json({ error: "Missing project identifier" }, { status: 400 });
+    const sourceType = ["web", "app", "desktop", "cli"].includes(String(body.sourceType || body.source_type))
+      ? String(body.sourceType || body.source_type)
+      : "web";
+
+    // 2. Drop automated bots/crawlers on web beacons cleanly (still allow explicit CLI/app beacons)
+    if (sourceType === "web" && userAgent && BOT_UA_REGEX.test(userAgent)) {
+      return NextResponse.json(
+        { success: true, accepted: false, filtered: "bot" },
+        { status: 202, headers: { "Access-Control-Allow-Origin": "*" } }
+      );
     }
 
-    // Match project by ID, slug, or telemetryApiKey
+    // Prefer dedicated frontend read-only `writeKey` (`dp_pub_*`), with slug/id/legacy apiKey compat
+    const projectIdentifier =
+      body.writeKey || body.publicWriteKey || body.project || body.projectId || body.apiKey;
+    if (!projectIdentifier) {
+      return NextResponse.json({ error: "Missing writeKey or project identifier" }, { status: 400 });
+    }
+
+    const idStr = String(projectIdentifier).trim();
     const [project] = await db
       .select({ id: projects.id })
       .from(projects)
       .where(
         or(
-          eq(projects.id, String(projectIdentifier)),
-          eq(projects.slug, String(projectIdentifier)),
-          eq(projects.telemetryApiKey, String(projectIdentifier))
+          eq(projects.publicWriteKey, idStr),
+          eq(projects.id, idStr),
+          eq(projects.slug, idStr),
+          eq(projects.telemetryApiKey, idStr)
         )
       )
       .limit(1);
@@ -73,22 +114,18 @@ export async function POST(req: NextRequest) {
     const rawReferrer = String(body.referrer || "direct").slice(0, 255);
     const referrer = rawReferrer.replace(/^https?:\/\//i, "").replace(/\/.*$/, "") || "direct";
     const device = body.device === "mobile" || body.device === "tablet" ? body.device : "desktop";
-    const sourceType = ["web", "app", "desktop", "cli"].includes(String(body.sourceType || body.source_type))
-      ? String(body.sourceType || body.source_type)
-      : "web";
     const eventName = String(body.eventName || body.event_name || "pageview").slice(0, 64);
-    const appVersion = body.appVersion || body.app_version || body.version
-      ? String(body.appVersion || body.app_version || body.version).slice(0, 40)
-      : null;
+    const appVersion =
+      body.appVersion || body.app_version || body.version
+        ? String(body.appVersion || body.app_version || body.version).slice(0, 40)
+        : null;
 
     const country = req.headers.get("cf-ipcountry") || "Global";
-    const userAgent = req.headers.get("user-agent") || "";
     const browser = detectBrowser(userAgent);
     const os = detectOs(userAgent, body.os);
 
     const hitId = `pv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    // Support numeric custom event metrics: trackMetric("active_jobs", 42)
     const rawMetricName = body.metricName || body.metric_name;
     const rawMetricValue = body.metricValue ?? body.metric_value;
     const hasCustomMetric =
@@ -101,6 +138,7 @@ export async function POST(req: NextRequest) {
       ? `metric:${rawMetricName.trim().slice(0, 56)}`
       : eventName;
     const finalPath = hasCustomMetric ? String(rawMetricValue) : path;
+    const todayStr = new Date().toISOString().slice(0, 10);
 
     await db.insert(pageviews).values({
       id: hitId,
@@ -123,7 +161,7 @@ export async function POST(req: NextRequest) {
         projectId: project.id,
         source: "web",
         metricType: "pageviews",
-        date: new Date().toISOString().slice(0, 10),
+        date: todayStr,
         value: Math.round(rawMetricValue),
         metadataJson: JSON.stringify({
           kind: "custom_metric",
@@ -134,6 +172,24 @@ export async function POST(req: NextRequest) {
           os,
         }),
       });
+    } else if (finalEventName === "pageview") {
+      // Atomic SQL daily rollup counter so daily traffic aggregates without raw row scans
+      const rollupId = `met_web_${project.id}_${todayStr}`;
+      await db
+        .insert(dailyMetrics)
+        .values({
+          id: rollupId,
+          projectId: project.id,
+          source: "web",
+          metricType: "pageviews",
+          date: todayStr,
+          value: 1,
+        })
+        .onConflictDoUpdate({
+          target: dailyMetrics.id,
+          set: { value: sql`${dailyMetrics.value} + 1` },
+        })
+        .catch(() => {});
     }
 
     return NextResponse.json(

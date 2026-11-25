@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { users, userStorageConfigs } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { users, userStorageConfigs, pendingUploads } from "@/db/schema";
+import { and, eq, lte, sql, gt } from "drizzle-orm";
 import { getHostedR2Credentials, type R2Credentials } from "./r2";
 import { decryptSecret } from "@/lib/security/crypto";
 
@@ -201,6 +201,121 @@ export async function checkAndReserveStorageQuota(
       usedBytes: ctx.usedBytes + safeBytes,
     },
   };
+}
+
+/**
+ * Checks available storage quota including active unconfirmed presigned uploads
+ * without permanently mutating `storageUsedBytes` until the upload is confirmed.
+ */
+export async function checkPendingUploadCapacity(
+  userId: string,
+  bytesNeeded: number
+): Promise<QuotaReservationResult> {
+  const ctx = await resolveUserStorageContext(userId);
+  const safeBytes = Math.max(0, Math.ceil(bytesNeeded));
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  if (!ctx.credentials) {
+    return {
+      allowed: false,
+      reason: "R2 storage credentials are not configured on this environment.",
+      context: ctx,
+    };
+  }
+
+  if (!ctx.isByos) {
+    const [pendingAgg] = await db
+      .select({ total: sql<number>`coalesce(sum(${pendingUploads.sizeBytes}), 0)` })
+      .from(pendingUploads)
+      .where(
+        and(
+          eq(pendingUploads.userId, userId),
+          eq(pendingUploads.confirmed, false),
+          gt(pendingUploads.expiresAt, nowSec)
+        )
+      )
+      .catch(() => [{ total: 0 }]);
+
+    const pendingBytes = Number(pendingAgg?.total || 0);
+    if (ctx.usedBytes + pendingBytes + safeBytes > ctx.limitBytes) {
+      return {
+        allowed: false,
+        reason: `Storage quota exceeded (${formatBytes(ctx.usedBytes + pendingBytes)} / ${formatBytes(ctx.limitBytes)} on ${ctx.tier.toUpperCase()} tier). Upgrade plan or connect BYOS bucket.`,
+        context: ctx,
+      };
+    }
+  }
+
+  return { allowed: true, context: ctx };
+}
+
+export async function recordPendingUpload(params: {
+  objectKey: string;
+  userId: string;
+  projectId: string;
+  sizeBytes: number;
+  ttlSeconds?: number;
+}) {
+  const expiresAt = Math.floor(Date.now() / 1000) + (params.ttlSeconds ?? 900);
+  await db
+    .insert(pendingUploads)
+    .values({
+      objectKey: params.objectKey,
+      userId: params.userId,
+      projectId: params.projectId,
+      sizeBytes: Math.max(0, Math.ceil(params.sizeBytes)),
+      confirmed: false,
+      expiresAt,
+    })
+    .onConflictDoNothing()
+    .catch(() => {});
+}
+
+export async function confirmPendingUpload(objectKey: string, userId: string): Promise<void> {
+  const [row] = await db
+    .select()
+    .from(pendingUploads)
+    .where(and(eq(pendingUploads.objectKey, objectKey), eq(pendingUploads.userId, userId)))
+    .limit(1)
+    .catch(() => []);
+
+  if (!row || row.confirmed) return;
+
+  await db
+    .update(pendingUploads)
+    .set({ confirmed: true })
+    .where(and(eq(pendingUploads.objectKey, objectKey), eq(pendingUploads.confirmed, false)))
+    .catch(() => {});
+
+  if (row.sizeBytes > 0) {
+    await db
+      .update(userStorageConfigs)
+      .set({
+        storageUsedBytes: sql`${userStorageConfigs.storageUsedBytes} + ${row.sizeBytes}`,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(userStorageConfigs.userId, userId))
+      .catch(() => {});
+  }
+}
+
+export async function releasePendingUpload(objectKey: string): Promise<void> {
+  await db
+    .delete(pendingUploads)
+    .where(and(eq(pendingUploads.objectKey, objectKey), eq(pendingUploads.confirmed, false)))
+    .catch(() => {});
+}
+
+export async function pruneExpiredPendingUploads(): Promise<number> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  try {
+    await db
+      .delete(pendingUploads)
+      .where(and(eq(pendingUploads.confirmed, false), lte(pendingUploads.expiresAt, nowSec)));
+    return 1;
+  } catch {
+    return 0;
+  }
 }
 
 export function formatBytes(bytes: number): string {

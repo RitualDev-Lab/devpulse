@@ -3,10 +3,11 @@ import { db } from "@/db";
 import { projects, errorEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { checkRateLimit, getClientIp, verifyTurnstileToken } from "@/lib/security/rate-limit";
-import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
+import { checkAndReserveStorageQuota, confirmPendingUpload } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
+import { recordCrashIssueOccurrence } from "@/lib/crashes/issues";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096;
 const MAX_TURSO_PREVIEW_CHARS = 2000;
@@ -114,7 +115,14 @@ export async function POST(req: NextRequest) {
         );
       }
       validatedAttachmentKey = attachmentKey.trim();
+      await confirmPendingUpload(validatedAttachmentKey, project.userId);
     }
+
+    const issueSummary = await recordCrashIssueOccurrence({
+      projectId: project.id,
+      errorName: safeErrorName,
+      stackTrace: rawStack,
+    });
 
     await db.insert(errorEvents).values({
       id: eventId,
@@ -129,23 +137,27 @@ export async function POST(req: NextRequest) {
       r2ObjectKey,
       payloadSizeBytes: payloadBytes,
       storageProvider,
+      fingerprint: issueSummary.fingerprint,
       reporterEmail: reporterEmail ? String(reporterEmail).slice(0, 255) : null,
     });
 
     if (
-      project.discordWebhookUrl ||
-      project.slackWebhookUrl ||
-      (project.telegramBotToken && project.telegramChatId) ||
-      project.genericWebhookUrl ||
-      project.pagerdutyRoutingKey ||
-      project.opsgenieApiKeyEncrypted ||
-      project.teamsWebhookUrl
+      issueSummary.shouldAlert &&
+      (project.discordWebhookUrl ||
+        project.slackWebhookUrl ||
+        (project.telegramBotToken && project.telegramChatId) ||
+        project.genericWebhookUrl ||
+        project.pagerdutyRoutingKey ||
+        project.opsgenieApiKeyEncrypted ||
+        project.teamsWebhookUrl)
     ) {
       const webhookConfig = await resolveDecryptedWebhookConfig(project);
       await dispatchCrashAlerts(
         webhookConfig,
         {
           eventId,
+          fingerprint: issueSummary.fingerprint,
+          occurrenceCount: issueSummary.occurrenceCount,
           projectName: project.name,
           projectSlug: project.slug,
           errorName: safeErrorName,

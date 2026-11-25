@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects, errorEvents } from "@/db/schema";
 import { eq, count, and } from "drizzle-orm";
-import { fetchNpmStats } from "@/lib/integrations/npm";
-import { fetchPyPiStats } from "@/lib/integrations/pypi";
-import { fetchGitHubRepoStats } from "@/lib/integrations/github";
-
-export const dynamic = "force-dynamic";
+import { readProjectSnapshots, refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
 
 interface BadgeRouteParams {
   params: Promise<{
@@ -15,16 +11,32 @@ interface BadgeRouteParams {
   }>;
 }
 
+function escapeXml(raw: string): string {
+  return String(raw)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function sanitizeSvgColor(raw: string): string {
+  return /^#[0-9a-fA-F]{3,8}$/.test(raw) ? raw : "#3b82f6";
+}
+
 function formatNumber(num: number): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
-  return num.toLocaleString();
+  return num.toLocaleString("en-US");
 }
 
-function generateSvgBadge(label: string, value: string, color: string): string {
-  // Approximate character widths for crisp text alignment
-  const labelWidth = Math.max(Math.round(label.length * 7.2 + 16), 40);
-  const valueWidth = Math.max(Math.round(value.length * 7.4 + 18), 45);
+function generateSvgBadge(rawLabel: string, rawValue: string, rawColor: string): string {
+  const label = escapeXml(rawLabel);
+  const value = escapeXml(rawValue);
+  const color = sanitizeSvgColor(rawColor);
+
+  const labelWidth = Math.max(Math.round(rawLabel.length * 7.2 + 16), 40);
+  const valueWidth = Math.max(Math.round(rawValue.length * 7.4 + 18), 45);
   const totalWidth = labelWidth + valueWidth;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20" role="img" aria-label="${label}: ${value}">
@@ -50,12 +62,11 @@ function generateSvgBadge(label: string, value: string, color: string): string {
 </svg>`;
 }
 
-export async function GET(req: NextRequest, { params }: BadgeRouteParams) {
+export async function GET(_req: NextRequest, { params }: BadgeRouteParams) {
   try {
     const { type, slug } = await params;
     const cleanSlug = slug.replace(/\.svg$/i, "");
 
-    // Find project
     let project = null;
     try {
       const rows = await db
@@ -73,39 +84,39 @@ export async function GET(req: NextRequest, { params }: BadgeRouteParams) {
       return new NextResponse(errorSvg, {
         status: 404,
         headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "no-cache",
+          "Content-Type": "image/svg+xml; charset=utf-8",
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600",
         },
       });
     }
 
-  let label = "devpulse";
-  let value = "active";
-  let color = "#3b82f6"; // Blue
+    let label = "devpulse";
+    let value = "active";
+    let color = "#3b82f6";
 
-  try {
-    switch (type.toLowerCase()) {
-      case "downloads": {
+    try {
+      const badgeType = type.toLowerCase();
+
+      if (badgeType === "downloads") {
         label = "downloads";
-        let total = 0;
-
-        if (project.npmPackage) {
-          const npm = await fetchNpmStats(project.npmPackage);
-          if (npm) total += npm.downloadsLastMonth;
-        }
-        if (project.pypiPackage) {
-          const pypi = await fetchPyPiStats(project.pypiPackage);
-          if (pypi) total += pypi.downloadsLastMonth;
+        let snap = await readProjectSnapshots(project.id);
+        if (snap.presentKeys.size === 0) {
+          snap = await refreshProjectSnapshots(project, {
+            keys: ["npm", "pypi", "crates", "docker", "vscode"],
+          }).catch(() => snap);
         }
 
-        value = total > 0 ? `${formatNumber(total)}/mo` : "active";
-        color = "#10b981"; // Emerald
-        break;
-      }
+        const total =
+          Number(snap.npmStats?.downloadsLastMonth || 0) +
+          Number(snap.pypiStats?.downloadsLastMonth || 0) +
+          Number(snap.rustStats?.totalDownloads || 0) +
+          Number(snap.dockerStats?.pullCount || 0) +
+          Number(snap.vscodeStats?.installs || 0);
 
-      case "health": {
+        value = total > 0 ? formatNumber(total) : "active";
+        color = "#10b981";
+      } else if (badgeType === "health") {
         label = "health";
-        // Calculate crash-free rate based on unresolved crashes
         const [unresolved] = await db
           .select({ count: count() })
           .from(errorEvents)
@@ -116,63 +127,53 @@ export async function GET(req: NextRequest, { params }: BadgeRouteParams) {
             )
           );
 
-        const unresolvedCount = unresolved?.count || 0;
+        const unresolvedCount = Number(unresolved?.count || 0);
         if (unresolvedCount === 0) {
           value = "100% crash-free";
-          color = "#10b981"; // Emerald
+          color = "#10b981";
         } else if (unresolvedCount < 3) {
           value = "99.2% healthy";
-          color = "#3b82f6"; // Blue
+          color = "#3b82f6";
         } else {
           value = `${unresolvedCount} active issues`;
-          color = "#ef4444"; // Red
+          color = "#ef4444";
         }
-        break;
-      }
-
-      case "stars": {
+      } else if (badgeType === "stars") {
         label = "stars";
-        if (project.githubRepo) {
-          const gh = await fetchGitHubRepoStats(project.githubRepo);
-          value = gh ? formatNumber(gh.stars) : "0";
-        } else {
-          value = "0";
+        let snap = await readProjectSnapshots(project.id);
+        if (snap.presentKeys.size === 0 && project.githubRepo) {
+          snap = await refreshProjectSnapshots(project, { keys: ["github"] }).catch(() => snap);
         }
-        color = "#f59e0b"; // Amber
-        break;
-      }
-
-      case "status":
-      default: {
+        value = snap.githubStats ? formatNumber(snap.githubStats.stars) : "0";
+        color = "#f59e0b";
+      } else {
         label = "devpulse";
         value = "monitored";
-        color = "#6366f1"; // Indigo
-        break;
+        color = "#6366f1";
       }
+    } catch (err) {
+      console.error(`Error generating badge for ${type}/${slug}:`, err);
+      value = "unknown";
+      color = "#71717a";
     }
-  } catch (err) {
-    console.error(`Error generating badge for ${type}/${slug}:`, err);
-    value = "unknown";
-    color = "#71717a";
-  }
 
-  const svg = generateSvgBadge(label, value, color);
+    const svg = generateSvgBadge(label, value, color);
 
-  return new NextResponse(svg, {
-    status: 200,
-    headers: {
-      "Content-Type": "image/svg+xml",
-      "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
-    },
-  });
+    return new NextResponse(svg, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/svg+xml; charset=utf-8",
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+      },
+    });
   } catch (outerErr: any) {
     console.error("Fatal badge generation error:", outerErr);
     const fallbackSvg = generateSvgBadge("badge", "error", "#ef4444");
     return new NextResponse(fallbackSvg, {
       status: 200,
       headers: {
-        "Content-Type": "image/svg+xml",
-        "Cache-Control": "no-cache",
+        "Content-Type": "image/svg+xml; charset=utf-8",
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600",
       },
     });
   }

@@ -62,6 +62,53 @@ export function computeSemanticGroupKey(
 }
 
 /**
+ * Extracts normalized top application stack frame (`file:line` / `fn@file`) for issue fingerprinting.
+ */
+export function extractTopStackFrame(stackTrace?: string | null): string {
+  if (!stackTrace) return "no-stack";
+  const lines = stackTrace
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const frameLine =
+    lines.find(
+      (l) =>
+        (/\bat\s+/.test(l) || /File\s+"/.test(l) || /\.ts:|\.js:|\.py:|\.rs:|\.go:|\.dart:/.test(l)) &&
+        !/node_modules|internal\/|<anonymous>/.test(l)
+    ) ||
+    lines.find((l) => /\bat\s+|File\s+"/.test(l)) ||
+    lines[1] ||
+    lines[0] ||
+    "no-stack";
+
+  return frameLine
+    .replace(/:\d+:\d+/g, "")
+    .replace(/0x[0-9a-f]+/gi, "<hex>")
+    .slice(0, 140);
+}
+
+/**
+ * Computes a deterministic SHA-256 issue fingerprint (`fp_<24-hex>`) from
+ * projectId + errorName + normalized top stack frame.
+ */
+export async function computeCrashFingerprint(
+  projectId: string,
+  errorName: string,
+  stackTrace?: string | null
+): Promise<{ fingerprint: string; topFrame: string }> {
+  const cleanName = errorName.split(":")[0].trim().toLowerCase() || "runtimeerror";
+  const topFrame = extractTopStackFrame(stackTrace);
+  const input = `${projectId}|${cleanName}|${topFrame.toLowerCase()}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  const hex = Array.from(new Uint8Array(digest))
+    .slice(0, 12)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return { fingerprint: `fp_${hex}`, topFrame };
+}
+
+/**
  * Assigns Business Impact ($) and Priority Score (0..1000) to a crash event based on:
  * - Affected route criticality (/checkout, /billing, /auth, /api)
  * - Affected users count

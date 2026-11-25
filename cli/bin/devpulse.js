@@ -73,14 +73,94 @@ async function handleStatus(slug) {
   }
 }
 
-async function handleCrashes(slug) {
-  printHeader();
-  console.log(`🚨 Checking runtime crash diagnostics for \x1b[36m${slug}\x1b[0m...\n`);
+async function handleCrashes(rawArgs) {
+  const positional = rawArgs.filter((a, i) => !a.startsWith("--") && !(i > 0 && rawArgs[i - 1].startsWith("--")));
+  const flags = parseFlags(rawArgs);
+  const slug = flags.project || positional[0] || DEFAULT_SLUG;
+  const apiKey = flags.key || process.env.DEVPULSE_API_KEY || process.env.DEVPULSE_TOKEN;
+  const host = (flags.endpoint || DEFAULT_HOST).replace(/\/$/, "");
+  const limit = Math.min(100, Math.max(1, Number(flags.limit || 20)));
+  const status = flags.status || "all";
+  const tail = flags.tail === "true" || flags.tail === true;
+  const jsonMode = flags.json === "true" || flags.json === true;
 
-  console.log("\x1b[32m✔ Telemetry Engine Online\x1b[0m");
-  console.log(`• Telemetry Ingest: \x1b[36m${DEFAULT_HOST}/api/v1/event\x1b[0m`);
-  console.log(`• View Live Stream: \x1b[36m${DEFAULT_HOST}\x1b[0m\n`);
-  console.log("Run with \x1b[33mdevpulse status\x1b[0m to check download velocity.\n");
+  if (!apiKey) {
+    console.error("❌ Authentication required: pass --key <telemetryApiKey> or set DEVPULSE_API_KEY.");
+    process.exit(1);
+  }
+
+  if (!jsonMode) {
+    printHeader();
+    console.log(`🚨 Fetching crash feed for \x1b[36m${slug}\x1b[0m${tail ? " (\x1b[33m--tail live mode\x1b[0m)" : ""}...\n`);
+  }
+
+  let lastSeenCreatedAt = "";
+
+  const pollOnce = async () => {
+    const qs = new URLSearchParams({
+      project: slug,
+      status,
+      limit: String(limit),
+    });
+    if (lastSeenCreatedAt) qs.set("since", lastSeenCreatedAt);
+
+    const res = await fetch(`${host}/api/v1/event?${qs.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status}: ${errText}`);
+    }
+
+    const data = await res.json();
+    const events = Array.isArray(data.events) ? [...data.events].reverse() : [];
+
+    if (events.length === 0) {
+      if (!lastSeenCreatedAt && !jsonMode) {
+        console.log("\x1b[32m✔ Zero matching crashes recorded.\x1b[0m\n");
+      }
+      return;
+    }
+
+    for (const ev of events) {
+      if (jsonMode) {
+        console.log(JSON.stringify(ev));
+      } else {
+        const badge =
+          ev.status === "resolved"
+            ? "\x1b[32m[RESOLVED]\x1b[0m"
+            : ev.status === "ignored"
+            ? "\x1b[90m[IGNORED]\x1b[0m"
+            : "\x1b[31m[UNRESOLVED]\x1b[0m";
+        const fp = ev.fingerprint ? ` \x1b[90m(${ev.fingerprint})\x1b[0m` : "";
+        console.log(
+          `${badge} \x1b[1m${ev.errorName}\x1b[0m${fp} \x1b[36m[${ev.platform || ev.runtime}]\x1b[0m ${ev.createdAt}`
+        );
+        console.log(`   ${ev.message}`);
+      }
+      if (!lastSeenCreatedAt || ev.createdAt > lastSeenCreatedAt) {
+        lastSeenCreatedAt = ev.createdAt;
+      }
+    }
+  };
+
+  try {
+    await pollOnce();
+    if (tail) {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        await new Promise((r) => setTimeout(r, 3000));
+        await pollOnce();
+      }
+    }
+  } catch (err) {
+    console.error("❌ Failed to fetch crashes:", err.message);
+    process.exit(1);
+  }
 }
 
 function parseFlags(argv) {
@@ -162,7 +242,7 @@ function handleHelp() {
   console.log("Usage: devpulse <command> [options]\n");
   console.log("Commands:");
   console.log("  \x1b[36mstatus\x1b[0m            [slug]  Print package downloads, release status & badges");
-  console.log("  \x1b[36mcrashes\x1b[0m           [slug]  View crash telemetry stream endpoint & status");
+  console.log("  \x1b[36mcrashes\x1b[0m           [slug]  Stream live crashes (--key, --project, --tail, --json)");
   console.log("  \x1b[36mupload-sourcemaps\x1b[0m [flags] Upload .map & Rust .dwarf.json files to R2");
   console.log("      --key <apiKey>          Project telemetry API key (or DEVPULSE_API_KEY)");
   console.log("      --release <version>     Release version tag (e.g. v1.4.2)");
@@ -183,7 +263,7 @@ switch (command) {
     break;
   case "crashes":
   case "errors":
-    handleCrashes(targetSlug);
+    handleCrashes(args.slice(1));
     break;
   case "upload-sourcemaps":
     handleUploadSourcemaps(args.slice(1));

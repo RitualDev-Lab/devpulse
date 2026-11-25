@@ -60,6 +60,7 @@ export const projects = sqliteTable("projects", {
   // Telemetry & Security
   stackPreset: text("stack_preset").default("saas").notNull(), // 'saas' | 'package' | 'desktop' | 'mcp'
   telemetryApiKey: text("telemetry_api_key").unique().notNull(), // For crash reports & events
+  publicWriteKey: text("public_write_key").unique(), // Public read/analytics beacon writeKey (dp_pub_*)
   npmTokenEncrypted: text("npm_token_encrypted"), // Optional npm Read Token for private packages
   githubTokenEncrypted: text("github_token_encrypted"), // Optional repo-scoped GitHub PAT
   isPublic: integer("is_public", { mode: "boolean" }).default(true).notNull(),
@@ -121,7 +122,7 @@ export const dashboardWidgets = sqliteTable("dashboard_widgets", {
 export const dailyMetrics = sqliteTable("daily_metrics", {
   id: text("id").primaryKey(),
   projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
-  source: text("source", { enum: ["github", "npm", "pypi", "vscode", "docker", "web", "crates", "go"] }).notNull(),
+  source: text("source", { enum: ["github", "npm", "pypi", "vscode", "docker", "web", "crates", "go", "mcp"] }).notNull(),
   metricType: text("metric_type", { enum: ["downloads", "stars", "views", "clones", "installs", "pageviews", "pulls", "versions"] }).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
   value: integer("value").notNull(),
@@ -152,6 +153,7 @@ export const errorEvents = sqliteTable("error_events", {
   breadcrumbsJson: text("breadcrumbs_json"), // JSON array of HTTP/console/UI events leading to crash
   commitSha: text("commit_sha"), // Suspected release/commit SHA attribution
   traceId: text("trace_id"), // Linked OpenTelemetry Trace ID
+  fingerprint: text("fingerprint"), // Deterministic hash(projectId + errorName + topStackFrame)
   aiGroupKey: text("ai_group_key"),
   aiGroupTitle: text("ai_group_title"),
   aiRootCause: text("ai_root_cause"),
@@ -707,5 +709,34 @@ export const projectSnapshots = sqliteTable("project_snapshots", {
   snapshotKey: text("snapshot_key").notNull(), // 'github' | 'npm' | 'pypi' | 'crates' | 'go' | 'docker' | 'vscode' | 'mcp' | 'revenue'
   payloadJson: text("payload_json").notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Grouped Crash Issues with Occurrence Counters & Alert Cooldowns
+ */
+export const crashIssues = sqliteTable("crash_issues", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  errorName: text("error_name").notNull(),
+  topFrame: text("top_frame"),
+  occurrenceCount: integer("occurrence_count").default(1).notNull(),
+  status: text("status", { enum: ["unresolved", "resolved", "ignored"] }).default("unresolved").notNull(),
+  firstSeenAt: text("first_seen_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  lastSeenAt: text("last_seen_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  lastAlertedAt: text("last_alerted_at"),
+});
+
+/**
+ * Pending Presigned Upload Reservations (reconciled on crash/report confirm or expired by cron)
+ */
+export const pendingUploads = sqliteTable("pending_uploads", {
+  objectKey: text("object_key").primaryKey(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  confirmed: integer("confirmed", { mode: "boolean" }).default(false).notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

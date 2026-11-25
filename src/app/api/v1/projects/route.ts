@@ -118,6 +118,7 @@ export async function POST(request: Request) {
 
     const projectId = `prj_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
     const telemetryApiKey = `dp_live_${crypto.randomBytes(12).toString("hex")}`;
+    const publicWriteKey = `dp_pub_${crypto.randomBytes(12).toString("hex")}`;
 
     await db.insert(projects).values({
       id: projectId,
@@ -132,6 +133,7 @@ export async function POST(request: Request) {
       vscodeExtension: vscodeExtension || null,
       mcpServerName: mcpServerName || null,
       telemetryApiKey,
+      publicWriteKey,
       isPublic: true,
       theme: "dark",
     });

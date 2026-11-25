@@ -128,6 +128,10 @@ export function BugReportClientForm({
         });
 
         if (!uploadRes.ok) {
+          await fetch(
+            `/api/v1/storage/presign?objectKey=${encodeURIComponent(presignData.objectKey)}`,
+            { method: "DELETE" }
+          ).catch(() => {});
           throw new Error("Failed to upload attachment to Cloudflare R2.");
         }
 

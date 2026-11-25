@@ -8,6 +8,8 @@ import { validatePublicUrl } from "@/lib/security/ssrf";
 
 export interface AlertPayload {
   eventId?: string;
+  fingerprint?: string;
+  occurrenceCount?: number;
   projectName: string;
   projectSlug: string;
   errorName: string;
@@ -340,7 +342,7 @@ export async function sendPagerDutyAlert(routingKey: string, data: AlertPayload)
   const body = {
     routing_key: routingKey,
     event_action: "trigger",
-    dedup_key: data.eventId || `${data.projectSlug}-${data.errorName}`,
+    dedup_key: data.fingerprint || `${data.projectSlug}-${data.errorName}`.slice(0, 200),
     payload: {
       summary: `[${data.projectName}] ${data.errorName}: ${data.message.slice(0, 200)}`,
       severity: "error",

@@ -119,6 +119,7 @@ export async function POST(request: Request) {
 
     const projectId = `prj_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
     const telemetryApiKey = `dp_live_${crypto.randomBytes(12).toString("hex")}`;
+    const publicWriteKey = `dp_pub_${crypto.randomBytes(12).toString("hex")}`;
 
     // 4. Insert new Project row
     await db.insert(projects).values({
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
       mcpServerName: scanned.detectedEcosystems.mcpServerName || null,
       stackPreset,
       telemetryApiKey,
+      publicWriteKey,
       isPublic: true,
       theme: "dark",
     });

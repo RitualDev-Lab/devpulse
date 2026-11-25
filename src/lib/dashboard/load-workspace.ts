@@ -35,6 +35,7 @@ import { fetchMcpStats } from "@/lib/integrations/mcp";
 import { fetchRevenueStats } from "@/lib/integrations/revenue";
 import { computeP95Latency, computeUptimeBasisPoints } from "@/lib/monitors/checker";
 import { readProjectSnapshots, refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
+import { loadAnalyticsSummarySql } from "@/lib/analytics/rollup";
 import type { ProjectSummary } from "@/components/dashboard/ProjectWorkspaceSwitcher";
 import type { DashboardData } from "@/components/dashboard/DragDropGrid";
 
@@ -282,7 +283,7 @@ export async function loadDashboardWorkspace(
     rawMonitors,
     rawUptimeChecks,
     rawDailyMetrics,
-    rawPageviews,
+    analyticsSummarySql,
     rawSourceMaps,
   ] = await Promise.all([
     needExternal ? readProjectSnapshots(activeProject.id) : Promise.resolve(null),
@@ -353,18 +354,8 @@ export async function loadDashboardWorkspace(
           .catch(() => [])
       : Promise.resolve([]),
     needAnalytics
-      ? db
-          .select()
-          .from(pageviews)
-          .where(
-            and(
-              eq(pageviews.projectId, activeProject.id),
-              gte(pageviews.createdAt, retentionCutoffIso)
-            )
-          )
-          .limit(500)
-          .catch(() => [])
-      : Promise.resolve([]),
+      ? loadAnalyticsSummarySql(activeProject.id, retentionCutoffIso).catch(() => null)
+      : Promise.resolve(null),
     needCrashes || needSettings
       ? db
           .select()
@@ -448,93 +439,22 @@ export async function loadDashboardWorkspace(
     createdAt: err.createdAt,
   }));
 
-  const refMap: Record<string, number> = {};
-  const countryMap: Record<string, number> = {};
-  const pathMap: Record<string, number> = {};
-  const pageOnlyMap: Record<string, number> = {};
-  const customEventMap: Record<string, number> = {};
-  const osMap: Record<string, number> = {};
-  const dailyMap: Record<string, number> = {};
-  const cohortMap: Record<string, { web: number; appCli: number; total: number }> = {};
-  let desktopCount = 0;
-  let mobileCount = 0;
-  let webHits = 0;
-  let appHits = 0;
-
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const weekCutoffIso = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
-  const monthCutoffIso = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
-  const dauSet = new Set<string>();
-  const wauSet = new Set<string>();
-  const mauSet = new Set<string>();
-
-  for (const pv of rawPageviews || []) {
-    refMap[pv.referrer] = (refMap[pv.referrer] || 0) + 1;
-    countryMap[pv.country] = (countryMap[pv.country] || 0) + 1;
-    const isCustom = pv.eventName && pv.eventName !== "pageview";
-    const pKey = isCustom ? `event:${pv.eventName}` : pv.path || "/";
-    pathMap[pKey] = (pathMap[pKey] || 0) + 1;
-    if (isCustom) {
-      customEventMap[pv.eventName] = (customEventMap[pv.eventName] || 0) + 1;
-    } else {
-      pageOnlyMap[pv.path || "/"] = (pageOnlyMap[pv.path || "/"] || 0) + 1;
-    }
-    const osKey = pv.os || "Unknown";
-    osMap[osKey] = (osMap[osKey] || 0) + 1;
-    const dayKey = String(pv.createdAt || "").slice(0, 10) || todayIso;
-    dailyMap[dayKey] = (dailyMap[dayKey] || 0) + 1;
-    if (!cohortMap[dayKey]) cohortMap[dayKey] = { web: 0, appCli: 0, total: 0 };
-    cohortMap[dayKey].total += 1;
-    if (pv.sourceType && pv.sourceType !== "web") {
-      appHits++;
-      cohortMap[dayKey].appCli += 1;
-    } else {
-      webHits++;
-      cohortMap[dayKey].web += 1;
-    }
-    if (pv.device === "mobile" || pv.device === "tablet") mobileCount++;
-    else desktopCount++;
-
-    const sig = `${pv.country || ""}:${pv.os || ""}:${pv.browser || ""}:${pv.device || ""}:${pv.sourceType || "web"}`;
-    if (dayKey === todayIso) dauSet.add(sig);
-    if (dayKey >= weekCutoffIso) wauSet.add(sig);
-    if (dayKey >= monthCutoffIso) mauSet.add(sig);
-  }
-
-  const analyticsSummary = {
-    totalPageviews: rawPageviews.length,
-    dau: dauSet.size,
-    wau: wauSet.size,
-    mau: mauSet.size,
-    uniqueReferrers: Object.keys(refMap).length,
-    topReferrers: Object.entries(refMap)
-      .map(([referrer, count]) => ({ referrer, count }))
-      .sort((a, b) => b.count - a.count),
-    topCountries: Object.entries(countryMap)
-      .map(([country, count]) => ({ country, count }))
-      .sort((a, b) => b.count - a.count),
-    topPaths: Object.entries(pathMap)
-      .map(([path, count]) => ({ path, count }))
-      .sort((a, b) => b.count - a.count),
-    topPages: Object.entries(pageOnlyMap)
-      .map(([path, count]) => ({ path, count }))
-      .sort((a, b) => b.count - a.count),
-    topCustomEvents: Object.entries(customEventMap)
-      .map(([event, count]) => ({ event, count }))
-      .sort((a, b) => b.count - a.count),
-    topOs: Object.entries(osMap)
-      .map(([os, count]) => ({ os, count }))
-      .sort((a, b) => b.count - a.count),
-    dailySeries: Object.entries(dailyMap)
-      .map(([date, hits]) => ({ date, hits }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-14),
-    dailyCohorts: Object.entries(cohortMap)
-      .map(([date, c]) => ({ date, ...c }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-30),
-    sources: { web: webHits, app: appHits },
-    devices: { desktop: desktopCount, mobile: mobileCount },
+  const analyticsSummary = analyticsSummarySql || {
+    totalPageviews: 0,
+    dau: 0,
+    wau: 0,
+    mau: 0,
+    uniqueReferrers: 0,
+    topReferrers: [],
+    topCountries: [],
+    topPaths: [],
+    topPages: [],
+    topCustomEvents: [],
+    topOs: [],
+    dailySeries: [],
+    dailyCohorts: [],
+    sources: { web: 0, app: 0 },
+    devices: { desktop: 0, mobile: 0 },
   };
 
   const effectiveRole: OrgRole = isDemoView
@@ -560,6 +480,7 @@ export async function loadDashboardWorkspace(
       hasNpmToken: canSeeWebhookStatus ? Boolean(activeProject.npmTokenEncrypted) : false,
       hasGithubToken: canSeeWebhookStatus ? Boolean(activeProject.githubTokenEncrypted) : false,
       telemetryApiKey: canManageSecrets ? activeProject.telemetryApiKey : null,
+      publicWriteKey: activeProject.publicWriteKey || activeProject.slug,
       hasTelemetryApiKey: Boolean(activeProject.telemetryApiKey),
       // Strictly gate raw webhook URLs, bot tokens, routing keys, and billing keys out of RSC payloads
       discordWebhookUrl: null,

@@ -8,6 +8,19 @@ export interface RateLimitResult {
   retryAfterSeconds: number;
 }
 
+export async function pruneExpiredRateLimits(): Promise<number> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  try {
+    const res = await client.execute({
+      sql: `DELETE FROM rate_limit_counters WHERE expires_at <= ?`,
+      args: [nowSec],
+    });
+    return Number(res.rowsAffected || 0);
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Fixed/sliding window rate limiter persisted in Turso rate_limit_counters.
  * Used to enforce max 500 telemetry beacons/min per API key cleanly across Cloudflare Edge instances.
@@ -21,6 +34,16 @@ export async function checkRateLimit(opts: {
   const windowBucket = Math.floor(nowSec / opts.windowSeconds);
   const resetAtEpoch = (windowBucket + 1) * opts.windowSeconds;
   const bucketKey = `${opts.key}:${windowBucket}`;
+
+  // Opportunistic inline cleanup (~3% of checks) to keep table bounded between cron runs
+  if (Math.random() < 0.03) {
+    client
+      .execute({
+        sql: `DELETE FROM rate_limit_counters WHERE expires_at <= ?`,
+        args: [nowSec - 60],
+      })
+      .catch(() => {});
+  }
 
   try {
     const res = await client.execute({

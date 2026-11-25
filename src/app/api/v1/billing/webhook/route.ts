@@ -141,6 +141,15 @@ export async function POST(req: NextRequest) {
       "payment.succeeded",
     ].includes(eventType);
 
+    const isRefundOrRevocation = [
+      "payment.refunded",
+      "payment.disputed",
+      "refund.succeeded",
+      "subscription.cancelled",
+      "subscription.expired",
+      "subscription.on_hold",
+    ].includes(eventType);
+
     if (isActivationEvent && itemKey) {
       if (itemKey === "pro" || itemKey === "team") {
         userUpdates.storageTier = itemKey;
@@ -161,12 +170,24 @@ export async function POST(req: NextRequest) {
       } else if (itemKey === "extra_storage" && eventType === "payment.succeeded") {
         userUpdates.extraStorageGb = Number(userRow.extraStorageGb || 0) + 25 * quantity;
       }
-    } else if (eventType === "subscription.cancelled" || eventType === "subscription.on_hold") {
-      userUpdates.subscriptionStatus =
-        eventType === "subscription.cancelled" ? "cancelled" : "on_hold";
-    } else if (eventType === "subscription.expired") {
-      userUpdates.subscriptionStatus = "expired";
-      userUpdates.storageTier = "free";
+    } else if (isRefundOrRevocation) {
+      if (itemKey === "extra_domain") {
+        userUpdates.extraCustomDomains = Math.max(
+          0,
+          Number(userRow.extraCustomDomains || 0) - quantity
+        );
+      } else if (itemKey === "extra_storage") {
+        userUpdates.extraStorageGb = Math.max(
+          0,
+          Number(userRow.extraStorageGb || 0) - 25 * quantity
+        );
+      } else if (eventType === "subscription.cancelled" || eventType === "subscription.on_hold") {
+        userUpdates.subscriptionStatus =
+          eventType === "subscription.cancelled" ? "cancelled" : "on_hold";
+      } else if (eventType === "subscription.expired") {
+        userUpdates.subscriptionStatus = "expired";
+        userUpdates.storageTier = "free";
+      }
     }
 
     await db.update(users).set(userUpdates).where(eq(users.id, targetUserId));

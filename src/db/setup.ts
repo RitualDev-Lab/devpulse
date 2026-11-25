@@ -722,10 +722,81 @@ export async function initDb() {
     ON uptime_checks(project_id, checked_at);
   `).catch(() => {});
 
+  await client.execute(`ALTER TABLE projects ADD COLUMN public_write_key TEXT;`).catch(() => {});
+  await client.execute(`ALTER TABLE error_events ADD COLUMN fingerprint TEXT;`).catch(() => {});
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS crash_issues (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      fingerprint TEXT NOT NULL,
+      error_name TEXT NOT NULL,
+      top_frame TEXT,
+      occurrence_count INTEGER DEFAULT 1 NOT NULL,
+      status TEXT DEFAULT 'unresolved' NOT NULL,
+      first_seen_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      last_alerted_at TEXT
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS pending_uploads (
+      object_key TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      size_bytes INTEGER NOT NULL,
+      confirmed INTEGER DEFAULT 0 NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_public_write_key
+    ON projects(public_write_key);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_crash_issues_proj_fp
+    ON crash_issues(project_id, fingerprint);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_error_events_proj_fp
+    ON error_events(project_id, fingerprint);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_pending_uploads_user
+    ON pending_uploads(user_id, confirmed, expires_at);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_rate_limit_expires
+    ON rate_limit_counters(expires_at);
+  `).catch(() => {});
+
   await client.execute(`
     CREATE INDEX IF NOT EXISTS idx_daily_metrics_project_date
     ON daily_metrics(project_id, date);
   `).catch(() => {});
+
+  // Backfill public_write_key cleanly for any existing projects missing one
+  const missingPubKeys = await client
+    .execute(`SELECT id FROM projects WHERE public_write_key IS NULL OR public_write_key = '';`)
+    .catch(() => ({ rows: [] as any[] }));
+  for (const row of missingPubKeys.rows) {
+    const pid = String((row as any).id || "");
+    if (!pid) continue;
+    const pubKey = `dp_pub_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+    await client
+      .execute({
+        sql: `UPDATE projects SET public_write_key = ? WHERE id = ?`,
+        args: [pubKey, pid],
+      })
+      .catch(() => {});
+  }
 
   console.log("DevPulse Database tables verified successfully.");
 }

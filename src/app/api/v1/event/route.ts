@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { deployments, errorEvents, otelTraces, projectReleases, workspaces } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { crashIssues, deployments, errorEvents, otelTraces, projectReleases, projects, workspaces } from "@/db/schema";
+import { eq, and, desc, gt, or, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { evaluateProjectAlertRules } from "@/lib/alerts/smart-engine";
@@ -11,7 +11,8 @@ import {
   computeSemanticGroupKey,
   extractCountryCode,
 } from "@/lib/crashes/impact";
-import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
+import { recordCrashIssueOccurrence } from "@/lib/crashes/issues";
+import { checkAndReserveStorageQuota, confirmPendingUpload } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
 import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { checkRateLimit } from "@/lib/security/rate-limit";
@@ -30,10 +31,116 @@ export async function OPTIONS() {
     status: 204,
     headers: {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, PATCH, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
   });
+}
+
+/**
+ * GET /api/v1/event?project=<id|slug>&status=...&limit=30&since=<iso>
+ * Authenticated crash stream endpoint for `devpulse crashes [--tail] [--json]` CLI and dashboards.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const authHeader = req.headers.get("authorization");
+    const bearerKey = authHeader?.replace(/^Bearer\s+/i, "").trim();
+    const projectParam = req.nextUrl.searchParams.get("project")?.trim();
+    const statusParam = (req.nextUrl.searchParams.get("status") || "all").toLowerCase();
+    const sinceParam = req.nextUrl.searchParams.get("since")?.trim();
+    const limit = Math.min(100, Math.max(1, Number(req.nextUrl.searchParams.get("limit") || 25)));
+
+    let targetProject: { id: string; name: string; slug: string } | null = null;
+
+    if (bearerKey) {
+      const verified = await verifyTelemetryApiKey(bearerKey);
+      if (!verified) {
+        return NextResponse.json({ error: "Invalid or revoked telemetry API key" }, { status: 403 });
+      }
+      if (projectParam && verified.id !== projectParam && verified.slug !== projectParam) {
+        return NextResponse.json(
+          { error: "Forbidden: API key does not match requested project" },
+          { status: 403 }
+        );
+      }
+      targetProject = { id: verified.id, name: verified.name, slug: verified.slug };
+    } else {
+      const user = await getCurrentUser();
+      if (!user) {
+        return NextResponse.json(
+          { error: "Unauthorized: pass Authorization: Bearer <apiKey> or sign in" },
+          { status: 401 }
+        );
+      }
+      if (!projectParam) {
+        return NextResponse.json({ error: "Missing project parameter" }, { status: 400 });
+      }
+      const [found] = await db
+        .select({ id: projects.id, name: projects.name, slug: projects.slug })
+        .from(projects)
+        .where(or(eq(projects.id, projectParam), eq(projects.slug, projectParam)))
+        .limit(1);
+      if (!found) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      }
+      const access = await resolveProjectAccess(found.id, user);
+      if (!access || !access.canRead) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      targetProject = found;
+    }
+
+    const conditions = [eq(errorEvents.projectId, targetProject.id)];
+    if (["unresolved", "resolved", "ignored"].includes(statusParam)) {
+      conditions.push(eq(errorEvents.status, statusParam as "unresolved" | "resolved" | "ignored"));
+    }
+    if (sinceParam) {
+      conditions.push(gt(errorEvents.createdAt, sinceParam));
+    }
+
+    const [events, issues] = await Promise.all([
+      db
+        .select({
+          id: errorEvents.id,
+          errorName: errorEvents.errorName,
+          message: errorEvents.message,
+          runtime: errorEvents.runtime,
+          platform: errorEvents.platform,
+          errorCategory: errorEvents.errorCategory,
+          version: errorEvents.version,
+          environment: errorEvents.environment,
+          status: errorEvents.status,
+          fingerprint: errorEvents.fingerprint,
+          impactScore: errorEvents.impactScore,
+          isRegression: errorEvents.isRegression,
+          createdAt: errorEvents.createdAt,
+        })
+        .from(errorEvents)
+        .where(and(...conditions))
+        .orderBy(desc(errorEvents.createdAt))
+        .limit(limit),
+      db
+        .select()
+        .from(crashIssues)
+        .where(eq(crashIssues.projectId, targetProject.id))
+        .orderBy(desc(crashIssues.lastSeenAt))
+        .limit(25)
+        .catch(() => []),
+    ]);
+
+    return NextResponse.json({
+      project: targetProject,
+      count: events.length,
+      events,
+      issues,
+    });
+  } catch (err: any) {
+    console.error("GET /api/v1/event error:", err);
+    return NextResponse.json(
+      { error: "Failed to fetch crash events", details: err?.message },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -136,6 +243,7 @@ export async function POST(req: NextRequest) {
         );
       }
       attachmentUrl = rawAttachment.trim();
+      await confirmPendingUpload(attachmentUrl, project.userId);
     }
 
     const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? body.breadcrumbs.slice(-50) : null;
@@ -242,6 +350,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const issueSummary = await recordCrashIssueOccurrence({
+      projectId: project.id,
+      errorName,
+      stackTrace: rawStack,
+      explicitRegression: isRegression,
+    });
+
     await db.insert(errorEvents).values({
       id: eventId,
       projectId: project.id,
@@ -261,8 +376,9 @@ export async function POST(req: NextRequest) {
       breadcrumbsJson,
       commitSha,
       traceId,
+      fingerprint: issueSummary.fingerprint,
       aiGroupKey,
-      isRegression,
+      isRegression: issueSummary.isRegression,
       affectedUsersCount,
       countryCode,
       routePath,
@@ -290,7 +406,7 @@ export async function POST(req: NextRequest) {
         .catch(() => {});
     }
 
-    // Fire instant crash alerts to Discord / Slack / Telegram / PagerDuty / OpsGenie / Teams / Generic Webhook
+    // Fire instant crash alerts only when anti-storm fingerprint/cooldown gate allows (prevents crash-loop floods)
     const hasWebhooks = Boolean(
       project.discordWebhookUrl ||
       project.slackWebhookUrl ||
@@ -301,15 +417,20 @@ export async function POST(req: NextRequest) {
       project.teamsWebhookUrl
     );
 
-    if (hasWebhooks) {
+    if (issueSummary.shouldAlert && hasWebhooks) {
       const webhookConfig = await resolveDecryptedWebhookConfig(project);
       await dispatchCrashAlerts(
         webhookConfig,
         {
           eventId,
+          fingerprint: issueSummary.fingerprint,
+          occurrenceCount: issueSummary.occurrenceCount,
           projectName: project.name,
           projectSlug: project.slug,
-          errorName,
+          errorName:
+            issueSummary.occurrenceCount > 1
+              ? `${errorName} (×${issueSummary.occurrenceCount})`
+              : errorName,
           message,
           runtime,
           version,
@@ -323,7 +444,7 @@ export async function POST(req: NextRequest) {
       ).catch((err) => console.error("Webhook alert error:", err));
     }
 
-    if (project.notificationEmail) {
+    if (issueSummary.shouldAlert && project.notificationEmail) {
       const emailKey = await decryptSecret(project.emailApiKeyEncrypted);
       await sendTransactionalEmail({
         to: project.notificationEmail,
@@ -356,6 +477,9 @@ export async function POST(req: NextRequest) {
       {
         success: true,
         eventId,
+        fingerprint: issueSummary.fingerprint,
+        occurrenceCount: issueSummary.occurrenceCount,
+        alertDispatched: issueSummary.shouldAlert,
         project: project.name,
         storage: {
           provider: storageProvider,
