@@ -381,7 +381,7 @@ export default function HomePage() {
               </div>
               <ul className="space-y-2.5 text-xs text-zinc-300">
                 {[
-                  "1 Project workspace",
+                  "5 GitHub Repositories / Workspaces",
                   "1 Free *.devpulse.ritualdev.in subdomain",
                   "100 MB Cloudflare R2 storage (7d lifecycle)",
                   "7-day analytics & telemetry history",
@@ -417,7 +417,7 @@ export default function HomePage() {
               </div>
               <ul className="space-y-2.5 text-xs text-zinc-200">
                 {[
-                  "5 Projects + 1-Click GitHub Import",
+                  "25 Projects + 1-Click GitHub Import",
                   "1 Custom Domain with automatic SSL",
                   "5 GB Cloudflare R2 storage (90d lifecycle)",
                   "90-day analytics & metrics history",

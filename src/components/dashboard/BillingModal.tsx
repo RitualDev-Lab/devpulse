@@ -170,7 +170,7 @@ export function BillingModal({
       period: "/mo",
       badge: "OSS Starter",
       features: [
-        "1 Project workspace",
+        "5 GitHub Repositories / Workspaces",
         "1 Free *.devpulse.ritualdev.in subdomain",
         "100 MB Cloudflare R2 storage",
         "7-day analytics & telemetry history",
@@ -185,7 +185,7 @@ export function BillingModal({
       badge: "Most Popular",
       highlight: true,
       features: [
-        "5 Projects + 1-Click GitHub Import",
+        "25 Projects + 1-Click GitHub Import",
         "1 Custom Domain with auto SSL",
         "5 GB Cloudflare R2 storage (90d lifecycle)",
         "90-day analytics & historical metrics",

@@ -33,7 +33,7 @@ export const PLANS: Record<"free" | "pro" | "team", PlanDefinition> = {
     name: "Free",
     tagline: "Built for solo open-source maintainers",
     priceMonthlyUsd: 0,
-    maxProjects: 1,
+    maxProjects: 5,
     maxSubdomains: 1,
     maxCustomDomains: 0,
     storageLimitBytes: 100 * 1024 * 1024, // 100 MB
@@ -44,7 +44,7 @@ export const PLANS: Record<"free" | "pro" | "team", PlanDefinition> = {
     allowWhiteLabel: false,
     alertChannels: ["generic"],
     features: [
-      "1 Project workspace",
+      "Up to 5 GitHub repositories / project workspaces",
       "1 Free *.devpulse.ritualdev.in subdomain",
       "100 MB Cloudflare R2 storage (7-day retention)",
       "7-day analytics & metrics history",
@@ -57,7 +57,7 @@ export const PLANS: Record<"free" | "pro" | "team", PlanDefinition> = {
     name: "Developer Pro",
     tagline: "For indie hackers & growing OSS tools",
     priceMonthlyUsd: 14,
-    maxProjects: 5,
+    maxProjects: 25,
     maxSubdomains: 1,
     maxCustomDomains: 1,
     storageLimitBytes: 5 * 1024 * 1024 * 1024, // 5 GB
@@ -68,7 +68,7 @@ export const PLANS: Record<"free" | "pro" | "team", PlanDefinition> = {
     allowWhiteLabel: true,
     alertChannels: ["discord", "telegram", "generic"],
     features: [
-      "Up to 5 independent Projects",
+      "Up to 25 independent repositories / projects",
       "1 Custom Domain with automatic SSL",
       "5 GB Cloudflare R2 storage (90-day lifecycle)",
       "90-day analytics & historical sparklines",

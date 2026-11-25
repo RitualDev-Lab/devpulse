@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       if (Number(count) >= entitlements.maxProjects) {
         return NextResponse.json(
           {
-            error: `Project limit reached (${entitlements.maxProjects} on ${entitlements.plan.name}). Upgrade to Developer Pro ($14/mo for 5 projects) or Team ($49/mo for unlimited projects).`,
+            error: `Project limit reached (${entitlements.maxProjects} on ${entitlements.plan.name}). Upgrade to Developer Pro ($14/mo for 25 projects) or Team ($49/mo for unlimited projects).`,
             code: "PROJECT_LIMIT_REACHED",
             limit: entitlements.maxProjects,
             plan: entitlements.plan.id,
