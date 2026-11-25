@@ -222,18 +222,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.redirect(`${origin}/?error=saml-unsolicited`);
     }
 
+    // Atomic single-use: the pending row is deleted and returned in one statement, so two
+    // concurrent callbacks cannot both consume the same RelayState.
     const [sessionRow] = await db
-      .select()
-      .from(samlSessions)
+      .delete(samlSessions)
       .where(eq(samlSessions.id, relayState))
-      .limit(1);
+      .returning();
 
     if (!sessionRow) {
       return NextResponse.redirect(`${origin}/?error=saml-invalid-relay-state`);
     }
-
-    // Consume immediately so relayState cannot be replayed
-    await db.delete(samlSessions).where(eq(samlSessions.id, relayState));
 
     if (Date.parse(sessionRow.expiresAt) < Date.now()) {
       return NextResponse.redirect(`${origin}/?error=saml-session-expired`);
