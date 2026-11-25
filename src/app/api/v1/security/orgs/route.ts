@@ -5,6 +5,8 @@ import { organizations, organizationMembers, projects, users } from "@/db/schema
 import { eq, and, or, desc, inArray } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/security/audit";
 import type { OrgRole } from "@/lib/security/rbac";
+import { decryptSecret } from "@/lib/security/crypto";
+import { buildRbacInviteEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
 
 export const dynamic = "force-dynamic";
 
@@ -271,6 +273,8 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      const inviteEmail = body.email ? String(body.email).trim() : existingUser?.email || null;
+
       await recordAuditEvent({
         userId: user.id,
         actorUsername: user.githubUsername,
@@ -279,10 +283,40 @@ export async function POST(req: NextRequest) {
         resourceType: "organization_member",
         resourceId: handle,
         headers: req.headers,
-        metadata: { githubUsername: handle, role },
+        metadata: { githubUsername: handle, role, email: inviteEmail },
       });
 
-      return NextResponse.json({ success: true });
+      let emailStatus: { sent: boolean; provider?: string; skippedReason?: string } | null = null;
+      if (inviteEmail) {
+        // Resolve org-scoped project email key if present
+        const [orgProj] = await db
+          .select({
+            emailProvider: projects.emailProvider,
+            emailApiKeyEncrypted: projects.emailApiKeyEncrypted,
+          })
+          .from(projects)
+          .where(eq(projects.organizationId, organizationId))
+          .limit(1);
+
+        const decryptedKey = orgProj?.emailApiKeyEncrypted
+          ? await decryptSecret(orgProj.emailApiKeyEncrypted)
+          : null;
+
+        emailStatus = await sendTransactionalEmail({
+          to: inviteEmail,
+          subject: `[@${user.githubUsername}] Invited you to ${org.name} on DevPulse (${role})`,
+          html: buildRbacInviteEmailHtml({
+            orgName: org.name,
+            inviterUsername: user.githubUsername,
+            inviteeUsername: handle,
+            role,
+          }),
+          provider: orgProj?.emailProvider,
+          apiKey: decryptedKey,
+        }).catch(() => ({ sent: false, skippedReason: "Email send failed" }));
+      }
+
+      return NextResponse.json({ success: true, emailNotification: emailStatus });
     }
 
     if (action === "update_role") {

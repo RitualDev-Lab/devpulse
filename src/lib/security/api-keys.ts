@@ -35,6 +35,9 @@ export interface VerifiedProjectRecord {
   telegramChatId: string | null;
   genericWebhookUrl: string | null;
   pagerdutyRoutingKey: string | null;
+  notificationEmail: string | null;
+  emailProvider: string | null;
+  emailApiKeyEncrypted: string | null;
   matchedKeyId: string | null;
 }
 
@@ -73,6 +76,9 @@ export async function verifyTelemetryApiKey(rawKey: string): Promise<VerifiedPro
         telegramChatId: projects.telegramChatId,
         genericWebhookUrl: projects.genericWebhookUrl,
         pagerdutyRoutingKey: projects.pagerdutyRoutingKey,
+        notificationEmail: projects.notificationEmail,
+        emailProvider: projects.emailProvider,
+        emailApiKeyEncrypted: projects.emailApiKeyEncrypted,
       })
       .from(projects)
       .where(eq(projects.id, keyRow.projectId))
@@ -103,6 +109,9 @@ export async function verifyTelemetryApiKey(rawKey: string): Promise<VerifiedPro
       telegramChatId: projects.telegramChatId,
       genericWebhookUrl: projects.genericWebhookUrl,
       pagerdutyRoutingKey: projects.pagerdutyRoutingKey,
+      notificationEmail: projects.notificationEmail,
+      emailProvider: projects.emailProvider,
+      emailApiKeyEncrypted: projects.emailApiKeyEncrypted,
     })
     .from(projects)
     .where(eq(projects.telemetryApiKey, trimmed))

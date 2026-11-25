@@ -93,7 +93,9 @@ export function SecurityModal({
   const [newOrgName, setNewOrgName] = useState("");
   const [inviteOrgId, setInviteOrgId] = useState("");
   const [inviteHandle, setInviteHandle] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"owner" | "maintainer" | "viewer">("maintainer");
+  const [inviteStatusMsg, setInviteStatusMsg] = useState<string | null>(null);
   const [orgBusy, setOrgBusy] = useState(false);
 
   // Audit Log State
@@ -205,12 +207,19 @@ export function SecurityModal({
           action: "invite_member",
           organizationId: inviteOrgId,
           githubUsername: inviteHandle,
+          email: inviteEmail.trim() || undefined,
           role: inviteRole,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to invite member");
       setInviteHandle("");
+      setInviteEmail("");
+      setInviteStatusMsg(
+        data.emailNotification?.sent
+          ? `Member added & email invitation delivered via ${data.emailNotification.provider}!`
+          : "Member added to organization RBAC list."
+      );
       await loadTabData();
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to invite member");
@@ -496,7 +505,7 @@ export function SecurityModal({
               {orgs.length > 0 && (
                 <form
                   onSubmit={handleInviteMember}
-                  className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 grid grid-cols-1 sm:grid-cols-4 gap-2"
+                  className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 grid grid-cols-1 sm:grid-cols-5 gap-2"
                 >
                   <select
                     value={inviteOrgId}
@@ -516,6 +525,13 @@ export function SecurityModal({
                     placeholder="GitHub username"
                     className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500"
                   />
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="Invite email (optional)"
+                    className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500"
+                  />
                   <select
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value as any)}
@@ -533,6 +549,12 @@ export function SecurityModal({
                     Invite Member
                   </button>
                 </form>
+              )}
+
+              {inviteStatusMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-700/60 text-xs text-emerald-200">
+                  {inviteStatusMsg}
+                </div>
               )}
 
               <div className="space-y-3">

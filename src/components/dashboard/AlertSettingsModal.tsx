@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Bell, X, Send, Check, AlertCircle } from "lucide-react";
+import { Bell, X, Send, Check, AlertCircle, Mail } from "lucide-react";
 
 interface AlertSettingsModalProps {
   isOpen: boolean;
@@ -13,6 +13,10 @@ interface AlertSettingsModalProps {
   initialTelegramChatId?: string | null;
   initialGenericWebhook?: string | null;
   initialPagerDuty?: string | null;
+  initialNotificationEmail?: string | null;
+  initialEmailProvider?: string | null;
+  initialHasEmailApiKey?: boolean;
+  initialDigestEnabled?: boolean;
 }
 
 export function AlertSettingsModal({
@@ -25,6 +29,10 @@ export function AlertSettingsModal({
   initialTelegramChatId,
   initialGenericWebhook,
   initialPagerDuty,
+  initialNotificationEmail,
+  initialEmailProvider,
+  initialHasEmailApiKey,
+  initialDigestEnabled,
 }: AlertSettingsModalProps) {
   const [discordUrl, setDiscordUrl] = useState(initialDiscord || "");
   const [slackUrl, setSlackUrl] = useState(initialSlack || "");
@@ -32,6 +40,11 @@ export function AlertSettingsModal({
   const [telegramChatId, setTelegramChatId] = useState(initialTelegramChatId || "");
   const [genericWebhookUrl, setGenericWebhookUrl] = useState(initialGenericWebhook || "");
   const [pagerdutyRoutingKey, setPagerdutyRoutingKey] = useState(initialPagerDuty || "");
+  const [notificationEmail, setNotificationEmail] = useState(initialNotificationEmail || "");
+  const [emailProvider, setEmailProvider] = useState(initialEmailProvider === "postmark" ? "postmark" : "resend");
+  const [emailApiKey, setEmailApiKey] = useState(initialHasEmailApiKey ? "••••••••" : "");
+  const [digestEnabled, setDigestEnabled] = useState(Boolean(initialDigestEnabled));
+  const [sendingDigest, setSendingDigest] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [testingPing, setTestingPing] = useState(false);
@@ -56,6 +69,10 @@ export function AlertSettingsModal({
           telegramChatId,
           genericWebhookUrl,
           pagerdutyRoutingKey,
+          notificationEmail,
+          emailProvider,
+          emailApiKey,
+          digestEnabled,
           testPing: test,
         }),
       });
@@ -203,12 +220,83 @@ export function AlertSettingsModal({
               Triggers PagerDuty incidents automatically alongside Slack on fatal crashes
             </span>
           </div>
+
+          {/* Email Alerts & Weekly Digest (Resend / Postmark) */}
+          <div className="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Email Alerts &amp; Weekly Digest</span>
+              </div>
+              <select
+                value={emailProvider}
+                onChange={(e) => setEmailProvider(e.target.value)}
+                className="px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-200"
+              >
+                <option value="resend">Resend</option>
+                <option value="postmark">Postmark</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="email"
+                value={notificationEmail}
+                onChange={(e) => setNotificationEmail(e.target.value)}
+                placeholder="alerts@yourcompany.com"
+                className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-600 font-mono"
+              />
+              <input
+                type="password"
+                value={emailApiKey}
+                onChange={(e) => setEmailApiKey(e.target.value)}
+                placeholder={`${emailProvider === "postmark" ? "Postmark" : "Resend"} API Key (AES-256 encrypted)`}
+                className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-600 font-mono"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <label className="flex items-center gap-2 text-zinc-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={digestEnabled}
+                  onChange={(e) => setDigestEnabled(e.target.checked)}
+                  className="rounded border-zinc-700 bg-zinc-900 text-indigo-500"
+                />
+                <span>Send Weekly Maintainer Digest (stars, downloads, MRR, uptime)</span>
+              </label>
+              <button
+                type="button"
+                disabled={sendingDigest || !notificationEmail}
+                onClick={async () => {
+                  setSendingDigest(true);
+                  setTestResult(null);
+                  try {
+                    const res = await fetch("/api/v1/notifications/digest", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ projectId, toEmail: notificationEmail }),
+                    });
+                    const d = await res.json();
+                    setTestResult(
+                      d.sent
+                        ? `Weekly digest sent to ${notificationEmail} via ${d.provider}!`
+                        : d.skippedReason || d.error || "Digest skipped — check email API key."
+                    );
+                  } finally {
+                    setSendingDigest(false);
+                  }
+                }}
+                className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-200 text-[11px] font-semibold disabled:opacity-40 shrink-0"
+              >
+                {sendingDigest ? "Sending..." : "Send Digest Now"}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="mt-5 pt-3 border-t border-zinc-800 flex items-center justify-between gap-2">
           <button
             onClick={() => handleSave(true)}
-            disabled={testingPing || (!discordUrl && !slackUrl && !telegramToken && !genericWebhookUrl && !pagerdutyRoutingKey)}
+            disabled={testingPing || (!discordUrl && !slackUrl && !telegramToken && !genericWebhookUrl && !pagerdutyRoutingKey && !notificationEmail)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition disabled:opacity-40"
           >
             <Send className="w-3.5 h-3.5" />

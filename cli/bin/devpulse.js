@@ -8,6 +8,8 @@
 
 const https = require("node:https");
 const http = require("node:http");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const DEFAULT_HOST = process.env.DEVPULSE_HOST || "https://devpulse.ritualdev.in";
 const DEFAULT_SLUG = process.env.DEVPULSE_PROJECT || "ritual-core";
@@ -81,16 +83,94 @@ async function handleCrashes(slug) {
   console.log("Run with \x1b[33mdevpulse status\x1b[0m to check download velocity.\n");
 }
 
+function parseFlags(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("--")) {
+      const k = a.slice(2);
+      const v = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : "true";
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function collectMapFiles(dir, baseDir, acc = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectMapFiles(full, baseDir, acc);
+    } else if (
+      entry.name.endsWith(".map") ||
+      entry.name.endsWith(".dwarf.json") ||
+      entry.name.endsWith(".sym.json")
+    ) {
+      acc.push(path.relative(baseDir, full).replace(/\\/g, "/"));
+    }
+  }
+  return acc;
+}
+
+async function handleUploadSourcemaps(rawArgs) {
+  printHeader();
+  const flags = parseFlags(rawArgs);
+  const apiKey = flags.key || process.env.DEVPULSE_API_KEY;
+  const release = flags.release;
+  const targetDir = path.resolve(flags.dir || "./dist");
+  const endpoint = (flags.endpoint || DEFAULT_HOST).replace(/\/$/, "");
+
+  if (!apiKey || !release) {
+    console.error("❌ Error: --key <apiKey> and --release <version> are required.");
+    process.exit(1);
+  }
+  if (!fs.existsSync(targetDir)) {
+    console.error(`❌ Directory not found: ${targetDir}`);
+    process.exit(1);
+  }
+
+  const mapFiles = collectMapFiles(targetDir, targetDir);
+  console.log(`📦 Found ${mapFiles.length} source map / DWARF symbol file(s) for release ${release}\n`);
+
+  let uploaded = 0;
+  for (const relPath of mapFiles) {
+    const content = fs.readFileSync(path.join(targetDir, relPath), "utf8");
+    const res = await fetch(`${endpoint}/api/v1/releases`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        apiKey,
+        action: "upload_sourcemap",
+        version: release,
+        filePath: relPath,
+        content,
+      }),
+    });
+    if (res.ok) {
+      uploaded++;
+      console.log(`   \x1b[32m✔\x1b[0m Uploaded ${relPath}`);
+    } else {
+      console.error(`   \x1b[31m✖\x1b[0m Failed ${relPath} (${res.status}): ${await res.text()}`);
+    }
+  }
+
+  console.log(`\n✨ Done: ${uploaded}/${mapFiles.length} source maps uploaded to Cloudflare R2.\n`);
+}
+
 function handleHelp() {
   printHeader();
-  console.log("Usage: devpulse <command> [project-slug]\n");
+  console.log("Usage: devpulse <command> [options]\n");
   console.log("Commands:");
-  console.log("  \x1b[36mstatus\x1b[0m    [slug]  Print package downloads, release status & badges");
-  console.log("  \x1b[36mcrashes\x1b[0m   [slug]  View crash telemetry stream endpoint & status");
-  console.log("  \x1b[36mhelp\x1b[0m             Display this help manual\n");
+  console.log("  \x1b[36mstatus\x1b[0m            [slug]  Print package downloads, release status & badges");
+  console.log("  \x1b[36mcrashes\x1b[0m           [slug]  View crash telemetry stream endpoint & status");
+  console.log("  \x1b[36mupload-sourcemaps\x1b[0m [flags] Upload .map & Rust .dwarf.json files to R2");
+  console.log("      --key <apiKey>          Project telemetry API key (or DEVPULSE_API_KEY)");
+  console.log("      --release <version>     Release version tag (e.g. v1.4.2)");
+  console.log("      --dir <distDir>         Build output directory (default: ./dist)");
+  console.log("  \x1b[36mhelp\x1b[0m                      Display this help manual\n");
   console.log("Examples:");
   console.log("  $ npx @ritualdev/pulse status");
-  console.log("  $ npx @ritualdev/pulse status ritual-core\n");
+  console.log("  $ devpulse upload-sourcemaps --key dp_live_xxx --release v1.2.0 --dir .next\n");
 }
 
 const args = process.argv.slice(2);
@@ -104,6 +184,9 @@ switch (command) {
   case "crashes":
   case "errors":
     handleCrashes(targetSlug);
+    break;
+  case "upload-sourcemaps":
+    handleUploadSourcemaps(args.slice(1));
     break;
   case "help":
   case "--help":

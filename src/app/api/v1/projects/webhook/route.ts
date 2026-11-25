@@ -7,6 +7,8 @@ import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
 import { canUseAlertChannel } from "@/lib/billing/plans";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { decryptSecret, encryptSecret } from "@/lib/security/crypto";
+import { sendTransactionalEmail } from "@/lib/alerts/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,6 +26,10 @@ export async function POST(req: NextRequest) {
       telegramChatId,
       genericWebhookUrl,
       pagerdutyRoutingKey,
+      notificationEmail,
+      emailProvider,
+      emailApiKey,
+      digestEnabled,
       testPing,
     } = body;
 
@@ -69,7 +75,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update webhook settings scoped by RBAC
+    // Preserve existing encrypted email API key unless explicitly changed or cleared
+    let nextEmailKeyEncrypted = access.project.emailApiKeyEncrypted || null;
+    if (typeof emailApiKey === "string") {
+      const trimmedKey = emailApiKey.trim();
+      if (!trimmedKey) {
+        nextEmailKeyEncrypted = null;
+      } else if (!trimmedKey.startsWith("••") && !trimmedKey.includes("••••")) {
+        nextEmailKeyEncrypted = await encryptSecret(trimmedKey);
+      }
+    }
+
+    // Update webhook & email settings scoped by RBAC
     await db
       .update(projects)
       .set({
@@ -79,6 +96,10 @@ export async function POST(req: NextRequest) {
         telegramChatId: telegramChatId || null,
         genericWebhookUrl: genericWebhookUrl || null,
         pagerdutyRoutingKey: pagerdutyRoutingKey || null,
+        notificationEmail: notificationEmail ? String(notificationEmail).trim() : null,
+        emailProvider: emailProvider === "postmark" ? "postmark" : "resend",
+        emailApiKeyEncrypted: nextEmailKeyEncrypted,
+        digestEnabled: Boolean(digestEnabled),
       })
       .where(eq(projects.id, projectId));
 
@@ -97,6 +118,8 @@ export async function POST(req: NextRequest) {
         hasTelegram: Boolean(telegramBotToken && telegramChatId),
         hasGeneric: Boolean(genericWebhookUrl),
         hasPagerDuty: Boolean(pagerdutyRoutingKey),
+        hasEmailAlerts: Boolean(notificationEmail),
+        digestEnabled: Boolean(digestEnabled),
       },
     });
 
@@ -124,6 +147,17 @@ export async function POST(req: NextRequest) {
           dashboardUrl: "https://devpulse.ritualdev.in/dashboard",
         }
       );
+
+      if (notificationEmail) {
+        const plainEmailKey = await decryptSecret(nextEmailKeyEncrypted);
+        await sendTransactionalEmail({
+          to: String(notificationEmail).trim(),
+          subject: "[DevPulse] Test Crash & Uptime Email Connected",
+          html: `<p>Your DevPulse email alert channel (<strong>${emailProvider === "postmark" ? "Postmark" : "Resend"}</strong>) is connected and ready for fatal crash alerts, uptime downtime notifications, and weekly maintainer digests.</p>`,
+          provider: emailProvider,
+          apiKey: plainEmailKey,
+        }).catch(() => {});
+      }
     }
 
     return NextResponse.json({ success: true, message: "Webhook settings saved successfully." });

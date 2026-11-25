@@ -10,6 +10,8 @@ import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { decryptSecret } from "@/lib/security/crypto";
+import { buildFatalCrashEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096; // Offload payloads > 4KB (e.g. 100KB+ traces & terminal dumps) to R2
 const MAX_TURSO_PREVIEW_CHARS = 2000;
@@ -222,6 +224,25 @@ export async function POST(req: NextRequest) {
           dashboardUrl: `https://devpulse.ritualdev.in/dashboard?project=${project.slug}`,
         }
       ).catch((err) => console.error("Webhook alert error:", err));
+    }
+
+    if (project.notificationEmail) {
+      const emailKey = await decryptSecret(project.emailApiKeyEncrypted);
+      await sendTransactionalEmail({
+        to: project.notificationEmail,
+        subject: `[DevPulse Fatal Crash] ${errorName} in ${project.name} (${version || runtime})`,
+        html: buildFatalCrashEmailHtml({
+          projectName: project.name,
+          errorName,
+          message,
+          runtime,
+          version,
+          environment,
+          dashboardUrl: `https://devpulse.ritualdev.in/dashboard?project=${project.slug}`,
+        }),
+        provider: project.emailProvider,
+        apiKey: emailKey,
+      }).catch((err) => console.error("Email alert error:", err));
     }
 
     return NextResponse.json(

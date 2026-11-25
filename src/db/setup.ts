@@ -91,6 +91,11 @@ export async function initDb() {
     "ALTER TABLE pageviews ADD COLUMN app_version TEXT;",
     "ALTER TABLE error_events ADD COLUMN breadcrumbs_json TEXT;",
     "ALTER TABLE error_events ADD COLUMN commit_sha TEXT;",
+    "ALTER TABLE projects ADD COLUMN notification_email TEXT;",
+    "ALTER TABLE projects ADD COLUMN email_provider TEXT DEFAULT 'resend';",
+    "ALTER TABLE projects ADD COLUMN email_api_key_encrypted TEXT;",
+    "ALTER TABLE projects ADD COLUMN digest_enabled INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE projects ADD COLUMN last_digest_sent_at TEXT;",
   ];
 
   for (const query of optionalColumns) {
@@ -308,6 +313,43 @@ export async function initDb() {
       r2_object_key TEXT NOT NULL,
       size_bytes INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS uptime_monitors (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      method TEXT DEFAULT 'GET' NOT NULL,
+      expected_status INTEGER DEFAULT 200 NOT NULL,
+      interval_minutes INTEGER DEFAULT 5 NOT NULL,
+      is_active INTEGER DEFAULT 1 NOT NULL,
+      last_status TEXT DEFAULT 'pending' NOT NULL,
+      last_status_code INTEGER,
+      last_latency_ms INTEGER,
+      p95_latency_ms INTEGER DEFAULT 0 NOT NULL,
+      uptime_basis_points INTEGER DEFAULT 10000 NOT NULL,
+      last_error TEXT,
+      last_checked_at TEXT,
+      alert_on_down INTEGER DEFAULT 1 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS uptime_checks (
+      id TEXT PRIMARY KEY,
+      monitor_id TEXT NOT NULL REFERENCES uptime_monitors(id) ON DELETE CASCADE,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      status_code INTEGER,
+      latency_ms INTEGER NOT NULL,
+      edge_region TEXT DEFAULT 'edge' NOT NULL,
+      error_message TEXT,
+      checked_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
 

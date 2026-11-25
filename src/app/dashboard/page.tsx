@@ -1,6 +1,7 @@
 import { db } from "@/db";
-import { projects, errorEvents, users, pageviews, dashboardWidgets, projectReleases } from "@/db/schema";
+import { projects, errorEvents, users, pageviews, dashboardWidgets, projectReleases, uptimeMonitors, uptimeChecks } from "@/db/schema";
 import { eq, desc, and, gte } from "drizzle-orm";
+import { computeP95Latency, computeUptimeBasisPoints } from "@/lib/monitors/checker";
 import { getCurrentUser } from "@/lib/auth";
 import { withEdgeCache } from "@/lib/integrations/cached";
 import { getPlanDefinition } from "@/lib/billing/plans";
@@ -116,6 +117,8 @@ export default async function DashboardPage(props: DashboardPageProps) {
     rawErrors,
     rawWidgets,
     rawReleases,
+    rawMonitors,
+    rawUptimeChecks,
   ] = await Promise.all([
     activeProject.githubRepo
       ? withEdgeCache(`gh:${activeProject.githubRepo}`, 300, 2600, () =>
@@ -188,6 +191,20 @@ export default async function DashboardPage(props: DashboardPageProps) {
       .where(eq(projectReleases.projectId, activeProject.id))
       .orderBy(desc(projectReleases.releasedAt))
       .limit(10)
+      .catch(() => []),
+    db
+      .select()
+      .from(uptimeMonitors)
+      .where(eq(uptimeMonitors.projectId, activeProject.id))
+      .orderBy(desc(uptimeMonitors.createdAt))
+      .limit(15)
+      .catch(() => []),
+    db
+      .select()
+      .from(uptimeChecks)
+      .where(eq(uptimeChecks.projectId, activeProject.id))
+      .orderBy(desc(uptimeChecks.checkedAt))
+      .limit(60)
       .catch(() => []),
   ]);
 
@@ -306,6 +323,10 @@ export default async function DashboardPage(props: DashboardPageProps) {
       telegramChatId: activeProject.telegramChatId,
       genericWebhookUrl: activeProject.genericWebhookUrl,
       pagerdutyRoutingKey: activeProject.pagerdutyRoutingKey,
+      notificationEmail: activeProject.notificationEmail,
+      emailProvider: activeProject.emailProvider,
+      hasEmailApiKey: Boolean(activeProject.emailApiKeyEncrypted),
+      digestEnabled: activeProject.digestEnabled,
       stripeApiKey: activeProject.stripeApiKey ? "••••••••" : null,
       dodoPaymentsApiKey: activeProject.dodoPaymentsApiKey ? "••••••••" : null,
       theme: activeProject.theme,
@@ -321,6 +342,22 @@ export default async function DashboardPage(props: DashboardPageProps) {
     mcpStats,
     revenueStats,
     analyticsSummary,
+    uptimeSummary: {
+      monitors: (rawMonitors || []).map((m) => ({
+        id: m.id,
+        name: m.name,
+        url: m.url,
+        lastStatus: m.lastStatus,
+        lastStatusCode: m.lastStatusCode,
+        lastLatencyMs: m.lastLatencyMs,
+        p95LatencyMs: m.p95LatencyMs,
+        uptimePercent: (m.uptimeBasisPoints / 100).toFixed(2),
+        lastCheckedAt: m.lastCheckedAt,
+      })),
+      recentChecks: (rawUptimeChecks || []).slice(0, 30).reverse(),
+      overallP95Ms: computeP95Latency((rawUptimeChecks || []).map((c) => c.latencyMs)),
+      overallUptimePercent: (computeUptimeBasisPoints((rawUptimeChecks || []).map((c) => c.status)) / 100).toFixed(2),
+    },
     errors,
     releases: (rawReleases || []).map((r) => {
       const sessions = Math.max(r.totalSessions, r.crashCount);

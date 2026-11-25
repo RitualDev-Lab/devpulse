@@ -19,7 +19,11 @@ function collectMapFiles(dir: string, baseDir: string, acc: string[] = []): stri
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) collectMapFiles(full, baseDir, acc);
-    else if (entry.name.endsWith(".map")) {
+    else if (
+      entry.name.endsWith(".map") ||
+      entry.name.endsWith(".dwarf.json") ||
+      entry.name.endsWith(".sym.json")
+    ) {
       acc.push(path.relative(baseDir, full).replace(/\\/g, "/"));
     }
   }

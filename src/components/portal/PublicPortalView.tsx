@@ -141,9 +141,31 @@ export function PublicPortalView({
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">{displayDesc}</p>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Verified Public Registry Metrics</span>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+            {dashboardData?.uptimeSummary && dashboardData.uptimeSummary.monitors.length > 0 && (
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono ${
+                  dashboardData.uptimeSummary.monitors.some((m) => m.lastStatus === "down")
+                    ? "bg-red-500/15 border-red-500/30 text-red-300"
+                    : dashboardData.uptimeSummary.monitors.some((m) => m.lastStatus === "degraded")
+                    ? "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                    : "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>
+                  {dashboardData.uptimeSummary.monitors.some((m) => m.lastStatus === "down")
+                    ? "Partial Outage"
+                    : "Operational"}{" "}
+                  &bull; {dashboardData.uptimeSummary.overallUptimePercent}% &bull; P95{" "}
+                  {dashboardData.uptimeSummary.overallP95Ms}ms
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Verified Public Registry Metrics</span>
+            </div>
           </div>
         </div>
 

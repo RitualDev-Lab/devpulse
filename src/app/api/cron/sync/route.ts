@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncAllProjects } from "@/lib/sync/sync-metrics";
+import { runDueUptimeChecks } from "@/lib/monitors/checker";
+import { db } from "@/db";
+import { projects } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { sendProjectDigest } from "@/lib/alerts/digest";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +32,32 @@ async function handleSync(req: NextRequest) {
 
     const startedAt = new Date().toISOString();
     const results = await syncAllProjects();
+    const uptimeSummary = await runDueUptimeChecks().catch((e) => ({
+      checked: 0,
+      error: e instanceof Error ? e.message : "Uptime check failed",
+    }));
+
+    // Dispatch weekly maintainer digest for projects opted into digestEnabled (>7 days since lastDigestSentAt)
+    let digestsSent = 0;
+    try {
+      const digestProjects = await db
+        .select({ id: projects.id, lastDigestSentAt: projects.lastDigestSentAt })
+        .from(projects)
+        .where(eq(projects.digestEnabled, true))
+        .limit(20);
+
+      const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      for (const p of digestProjects) {
+        const lastSentMs = p.lastDigestSentAt ? new Date(p.lastDigestSentAt).getTime() : 0;
+        if (lastSentMs < sevenDaysAgoMs) {
+          const res = await sendProjectDigest(p.id).catch(() => ({ sent: false }));
+          if (res.sent) digestsSent++;
+        }
+      }
+    } catch {
+      // Non-fatal digest loop guard
+    }
+
     const completedAt = new Date().toISOString();
 
     return NextResponse.json({
@@ -34,6 +65,8 @@ async function handleSync(req: NextRequest) {
       startedAt,
       completedAt,
       projectsSynced: results.length,
+      uptimeSummary,
+      digestsSent,
       details: results,
     });
   } catch (err: any) {

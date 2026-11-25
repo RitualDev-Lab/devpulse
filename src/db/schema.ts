@@ -70,6 +70,13 @@ export const projects = sqliteTable("projects", {
   genericWebhookUrl: text("generic_webhook_url"),
   pagerdutyRoutingKey: text("pagerduty_routing_key"),
 
+  // Email Notifications & Weekly Maintainer Digest (Resend / Postmark)
+  notificationEmail: text("notification_email"),
+  emailProvider: text("email_provider").default("resend"),
+  emailApiKeyEncrypted: text("email_api_key_encrypted"),
+  digestEnabled: integer("digest_enabled", { mode: "boolean" }).default(false).notNull(),
+  lastDigestSentAt: text("last_digest_sent_at"),
+
   // Developer Revenue & Monetization (Stripe, Dodo Payments, Sponsors)
   stripeApiKey: text("stripe_api_key"),
   dodoPaymentsApiKey: text("dodo_payments_api_key"),
@@ -313,5 +320,44 @@ export const sourceMaps = sqliteTable("source_maps", {
   r2ObjectKey: text("r2_object_key").notNull(),
   sizeBytes: integer("size_bytes").default(0).notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Uptime & Latency Heartbeat Monitors Table
+ */
+export const uptimeMonitors = sqliteTable("uptime_monitors", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  method: text("method", { enum: ["GET", "HEAD", "POST"] }).default("GET").notNull(),
+  expectedStatus: integer("expected_status").default(200).notNull(),
+  intervalMinutes: integer("interval_minutes").default(5).notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  lastStatus: text("last_status", { enum: ["up", "degraded", "down", "pending"] }).default("pending").notNull(),
+  lastStatusCode: integer("last_status_code"),
+  lastLatencyMs: integer("last_latency_ms"),
+  p95LatencyMs: integer("p95_latency_ms").default(0).notNull(),
+  uptimeBasisPoints: integer("uptime_basis_points").default(10000).notNull(), // 10000 = 100.00%
+  lastError: text("last_error"),
+  lastCheckedAt: text("last_checked_at"),
+  alertOnDown: integer("alert_on_down", { mode: "boolean" }).default(true).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Individual Uptime Check Samples (used for P95 latency & availability charts)
+ */
+export const uptimeChecks = sqliteTable("uptime_checks", {
+  id: text("id").primaryKey(),
+  monitorId: text("monitor_id").references(() => uptimeMonitors.id, { onDelete: "cascade" }).notNull(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  status: text("status", { enum: ["up", "degraded", "down"] }).notNull(),
+  statusCode: integer("status_code"),
+  latencyMs: integer("latency_ms").notNull(),
+  edgeRegion: text("edge_region").default("edge").notNull(),
+  errorMessage: text("error_message"),
+  checkedAt: text("checked_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

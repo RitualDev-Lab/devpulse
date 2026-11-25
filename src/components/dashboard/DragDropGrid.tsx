@@ -25,6 +25,10 @@ import { ErrorStreamCard, type ErrorEventItem } from "./widgets/ErrorStreamCard"
 import { TelemetrySetupCard } from "./widgets/TelemetrySetupCard";
 import { BugReportBadgeCard } from "./widgets/BugReportBadgeCard";
 import { ReleaseHealthCard, type ReleaseHealthItem } from "./widgets/ReleaseHealthCard";
+import {
+  UptimeMonitorsCard,
+  type UptimeSummaryPayload,
+} from "./widgets/UptimeMonitorsCard";
 import { Plus, Eye, Cloud, Sparkles } from "lucide-react";
 import {
   buildDefaultLayout,
@@ -63,6 +67,10 @@ export interface DashboardData {
     telegramChatId?: string | null;
     genericWebhookUrl?: string | null;
     pagerdutyRoutingKey?: string | null;
+    notificationEmail?: string | null;
+    emailProvider?: string | null;
+    hasEmailApiKey?: boolean;
+    digestEnabled?: boolean;
     stripeApiKey?: string | null;
     dodoPaymentsApiKey?: string | null;
     theme?: string | null;
@@ -78,6 +86,7 @@ export interface DashboardData {
   mcpStats: McpServerStats | null;
   analyticsSummary?: AnalyticsSummary | null;
   revenueStats?: RevenueStats | null;
+  uptimeSummary?: UptimeSummaryPayload | null;
   errors: ErrorEventItem[];
   releases?: ReleaseHealthItem[];
   initialLayout?: GridWidgetItem[];
@@ -138,6 +147,7 @@ export function DragDropGrid({
         ? [{ id: "revenue_stats", title: "Revenue & Monetization", defaultW: 6, defaultH: 1 }]
         : []),
       { id: "web_analytics", title: "Cookie-Free Web Traffic", defaultW: 4, defaultH: 1 },
+      { id: "uptime_monitors", title: "Uptime & P95 Latency", defaultW: 4, defaultH: 1 },
       ...(!isPublicPortal
         ? [
             { id: "error_stream", title: "Runtime Crashes & Bugs", defaultW: 8, defaultH: 1 },
@@ -436,6 +446,15 @@ export function DragDropGrid({
           <WebAnalyticsCard
             summary={data.analyticsSummary || null}
             projectSlug={data.project.slug}
+          />
+        );
+      case "uptime_monitors":
+        return (
+          <UptimeMonitorsCard
+            projectId={data.project.id}
+            initialSummary={data.uptimeSummary || null}
+            isPublicPortal={isPublicPortal}
+            isDemo={isDemo}
           />
         );
       case "error_stream":

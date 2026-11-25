@@ -1,6 +1,7 @@
 import { db } from "@/db";
-import { users, projects, dashboardWidgets, pageviews, userCustomDomains } from "@/db/schema";
+import { users, projects, dashboardWidgets, pageviews, userCustomDomains, uptimeMonitors, uptimeChecks } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { computeP95Latency, computeUptimeBasisPoints } from "@/lib/monitors/checker";
 import { PRIMARY_PORTAL_DOMAIN, isPaidDomainTier } from "@/lib/domains/cloudflare-saas";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
@@ -151,6 +152,8 @@ export async function loadPortalData(
     mcpStats,
     rawPageviews,
     rawWidgets,
+    rawMonitors,
+    rawUptimeChecks,
   ] = await Promise.all([
     activeProject.githubRepo
       ? fetchGitHubRepoStats(activeProject.githubRepo).catch(() => null)
@@ -186,6 +189,20 @@ export async function loadPortalData(
       .select()
       .from(dashboardWidgets)
       .where(eq(dashboardWidgets.projectId, activeProject.id))
+      .catch(() => []),
+    db
+      .select()
+      .from(uptimeMonitors)
+      .where(eq(uptimeMonitors.projectId, activeProject.id))
+      .orderBy(desc(uptimeMonitors.createdAt))
+      .limit(15)
+      .catch(() => []),
+    db
+      .select()
+      .from(uptimeChecks)
+      .where(eq(uptimeChecks.projectId, activeProject.id))
+      .orderBy(desc(uptimeChecks.checkedAt))
+      .limit(50)
       .catch(() => []),
   ]);
 
@@ -254,6 +271,22 @@ export async function loadPortalData(
     mcpStats,
     revenueStats: null,
     analyticsSummary,
+    uptimeSummary: {
+      monitors: rawMonitors.map((m) => ({
+        id: m.id,
+        name: m.name,
+        url: m.url,
+        lastStatus: m.lastStatus,
+        lastStatusCode: m.lastStatusCode,
+        lastLatencyMs: m.lastLatencyMs,
+        p95LatencyMs: m.p95LatencyMs,
+        uptimePercent: (m.uptimeBasisPoints / 100).toFixed(2),
+        lastCheckedAt: m.lastCheckedAt,
+      })),
+      recentChecks: rawUptimeChecks.slice(0, 30).reverse(),
+      overallP95Ms: computeP95Latency(rawUptimeChecks.map((c) => c.latencyMs)),
+      overallUptimePercent: (computeUptimeBasisPoints(rawUptimeChecks.map((c) => c.status)) / 100).toFixed(2),
+    },
     errors: [],
     initialLayout,
   };

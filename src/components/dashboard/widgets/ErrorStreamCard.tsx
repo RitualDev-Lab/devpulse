@@ -17,6 +17,7 @@ import {
   RotateCcw,
   EyeOff,
   Layers,
+  Code2,
 } from "lucide-react";
 import { formatDate, formatTime } from "@/lib/utils/format";
 
@@ -128,6 +129,24 @@ export function ErrorStreamCard({
   const [attachmentSignedUrl, setAttachmentSignedUrl] = useState<string | null>(null);
   const [loadingR2, setLoadingR2] = useState(false);
 
+  const [symbolicating, setSymbolicating] = useState(false);
+  const [symbolicatedResult, setSymbolicatedResult] = useState<{
+    symbolicatedCount: number;
+    totalFrames: number;
+    matchedMaps: string[];
+    message?: string;
+    frames: Array<{
+      raw: string;
+      symbolicated: boolean;
+      kind: string;
+      originalFile?: string;
+      originalLine?: number;
+      originalColumn?: number;
+      functionName?: string;
+      codeContext?: Array<{ lineNumber: number; code: string; isTarget: boolean }>;
+    }>;
+  } | null>(null);
+
   useEffect(() => {
     setErrors(initialErrors);
   }, [initialErrors]);
@@ -140,6 +159,7 @@ export function ErrorStreamCard({
 
   useEffect(() => {
     const activeErr = selectedEvent || selectedGroup?.latest || null;
+    setSymbolicatedResult(null);
     if (!activeErr) {
       setFullPayload(null);
       setDownloadUrl(null);
@@ -638,18 +658,107 @@ export function ErrorStreamCard({
                       </span>
                     )}
                   </span>
-                  {downloadUrl && (
-                    <a
-                      href={downloadUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 text-[11px] text-purple-300 hover:text-purple-200 transition"
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={symbolicating || (!inspectedEvent.stackTrace && !fullPayload)}
+                      onClick={async () => {
+                        setSymbolicating(true);
+                        try {
+                          const res = await fetch("/api/v1/telemetry/symbolicate", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              projectId,
+                              eventId: inspectedEvent.id,
+                              stackTrace: fullPayload || inspectedEvent.stackTrace || "",
+                              version: inspectedEvent.version || undefined,
+                            }),
+                          });
+                          const data = await res.json();
+                          if (res.ok) setSymbolicatedResult(data);
+                        } finally {
+                          setSymbolicating(false);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/35 border border-cyan-500/40 text-[11px] font-semibold text-cyan-200 transition disabled:opacity-40"
                     >
-                      <Download className="w-3 h-3" />
-                      <span>Download Raw R2 Log</span>
-                    </a>
-                  )}
+                      {symbolicating ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Code2 className="w-3 h-3" />
+                      )}
+                      <span>
+                        {symbolicating
+                          ? "Decoding..."
+                          : symbolicatedResult
+                          ? `Symbolicated (${symbolicatedResult.symbolicatedCount})`
+                          : "Symbolicate Trace"}
+                      </span>
+                    </button>
+                    {downloadUrl && (
+                      <a
+                        href={downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 text-[11px] text-purple-300 hover:text-purple-200 transition"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>Download Raw R2 Log</span>
+                      </a>
+                    )}
+                  </div>
                 </div>
+
+                {symbolicatedResult && (
+                  <div className="mb-3 p-3 rounded-xl bg-cyan-950/20 border border-cyan-800/50 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold text-cyan-300">
+                        Source Map / DWARF Symbolication ({symbolicatedResult.symbolicatedCount}/
+                        {symbolicatedResult.totalFrames} frames decoded)
+                      </span>
+                      {symbolicatedResult.matchedMaps.length > 0 && (
+                        <span className="font-mono text-zinc-400">
+                          Maps: {symbolicatedResult.matchedMaps.join(", ")}
+                        </span>
+                      )}
+                    </div>
+                    {symbolicatedResult.message && symbolicatedResult.symbolicatedCount === 0 && (
+                      <p className="text-[11px] text-amber-300 font-mono">{symbolicatedResult.message}</p>
+                    )}
+                    {symbolicatedResult.frames.some((f) => f.symbolicated) && (
+                      <div className="space-y-2 max-h-56 overflow-y-auto">
+                        {symbolicatedResult.frames.map((frame, i) =>
+                          frame.symbolicated ? (
+                            <div key={i} className="rounded-lg bg-zinc-950 border border-cyan-900/50 p-2 font-mono text-[11px]">
+                              <div className="text-cyan-200 font-semibold">
+                                at {frame.functionName || "<anonymous>"} ({frame.originalFile}:{frame.originalLine}:{frame.originalColumn || 1})
+                              </div>
+                              <div className="text-[10px] text-zinc-500 truncate mb-1">
+                                Minified: {frame.raw}
+                              </div>
+                              {frame.codeContext && frame.codeContext.length > 0 && (
+                                <div className="mt-1 rounded bg-zinc-900/90 border border-zinc-800 p-1.5 space-y-0.5 overflow-x-auto">
+                                  {frame.codeContext.map((ctx) => (
+                                    <div
+                                      key={ctx.lineNumber}
+                                      className={`flex gap-2 px-1.5 rounded ${
+                                        ctx.isTarget ? "bg-red-500/20 text-red-200 font-semibold" : "text-zinc-400"
+                                      }`}
+                                    >
+                                      <span className="w-7 text-right select-none text-zinc-500">{ctx.lineNumber}</span>
+                                      <span className="whitespace-pre">{ctx.code}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : null
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {loadingR2 ? (
                   <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center gap-2 text-xs text-zinc-400">

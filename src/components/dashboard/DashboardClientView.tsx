@@ -231,6 +231,10 @@ export function DashboardClientView({
         initialTelegramChatId={data.project.telegramChatId}
         initialGenericWebhook={data.project.genericWebhookUrl}
         initialPagerDuty={data.project.pagerdutyRoutingKey}
+        initialNotificationEmail={data.project.notificationEmail}
+        initialEmailProvider={data.project.emailProvider}
+        initialHasEmailApiKey={data.project.hasEmailApiKey}
+        initialDigestEnabled={data.project.digestEnabled}
       />
 
       {/* Billing, Quotas, Add-Ons & Invoices Modal */}

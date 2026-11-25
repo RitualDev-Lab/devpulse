@@ -14,6 +14,7 @@ import {
   HardDrive,
   Globe,
   FolderGit2,
+  RefreshCw,
 } from "lucide-react";
 
 interface BillingModalProps {
@@ -74,6 +75,8 @@ export function BillingModal({
   const [loading, setLoading] = useState(false);
   const [checkoutItem, setCheckoutItem] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [syncingCustomer, setSyncingCustomer] = useState(false);
+  const [syncBanner, setSyncBanner] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -115,6 +118,29 @@ export function BillingModal({
     } catch (e: any) {
       setErrorMsg(e.message || "Checkout initialization failed");
       setCheckoutItem(null);
+    }
+  };
+
+  const syncCustomersNow = async () => {
+    if (isDemo) return;
+    setSyncingCustomer(true);
+    setErrorMsg(null);
+    setSyncBanner(null);
+    try {
+      const res = await fetch("/api/v1/billing/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Customer sync failed");
+      const r = data.syncReport;
+      setSyncBanner(
+        `Synced Dodo (${r.dodo?.customerId || "none"}) & Stripe (${r.stripe?.customerId || "none"}) — Active tier: ${r.updatedTier.toUpperCase()}`
+      );
+      const profRes = await fetch("/api/v1/billing");
+      const profData = await profRes.json();
+      if (profRes.ok && !profData.error) setProfile(profData);
+    } catch (e: any) {
+      setErrorMsg(e.message || "Customer sync failed");
+    } finally {
+      setSyncingCustomer(false);
     }
   };
 
@@ -209,6 +235,17 @@ export function BillingModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {!isDemo && (
+              <button
+                type="button"
+                onClick={syncCustomersNow}
+                disabled={syncingCustomer}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-emerald-300 font-medium transition disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncingCustomer ? "animate-spin" : ""}`} />
+                <span>{syncingCustomer ? "Syncing..." : "Sync Stripe / Dodo"}</span>
+              </button>
+            )}
             {(profile?.hasDodoCustomer || profile?.hasStripeCustomer) && (
               <button
                 type="button"
@@ -237,6 +274,13 @@ export function BillingModal({
           <div className="p-3 rounded-xl bg-red-950/60 border border-red-800/70 text-xs mb-4 text-red-200 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
             <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {syncBanner && (
+          <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-700/70 text-xs mb-4 text-emerald-200 flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{syncBanner}</span>
           </div>
         )}
 
