@@ -151,6 +151,18 @@ export const errorEvents = sqliteTable("error_events", {
   reporterEmail: text("reporter_email"), // Optional, if user submitted via public bug form
   breadcrumbsJson: text("breadcrumbs_json"), // JSON array of HTTP/console/UI events leading to crash
   commitSha: text("commit_sha"), // Suspected release/commit SHA attribution
+  traceId: text("trace_id"), // Linked OpenTelemetry Trace ID
+  aiGroupKey: text("ai_group_key"),
+  aiGroupTitle: text("ai_group_title"),
+  aiRootCause: text("ai_root_cause"),
+  aiFixSuggestion: text("ai_fix_suggestion"),
+  aiCodeSnippet: text("ai_code_snippet"),
+  isRegression: integer("is_regression", { mode: "boolean" }).default(false).notNull(),
+  affectedUsersCount: integer("affected_users_count").default(1).notNull(),
+  countryCode: text("country_code"),
+  routePath: text("route_path"),
+  estimatedLostRevenueCents: integer("estimated_lost_revenue_cents").default(0).notNull(),
+  impactScore: integer("impact_score").default(0).notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
@@ -531,6 +543,71 @@ export const alertIncidents = sqliteTable("alert_incidents", {
   acknowledgedBy: text("acknowledged_by"),
   acknowledgedAt: text("acknowledged_at"),
   resolvedAt: text("resolved_at"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * OpenTelemetry Distributed Traces (OTLP over HTTP)
+ */
+export const otelTraces = sqliteTable("otel_traces", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  traceId: text("trace_id").notNull(),
+  serviceName: text("service_name").default("unknown-service").notNull(),
+  rootSpanName: text("root_span_name").default("HTTP Request").notNull(),
+  status: text("status", { enum: ["ok", "error", "unset"] }).default("ok").notNull(),
+  spanCount: integer("span_count").default(1).notNull(),
+  durationMs: integer("duration_ms").default(0).notNull(),
+  startedAt: text("started_at").notNull(),
+  httpMethod: text("http_method"),
+  httpRoute: text("http_route"),
+  httpStatusCode: integer("http_status_code"),
+  linkedErrorId: text("linked_error_id"),
+  r2ObjectKey: text("r2_object_key"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+export const otelSpans = sqliteTable("otel_spans", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  traceId: text("trace_id").notNull(),
+  spanId: text("span_id").notNull(),
+  parentSpanId: text("parent_span_id"),
+  serviceName: text("service_name").default("unknown-service").notNull(),
+  spanName: text("span_name").notNull(),
+  kind: text("kind").default("SERVER").notNull(),
+  statusCode: text("status_code").default("OK").notNull(), // 'OK' | 'ERROR' | 'UNSET'
+  statusMessage: text("status_message"),
+  startTimeMs: integer("start_time_ms").notNull(),
+  endTimeMs: integer("end_time_ms").notNull(),
+  durationMs: integer("duration_ms").default(0).notNull(),
+  attributesJson: text("attributes_json"),
+  eventsJson: text("events_json"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Release Deployments & One-Click Rollback Tracking
+ * Connects GitHub Actions, Vercel, Railway, Fly.io webhooks
+ */
+export const deployments = sqliteTable("deployments", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  provider: text("provider").default("github_actions").notNull(), // 'github_actions' | 'vercel' | 'railway' | 'fly' | 'manual'
+  version: text("version").notNull(),
+  commitSha: text("commit_sha"),
+  branch: text("branch"),
+  deployer: text("deployer"),
+  environment: text("environment").default("production").notNull(),
+  status: text("status", { enum: ["success", "failure", "pending", "rolled_back"] }).default("success").notNull(),
+  changelogSummary: text("changelog_summary"),
+  deploymentUrl: text("deployment_url"),
+  rollbackCommitSha: text("rollback_commit_sha"),
+  rollbackUrl: text("rollback_url"),
+  totalSessions: integer("total_sessions").default(100).notNull(),
+  crashCount: integer("crash_count").default(0).notNull(),
+  deployedAt: text("deployed_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  rolledBackAt: text("rolled_back_at"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { errorEvents, projectReleases, workspaces } from "@/db/schema";
+import { deployments, errorEvents, otelTraces, projectReleases, workspaces } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
 import { evaluateProjectAlertRules } from "@/lib/alerts/smart-engine";
+import {
+  computeBusinessImpact,
+  computeSemanticGroupKey,
+  extractCountryCode,
+} from "@/lib/crashes/impact";
 import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
 import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
@@ -126,6 +131,31 @@ export async function POST(req: NextRequest) {
     const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? body.breadcrumbs.slice(-50) : null;
     const breadcrumbsJson = rawBreadcrumbs ? JSON.stringify(rawBreadcrumbs).slice(0, 12000) : null;
     let commitSha: string | null = body.commitSha || body.commit_sha ? String(body.commitSha || body.commit_sha).slice(0, 64) : null;
+    const traceId: string | null = body.traceId || body.trace_id ? String(body.traceId || body.trace_id).slice(0, 64) : null;
+    const routePath: string | null = body.routePath || body.route || body.path ? String(body.routePath || body.route || body.path).slice(0, 200) : null;
+    const affectedUsersCount = Math.max(1, Number(body.affectedUsersCount || body.usersAffected || 1));
+    const countryCode = extractCountryCode(req.headers, body);
+    const aiGroupKey = computeSemanticGroupKey(errorName, message, rawStack);
+    const impact = computeBusinessImpact({
+      routePath,
+      message,
+      affectedUsersCount,
+      environment,
+    });
+
+    // Regression Detection: check if this semantic error group (or errorName) was previously resolved
+    const [priorResolved] = await db
+      .select({ id: errorEvents.id })
+      .from(errorEvents)
+      .where(
+        and(
+          eq(errorEvents.projectId, project.id),
+          eq(errorEvents.status, "resolved"),
+          eq(errorEvents.aiGroupKey, aiGroupKey)
+        )
+      )
+      .limit(1);
+    const isRegression = Boolean(priorResolved);
 
     // Release Health & Commit Attribution correlation
     if (version) {
@@ -212,7 +242,29 @@ export async function POST(req: NextRequest) {
       reporterEmail,
       breadcrumbsJson,
       commitSha,
+      traceId,
+      aiGroupKey,
+      isRegression,
+      affectedUsersCount,
+      countryCode,
+      routePath,
+      estimatedLostRevenueCents: impact.estimatedLostRevenueCents,
+      impactScore: impact.impactScore,
     });
+
+    // Link trace -> crash bi-directionally & increment matching deployment crashCount
+    if (traceId) {
+      db.update(otelTraces)
+        .set({ linkedErrorId: eventId, status: "error" })
+        .where(and(eq(otelTraces.projectId, project.id), eq(otelTraces.traceId, traceId)))
+        .catch(() => {});
+    }
+    if (version) {
+      db.update(deployments)
+        .set({ crashCount: sql`${deployments.crashCount} + 1` })
+        .where(and(eq(deployments.projectId, project.id), eq(deployments.version, version)))
+        .catch(() => {});
+    }
 
     // Fire instant crash alerts to Discord / Slack / Telegram / PagerDuty / OpsGenie / Teams / Generic Webhook
     const hasWebhooks = Boolean(

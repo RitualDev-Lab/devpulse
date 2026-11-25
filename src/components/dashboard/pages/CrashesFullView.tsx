@@ -8,6 +8,8 @@ import { ErrorStreamCard } from "../widgets/ErrorStreamCard";
 import { ReleaseHealthCard } from "../widgets/ReleaseHealthCard";
 import { LanguageSdkTabs } from "../LanguageSdkTabs";
 import { SmartAlertsPanel } from "../widgets/SmartAlertsPanel";
+import { GeoErrorHeatmap } from "../widgets/GeoErrorHeatmap";
+import { DeploymentsPanel } from "../widgets/DeploymentsPanel";
 
 export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
@@ -42,6 +44,12 @@ export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady
 
         <div className="grid grid-cols-1 gap-5">
           <SmartAlertsPanel projectId={project.id} isDemo={isDemo} />
+          <GeoErrorHeatmap errors={initialData.errors} />
+          <DeploymentsPanel
+            projectId={project.id}
+            telemetryApiKey={project.telemetryApiKey}
+            isDemo={isDemo}
+          />
           <ReleaseHealthCard
             releases={initialData.releases || []}
             githubRepo={project.githubRepo}

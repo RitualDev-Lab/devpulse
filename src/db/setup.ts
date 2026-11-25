@@ -106,6 +106,18 @@ export async function initDb() {
     "ALTER TABLE organization_members ADD COLUMN workspace_id TEXT;",
     "ALTER TABLE audit_logs ADD COLUMN workspace_id TEXT;",
     "ALTER TABLE uptime_monitors ADD COLUMN sla_target_bp INTEGER DEFAULT 9990 NOT NULL;",
+    "ALTER TABLE error_events ADD COLUMN trace_id TEXT;",
+    "ALTER TABLE error_events ADD COLUMN ai_group_key TEXT;",
+    "ALTER TABLE error_events ADD COLUMN ai_group_title TEXT;",
+    "ALTER TABLE error_events ADD COLUMN ai_root_cause TEXT;",
+    "ALTER TABLE error_events ADD COLUMN ai_fix_suggestion TEXT;",
+    "ALTER TABLE error_events ADD COLUMN ai_code_snippet TEXT;",
+    "ALTER TABLE error_events ADD COLUMN is_regression INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE error_events ADD COLUMN affected_users_count INTEGER DEFAULT 1 NOT NULL;",
+    "ALTER TABLE error_events ADD COLUMN country_code TEXT;",
+    "ALTER TABLE error_events ADD COLUMN route_path TEXT;",
+    "ALTER TABLE error_events ADD COLUMN estimated_lost_revenue_cents INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE error_events ADD COLUMN impact_score INTEGER DEFAULT 0 NOT NULL;",
   ];
 
   for (const query of optionalColumns) {
@@ -511,6 +523,70 @@ export async function initDb() {
       acknowledged_by TEXT,
       acknowledged_at TEXT,
       resolved_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS otel_traces (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      trace_id TEXT NOT NULL,
+      service_name TEXT DEFAULT 'unknown-service' NOT NULL,
+      root_span_name TEXT DEFAULT 'HTTP Request' NOT NULL,
+      status TEXT DEFAULT 'ok' NOT NULL,
+      span_count INTEGER DEFAULT 1 NOT NULL,
+      duration_ms INTEGER DEFAULT 0 NOT NULL,
+      started_at TEXT NOT NULL,
+      http_method TEXT,
+      http_route TEXT,
+      http_status_code INTEGER,
+      linked_error_id TEXT,
+      r2_object_key TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS otel_spans (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      trace_id TEXT NOT NULL,
+      span_id TEXT NOT NULL,
+      parent_span_id TEXT,
+      service_name TEXT DEFAULT 'unknown-service' NOT NULL,
+      span_name TEXT NOT NULL,
+      kind TEXT DEFAULT 'SERVER' NOT NULL,
+      status_code TEXT DEFAULT 'OK' NOT NULL,
+      status_message TEXT,
+      start_time_ms INTEGER NOT NULL,
+      end_time_ms INTEGER NOT NULL,
+      duration_ms INTEGER DEFAULT 0 NOT NULL,
+      attributes_json TEXT,
+      events_json TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS deployments (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      provider TEXT DEFAULT 'github_actions' NOT NULL,
+      version TEXT NOT NULL,
+      commit_sha TEXT,
+      branch TEXT,
+      deployer TEXT,
+      environment TEXT DEFAULT 'production' NOT NULL,
+      status TEXT DEFAULT 'success' NOT NULL,
+      changelog_summary TEXT,
+      deployment_url TEXT,
+      rollback_commit_sha TEXT,
+      rollback_url TEXT,
+      total_sessions INTEGER DEFAULT 100 NOT NULL,
+      crash_count INTEGER DEFAULT 0 NOT NULL,
+      deployed_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      rolled_back_at TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);

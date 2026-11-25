@@ -18,7 +18,11 @@ import {
   EyeOff,
   Layers,
   Code2,
+  Sparkles,
+  TrendingDown,
+  Workflow,
 } from "lucide-react";
+import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/utils/format";
 
 export interface ErrorEventItem {
@@ -38,16 +42,33 @@ export interface ErrorEventItem {
   reporterEmail?: string | null;
   breadcrumbsJson?: string | null;
   commitSha?: string | null;
+  traceId?: string | null;
+  aiGroupKey?: string | null;
+  aiGroupTitle?: string | null;
+  aiRootCause?: string | null;
+  aiFixSuggestion?: string | null;
+  aiCodeSnippet?: string | null;
+  isRegression?: boolean;
+  affectedUsersCount?: number;
+  countryCode?: string | null;
+  routePath?: string | null;
+  estimatedLostRevenueCents?: number;
+  impactScore?: number;
   createdAt: string;
 }
 
 interface IssueGroup {
   fingerprint: string;
   errorName: string;
+  aiGroupTitle?: string | null;
   latestMessage: string;
   runtime: string;
   status: "unresolved" | "resolved" | "ignored";
   count: number;
+  totalAffectedUsers: number;
+  totalLostRevenueCents: number;
+  maxImpactScore: number;
+  hasRegression: boolean;
   firstSeen: string;
   lastSeen: string;
   versions: string[];
@@ -73,7 +94,7 @@ function groupErrorsIntoIssues(items: ErrorEventItem[]): IssueGroup[] {
   const map = new Map<string, ErrorEventItem[]>();
   for (const err of items) {
     const cleanName = err.errorName.split(":")[0].trim() || "RuntimeError";
-    const fp = `${cleanName}::${err.runtime}`;
+    const fp = err.aiGroupKey ? `ai::${err.aiGroupKey}` : `${cleanName}::${err.runtime}`;
     const list = map.get(fp) || [];
     list.push(err);
     map.set(fp, list);
@@ -91,13 +112,30 @@ function groupErrorsIntoIssues(items: ErrorEventItem[]): IssueGroup[] {
       ? "unresolved"
       : sorted[0].status;
 
+    const totalAffectedUsers = sorted.reduce(
+      (sum, e) => sum + Math.max(1, Number(e.affectedUsersCount || 1)),
+      0
+    );
+    const totalLostRevenueCents = sorted.reduce(
+      (sum, e) => sum + Math.max(0, Number(e.estimatedLostRevenueCents || 0)),
+      0
+    );
+    const maxImpactScore = Math.max(...sorted.map((e) => Number(e.impactScore || 0)), 0);
+    const hasRegression = sorted.some((e) => Boolean(e.isRegression));
+    const aiTitle = sorted.find((e) => e.aiGroupTitle)?.aiGroupTitle || null;
+
     groups.push({
       fingerprint,
       errorName: latest.errorName.split(":")[0].trim() || latest.errorName,
+      aiGroupTitle: aiTitle,
       latestMessage: latest.message,
       runtime: latest.runtime,
       status,
       count: sorted.length,
+      totalAffectedUsers,
+      totalLostRevenueCents,
+      maxImpactScore,
+      hasRegression,
       firstSeen: earliest.createdAt,
       lastSeen: latest.createdAt,
       versions: Array.from(new Set(sorted.map((e) => e.version).filter(Boolean) as string[])),
@@ -119,6 +157,8 @@ export function ErrorStreamCard({
 }: ErrorStreamCardProps) {
   const [errors, setErrors] = useState<ErrorEventItem[]>(initialErrors);
   const [statusFilter, setStatusFilter] = useState<"all" | "unresolved" | "resolved" | "ignored">("all");
+  const [sortMode, setSortMode] = useState<"impact" | "recent" | "frequency" | "regressions">("impact");
+  const [analyzingAi, setAnalyzingAi] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<IssueGroup | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ErrorEventItem | null>(null);
   const [simulating, setSimulating] = useState(false);
@@ -153,9 +193,58 @@ export function ErrorStreamCard({
 
   const issueGroups = useMemo(() => groupErrorsIntoIssues(errors), [errors]);
   const filteredGroups = useMemo(() => {
-    if (statusFilter === "all") return issueGroups;
-    return issueGroups.filter((g) => g.status === statusFilter);
-  }, [issueGroups, statusFilter]);
+    const base =
+      statusFilter === "all"
+        ? issueGroups
+        : issueGroups.filter((g) => g.status === statusFilter);
+    return [...base].sort((a, b) => {
+      if (sortMode === "impact") {
+        if (b.totalLostRevenueCents !== a.totalLostRevenueCents) {
+          return b.totalLostRevenueCents - a.totalLostRevenueCents;
+        }
+        return b.maxImpactScore - a.maxImpactScore;
+      }
+      if (sortMode === "frequency") return b.count - a.count;
+      if (sortMode === "regressions") {
+        if (a.hasRegression !== b.hasRegression) return a.hasRegression ? -1 : 1;
+      }
+      return new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime();
+    });
+  }, [issueGroups, statusFilter, sortMode]);
+
+  const runGeminiAnalyze = async (errorId?: string) => {
+    setAnalyzingAi(true);
+    try {
+      const res = await fetch("/api/v1/crashes/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, errorId }),
+      });
+      const d = await res.json();
+      if (res.ok && Array.isArray(d.results)) {
+        const resultMap = new Map<string, { analysis: any; isRegression: boolean }>(
+          d.results.map((r: any) => [r.errorId, r])
+        );
+        setErrors((prev) =>
+          prev.map((ev) => {
+            const matched = resultMap.get(ev.id);
+            if (!matched) return ev;
+            return {
+              ...ev,
+              ...matched.analysis,
+              isRegression: matched.isRegression,
+            };
+          })
+        );
+        if (selectedEvent && resultMap.has(selectedEvent.id)) {
+          const m = resultMap.get(selectedEvent.id)!;
+          setSelectedEvent({ ...selectedEvent, ...m.analysis, isRegression: m.isRegression });
+        }
+      }
+    } finally {
+      setAnalyzingAi(false);
+    }
+  };
 
   useEffect(() => {
     const activeErr = selectedEvent || selectedGroup?.latest || null;
@@ -356,23 +445,47 @@ export function ErrorStreamCard({
           </div>
         </div>
 
-        {/* Status Filter Bar */}
+        {/* Status & Business Impact Priority Filter Bar */}
         {errors.length > 0 && (
-          <div className="flex items-center gap-1 mb-3 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 w-fit text-[11px]">
-            {(["all", "unresolved", "resolved", "ignored"] as const).map((tab) => (
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 w-fit text-[11px]">
+              {(["all", "unresolved", "resolved", "ignored"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setStatusFilter(tab)}
+                  className={`px-2.5 py-1 rounded-lg capitalize font-medium transition ${
+                    statusFilter === tab
+                      ? "bg-indigo-600 text-white"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5">
               <button
-                key={tab}
                 type="button"
-                onClick={() => setStatusFilter(tab)}
-                className={`px-2.5 py-1 rounded-lg capitalize font-medium transition ${
-                  statusFilter === tab
-                    ? "bg-indigo-600 text-white"
-                    : "text-zinc-400 hover:text-white"
-                }`}
+                disabled={analyzingAi}
+                onClick={() => runGeminiAnalyze()}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/40 text-purple-200 text-[11px] font-semibold transition disabled:opacity-50"
               >
-                {tab}
+                {analyzingAi ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                <span>AI Group &amp; RCA</span>
               </button>
-            ))}
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as any)}
+                className="px-2.5 py-1 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-200"
+              >
+                <option value="impact">Priority: Business Impact ($)</option>
+                <option value="regressions">Priority: Regressions First</option>
+                <option value="frequency">Sort: Crash Count</option>
+                <option value="recent">Sort: Most Recent</option>
+              </select>
+            </div>
           </div>
         )}
 
@@ -426,6 +539,26 @@ export function ErrorStreamCard({
                     <span className="text-[10px] text-zinc-400 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">
                       {group.runtime}
                     </span>
+                    {group.hasRegression && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40 uppercase">
+                        Regression
+                      </span>
+                    )}
+                    {group.totalLostRevenueCents > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                        <TrendingDown className="w-2.5 h-2.5 text-red-400" />
+                        <span>
+                          {group.totalAffectedUsers.toLocaleString()} users &bull; est. $
+                          {Math.round(group.totalLostRevenueCents / 100).toLocaleString()} MRR
+                        </span>
+                      </span>
+                    )}
+                    {group.latest.traceId && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">
+                        <Workflow className="w-2.5 h-2.5" />
+                        <span>Trace</span>
+                      </span>
+                    )}
                     {group.latest.r2ObjectKey && (
                       <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono">
                         <HardDrive className="w-2.5 h-2.5" />
@@ -437,7 +570,7 @@ export function ErrorStreamCard({
                     )}
                   </div>
                   <p className="text-xs text-zinc-200 font-medium truncate">
-                    {group.latestMessage}
+                    {group.aiGroupTitle || group.latestMessage}
                   </p>
                   <div className="flex items-center gap-3 text-[10px] text-zinc-500 mt-1">
                     {group.oses[0] && <span>OS: {group.oses.join(", ")}</span>}
@@ -640,10 +773,69 @@ export function ErrorStreamCard({
               }
             })()}
 
-            <div className="mb-3">
+            <div className="mb-3 space-y-2">
               <p className="text-xs sm:text-sm text-red-300 font-mono bg-red-950/30 p-3 rounded-xl border border-red-900/40">
                 {inspectedEvent.message}
               </p>
+
+              {/* Business Impact + Linked Trace Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  {inspectedEvent.isRegression && (
+                    <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 text-[10px] font-bold uppercase">
+                      Regression (Re-appeared after Resolve)
+                    </span>
+                  )}
+                  <span className="font-mono text-emerald-300">
+                    Impact: {(inspectedEvent.affectedUsersCount || 1).toLocaleString()} user(s)
+                    {inspectedEvent.estimatedLostRevenueCents
+                      ? ` • est. $${Math.round(inspectedEvent.estimatedLostRevenueCents / 100).toLocaleString()} lost MRR`
+                      : ""}
+                    {inspectedEvent.routePath ? ` on ${inspectedEvent.routePath}` : ""}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {inspectedEvent.traceId && (
+                    <Link
+                      href={`/dashboard/traces?traceId=${encodeURIComponent(inspectedEvent.traceId)}`}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/35 border border-cyan-500/40 text-cyan-200 text-[11px] font-semibold"
+                    >
+                      <Workflow className="w-3 h-3" />
+                      <span>View OTEL Trace &rarr;</span>
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    disabled={analyzingAi}
+                    onClick={() => runGeminiAnalyze(inspectedEvent.id)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/40 text-purple-200 text-[11px] font-semibold"
+                  >
+                    {analyzingAi ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    <span>Analyze with Gemini</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* AI Root Cause & Suggested Fix */}
+              {inspectedEvent.aiRootCause && (
+                <div className="p-3.5 rounded-xl bg-purple-950/25 border border-purple-700/40 space-y-2 text-xs">
+                  <div className="font-bold text-purple-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Why Did This Crash? (AI Root Cause &amp; Fix)</span>
+                  </div>
+                  <p className="text-zinc-200 leading-relaxed">{inspectedEvent.aiRootCause}</p>
+                  {inspectedEvent.aiFixSuggestion && (
+                    <p className="text-emerald-300 text-[11px]">
+                      <strong>Suggested Fix:</strong> {inspectedEvent.aiFixSuggestion}
+                    </p>
+                  )}
+                  {inspectedEvent.aiCodeSnippet && (
+                    <pre className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-cyan-200 overflow-x-auto">
+                      {inspectedEvent.aiCodeSnippet}
+                    </pre>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3">
