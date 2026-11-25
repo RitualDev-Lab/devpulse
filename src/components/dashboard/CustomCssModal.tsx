@@ -55,6 +55,12 @@ export function CustomCssModal({
 
   const handleSelectTheme = (themeId: string) => {
     setSelectedTheme(themeId);
+    try {
+      document.cookie = `dp_theme=${encodeURIComponent(themeId)}; path=/; max-age=31536000; SameSite=Lax`;
+      document.documentElement.setAttribute("data-theme", themeId);
+    } catch {
+      // ignore
+    }
     onApplyTheme(themeId); // Live preview immediately
   };
 

@@ -264,6 +264,42 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === "suspect_commits") {
+      const headSha = String(body.commitSha || errRow.commitSha || "").trim();
+      const baseSha = String(body.baseCommitSha || "").trim();
+      if (!headSha) {
+        return NextResponse.json({ suspectCommits: [] });
+      }
+      const compareEndpoint = baseSha
+        ? `https://api.github.com/repos/${repoSlug}/compare/${encodeURIComponent(baseSha)}...${encodeURIComponent(headSha)}`
+        : `https://api.github.com/repos/${repoSlug}/commits/${encodeURIComponent(headSha)}`;
+      const ghRes = await fetch(compareEndpoint, { headers: ghHeaders });
+      if (!ghRes.ok) {
+        return NextResponse.json({ suspectCommits: [] });
+      }
+      const data = await ghRes.json();
+      const commits = Array.isArray(data?.commits)
+        ? data.commits.slice(-10).map((c: any) => ({
+            sha: String(c.sha || "").slice(0, 7),
+            message: String(c.commit?.message || "").split("\n")[0],
+            author: c.commit?.author?.name || c.author?.login || "unknown",
+            date: c.commit?.author?.date || "",
+            htmlUrl: c.html_url || "",
+          }))
+        : data?.sha
+        ? [
+            {
+              sha: String(data.sha).slice(0, 7),
+              message: String(data.commit?.message || "").split("\n")[0],
+              author: data.commit?.author?.name || data.author?.login || "unknown",
+              date: data.commit?.author?.date || "",
+              htmlUrl: data.html_url || "",
+            },
+          ]
+        : [];
+      return NextResponse.json({ success: true, suspectCommits: commits });
+    }
+
     return NextResponse.json({ error: "Unsupported GitHub crash action" }, { status: 400 });
   } catch (err) {
     console.error("POST /api/v1/crashes/github error:", err);

@@ -1,0 +1,11 @@
+{
+  "name": "@ritualdev-lab/devpulse-mcp",
+  "version": "1.0.0",
+  "description": "Official Model Context Protocol (MCP) server for DevPulse — inspect crashes, traces, analytics, and uptime monitors from Claude Code, Cursor, or Antigravity.",
+  "type": "module",
+  "bin": {
+    "devpulse-mcp": "./index.mjs"
+  },
+  "main": "./index.mjs",
+  "license": "MIT"
+}

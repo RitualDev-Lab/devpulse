@@ -833,6 +833,26 @@ export async function initDb() {
     ON feature_votes(feature_id, voter_hash);
   `).catch(() => {});
 
+  await client.execute(`ALTER TABLE audit_logs ADD COLUMN seq INTEGER DEFAULT 0 NOT NULL;`).catch(() => {});
+  await client.execute(`ALTER TABLE audit_logs ADD COLUMN prev_hash TEXT;`).catch(() => {});
+  await client.execute(`ALTER TABLE audit_logs ADD COLUMN entry_hash TEXT;`).catch(() => {});
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS metrics_hourly (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      hour_bucket TEXT NOT NULL,
+      source_type TEXT DEFAULT 'web' NOT NULL,
+      hits INTEGER DEFAULT 0 NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_metrics_hourly_proj_bucket
+    ON metrics_hourly(project_id, hour_bucket);
+  `).catch(() => {});
+
   // Backfill public_write_key cleanly for any existing projects missing one
   const missingPubKeys = await client
     .execute(`SELECT id FROM projects WHERE public_write_key IS NULL OR public_write_key = '';`)

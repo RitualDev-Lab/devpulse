@@ -13,6 +13,7 @@ import {
 } from "@/lib/crashes/impact";
 import { recordCrashIssueOccurrence } from "@/lib/crashes/issues";
 import { maybeAutoEscalateGitHubIssue } from "@/lib/crashes/github-auto";
+import { scrubBreadcrumbs, scrubTelemetryText } from "@/lib/security/ingest-scrub";
 import { checkAndReserveStorageQuota, confirmPendingUpload } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
 import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
@@ -225,10 +226,20 @@ export async function POST(req: NextRequest) {
     }
 
     const eventId = `err_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const errorName = String(body.errorName || body.error_name || body.name || "RuntimeError").slice(0, 255);
-    const message = String(body.message || "An unexpected error occurred").slice(0, 2000);
-    const rawStack = body.stackTrace || body.stack_trace || body.stack ? String(body.stackTrace || body.stack_trace || body.stack) : "";
-    const rawLogs = body.terminalLogs || body.terminal_logs || body.logs ? String(body.terminalLogs || body.terminal_logs || body.logs) : "";
+    const errorName = scrubTelemetryText(
+      String(body.errorName || body.error_name || body.name || "RuntimeError").slice(0, 255)
+    );
+    const message = scrubTelemetryText(
+      String(body.message || "An unexpected error occurred").slice(0, 2000)
+    );
+    const rawStack =
+      body.stackTrace || body.stack_trace || body.stack
+        ? scrubTelemetryText(String(body.stackTrace || body.stack_trace || body.stack))
+        : "";
+    const rawLogs =
+      body.terminalLogs || body.terminal_logs || body.logs
+        ? scrubTelemetryText(String(body.terminalLogs || body.terminal_logs || body.logs))
+        : "";
     const runtime = String(body.runtime || "node").slice(0, 50);
     const version = (body.version || body.release) ? String(body.version || body.release).slice(0, 50) : null;
     const os = body.os ? String(body.os).slice(0, 100) : null;
@@ -247,7 +258,7 @@ export async function POST(req: NextRequest) {
       await confirmPendingUpload(attachmentUrl, project.userId);
     }
 
-    const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? body.breadcrumbs.slice(-50) : null;
+    const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? scrubBreadcrumbs(body.breadcrumbs.slice(-50)) : null;
     const breadcrumbsJson = rawBreadcrumbs ? JSON.stringify(rawBreadcrumbs).slice(0, 12000) : null;
     let commitSha: string | null = body.commitSha || body.commit_sha ? String(body.commitSha || body.commit_sha).slice(0, 64) : null;
     const traceId: string | null = body.traceId || body.trace_id ? String(body.traceId || body.trace_id).slice(0, 64) : null;

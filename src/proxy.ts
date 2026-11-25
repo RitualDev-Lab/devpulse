@@ -5,7 +5,6 @@ const MAIN_APP_HOSTS = new Set([
   PRIMARY_PORTAL_DOMAIN,
   `www.${PRIMARY_PORTAL_DOMAIN}`,
   `cname.${PRIMARY_PORTAL_DOMAIN}`,
-  "devpulse.rolenest.in",
   "devpulse.internal",
   "localhost",
   "127.0.0.1",
@@ -17,11 +16,28 @@ function stripPort(hostHeader: string): string {
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  const rawHost = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
+  const host = stripPort(rawHost);
+
+  // Consolidate legacy devpulse.rolenest.in domain onto canonical devpulse.ritualdev.in
+  if (host === "devpulse.rolenest.in") {
+    const targetUrl = new URL(`https://${PRIMARY_PORTAL_DOMAIN}${pathname}${search}`);
+    const status = pathname.startsWith("/api/") ? 308 : 301;
+    return NextResponse.redirect(targetUrl, status);
+  }
+
+  // Ad-blocker resilient first-party script alias (/pulse/s.js -> /tracker.js)
+  if (pathname === "/pulse/s.js") {
+    const scriptUrl = request.nextUrl.clone();
+    scriptUrl.pathname = "/tracker.js";
+    return NextResponse.rewrite(scriptUrl);
+  }
 
   // Skip internal Next assets, APIs, auth callback, report pages, and direct portal routes
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
+    pathname.startsWith("/pulse") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/portal") ||
     pathname.startsWith("/report") ||
@@ -31,9 +47,6 @@ export function proxy(request: NextRequest) {
   ) {
     return NextResponse.next();
   }
-
-  const rawHost = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
-  const host = stripPort(rawHost);
 
   if (!host || MAIN_APP_HOSTS.has(host) || host.endsWith(".pages.dev")) {
     // Handle Supabase OAuth code landing on Site URL root (/?code=...) by forwarding to /auth/callback

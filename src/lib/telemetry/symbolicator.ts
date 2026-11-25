@@ -7,6 +7,8 @@
 export interface SourceMapV3 {
   version: number;
   file?: string;
+  debugId?: string;
+  debug_id?: string;
   sourceRoot?: string;
   sources: string[];
   sourcesContent?: Array<string | null>;
@@ -234,10 +236,21 @@ function normalizePath(p: string): string {
     .replace(/\\/g, "/");
 }
 
-function findMatchingMap<T extends { filePath: string }>(
+function findMatchingMap<T extends { filePath: string; parsed?: SourceMapV3 }>(
   generatedFile: string,
-  entries: T[]
+  entries: T[],
+  stackDebugIds?: Set<string>
 ): T | null {
+  // 0. TC39 ECMA-426 Debug ID exact match (beats filename/CDN hash variations)
+  if (stackDebugIds && stackDebugIds.size > 0) {
+    for (const entry of entries) {
+      const mapDebugId = (entry.parsed?.debugId || entry.parsed?.debug_id || "").toLowerCase();
+      if (mapDebugId && stackDebugIds.has(mapDebugId)) {
+        return entry;
+      }
+    }
+  }
+
   const normGen = normalizePath(generatedFile);
   const genBase = normGen.split("/").pop() || normGen;
   const expectedMapName = normGen.endsWith(".map") ? normGen : `${normGen}.map`;
@@ -364,6 +377,10 @@ export function symbolicateStackTrace(
   }
 
   const lines = (stackTrace || "").split(/\r?\n/);
+  const stackDebugIds = new Set<string>();
+  for (const m of (stackTrace || "").matchAll(/debugId[=:]\s*([0-9a-f-]{8,36})/gi)) {
+    stackDebugIds.add(m[1].toLowerCase());
+  }
   const frames: SymbolicatedFrame[] = [];
   const matchedSet = new Set<string>();
   let symbolicatedCount = 0;
@@ -409,7 +426,7 @@ export function symbolicateStackTrace(
     }
 
     if (genFile && genLine && genCol) {
-      const candidate = findMatchingMap(genFile, jsMaps);
+      const candidate = findMatchingMap(genFile, jsMaps, stackDebugIds);
       if (candidate) {
         const decoded = decodeSourceMapPosition(candidate.parsed, genLine, genCol);
         if (decoded) {

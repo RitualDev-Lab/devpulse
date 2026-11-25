@@ -1,8 +1,62 @@
 @import "tailwindcss";
 
-:root {
+/* WCAG 2.1 AA/AAA Semantic Theme Tokens */
+:root,
+[data-theme="dark"],
+[data-theme="devpulse-dark"] {
   --background: #09090b;
   --foreground: #f4f4f5;
+  --bg: #09090b;
+  --surface: #18181b;
+  --fg: #fafafa;
+  --fg-muted: #a1a1aa;
+  --accent: #4f46e5;
+  --accent-text: #818cf8;
+  --accent-fg: #ffffff;
+  --border-subtle: #27272a;
+  --border-interactive: #71717a;
+}
+
+[data-theme="cyber-neon"] {
+  --background: #050510;
+  --foreground: #00f0ff;
+  --bg: #050510;
+  --surface: #0d0d1f;
+  --fg: #00f0ff;
+  --fg-muted: #9494b8;
+  --accent: #00f0ff;
+  --accent-text: #00f0ff;
+  --accent-fg: #050510;
+  --border-subtle: #1f1f3d;
+  --border-interactive: #67e8f9;
+}
+
+[data-theme="tokyo-night"] {
+  --background: #1a1b26;
+  --foreground: #c0caf5;
+  --bg: #1a1b26;
+  --surface: #24283b;
+  --fg: #c0caf5;
+  --fg-muted: #9aa5ce;
+  --accent: #7aa2f7;
+  --accent-text: #7aa2f7;
+  --accent-fg: #1a1b26;
+  --border-subtle: #3b4261;
+  --border-interactive: #7aa2f7;
+}
+
+[data-theme="emerald-matrix"] {
+  --background: #020a06;
+  --foreground: #00ff66;
+  --bg: #020a06;
+  --surface: #06150e;
+  --fg: #00ff66;
+  --fg-muted: #59b878;
+  --accent: #10b981;
+  --accent-text: #34d399;
+  --accent-fg: #020a06;
+  --border-subtle: #064e3b;
+  --border-interactive: #34d399;
 }
 
 @theme inline {
@@ -16,6 +70,10 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes devpulseFadeSlideUp {

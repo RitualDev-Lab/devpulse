@@ -21,6 +21,44 @@ export interface NpmStats {
   daysSinceLastRelease?: number;
   dependenciesCount: number;
   description?: string;
+  downloadsLastYearChunked?: number;
+}
+
+/**
+ * Queries npm download ranges in <=500-day chunks to bypass api.npmjs.org's silent 549-day truncation.
+ */
+export async function fetchNpmChunkedTotal(
+  encodedPkg: string,
+  days = 365,
+  headers: Record<string, string> = { Accept: "application/json" }
+): Promise<number> {
+  const CHUNK_DAYS = 500;
+  let total = 0;
+  let remaining = Math.max(1, Math.min(1825, days));
+  let endMs = Date.now() - 86400_000;
+
+  while (remaining > 0) {
+    const span = Math.min(remaining, CHUNK_DAYS);
+    const startMs = endMs - (span - 1) * 86400_000;
+    const startStr = new Date(startMs).toISOString().slice(0, 10);
+    const endStr = new Date(endMs).toISOString().slice(0, 10);
+    const res = await fetch(
+      `https://api.npmjs.org/downloads/range/${startStr}:${endStr}/${encodedPkg}`,
+      { headers, next: { revalidate: 21600 } }
+    ).catch(() => null);
+    if (res && res.ok) {
+      const json = (await res.json()) as { downloads?: Array<{ downloads?: number }> };
+      if (Array.isArray(json.downloads)) {
+        total += json.downloads.reduce((acc, d) => acc + Number(d.downloads || 0), 0);
+      }
+    }
+    remaining -= span;
+    endMs = startMs - 86400_000;
+    if (remaining > 0) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+  return total;
 }
 
 export async function fetchNpmStats(

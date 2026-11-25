@@ -83,9 +83,9 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 text-center space-y-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold text-emerald-400">DevPulse HQ 1.0</span>
+            <span className="font-semibold text-emerald-400">Zero-Leak Sovereign Telemetry</span>
             <span className="text-zinc-500">&bull;</span>
-            <span>Unified Command Center for Software Creators</span>
+            <span>Cookie-Free Analytics, Edge PII Scrubbing &amp; Self-Hostable HQ</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-[1.1]">

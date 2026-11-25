@@ -204,7 +204,10 @@ export async function loadDashboardWorkspace(
 ): Promise<LoadedWorkspaceResult> {
   const scope: DashboardLoadScope = options?.scope || "full";
   const requestedProject = searchParams?.project;
-  const isDemoRequested = searchParams?.demo === "1";
+  const PUBLIC_SHOWCASE_SLUGS = new Set(["devpulse", "devshelf"]);
+  const isDemoRequested =
+    searchParams?.demo === "1" ||
+    Boolean(requestedProject && PUBLIC_SHOWCASE_SLUGS.has(requestedProject.toLowerCase()));
 
   const user = await getCurrentUser();
 
@@ -241,12 +244,23 @@ export async function loadDashboardWorkspace(
   } else if (isDemoRequested) {
     isDemoView = true;
     try {
-      const demoRows = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, "prj_ritual_core"))
-        .limit(1);
-      activeProject = demoRows[0] || null;
+      const targetSlug = requestedProject?.toLowerCase();
+      if (targetSlug && PUBLIC_SHOWCASE_SLUGS.has(targetSlug)) {
+        const matched = await db
+          .select()
+          .from(projects)
+          .where(and(eq(projects.slug, targetSlug), eq(projects.isPublic, true)))
+          .limit(1);
+        activeProject = matched[0] || null;
+      }
+      if (!activeProject) {
+        const demoRows = await db
+          .select()
+          .from(projects)
+          .where(eq(projects.id, "prj_ritual_core"))
+          .limit(1);
+        activeProject = demoRows[0] || null;
+      }
     } catch {
       activeProject = null;
     }

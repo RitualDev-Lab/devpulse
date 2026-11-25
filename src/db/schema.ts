@@ -327,6 +327,9 @@ export const auditLogs = sqliteTable("audit_logs", {
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   metadataJson: text("metadata_json"),
+  seq: integer("seq").default(0).notNull(),
+  prevHash: text("prev_hash"),
+  entryHash: text("entry_hash"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
@@ -777,5 +780,17 @@ export const featureVotes = sqliteTable("feature_votes", {
   featureId: text("feature_id").references(() => featureRequests.id, { onDelete: "cascade" }).notNull(),
   voterHash: text("voter_hash").notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Hourly Pre-Aggregated Analytics Rollups (avoids full raw pageviews table scans)
+ */
+export const metricsHourly = sqliteTable("metrics_hourly", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  hourBucket: text("hour_bucket").notNull(), // YYYY-MM-DDTHH
+  sourceType: text("source_type").default("web").notNull(),
+  hits: integer("hits").default(0).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

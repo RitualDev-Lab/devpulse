@@ -3,7 +3,7 @@
 import React, { useState, useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, EyeOff, Scaling } from "lucide-react";
+import { GripVertical, EyeOff, Scaling, ArrowLeft, ArrowRight } from "lucide-react";
 import {
   SIZE_PRESETS,
   detectPresetKey,
@@ -20,6 +20,7 @@ interface GridCardProps {
   isCustomizing: boolean;
   onHide?: (id: string) => void;
   onResize?: (id: string, nextW: number, nextH: number, commit?: boolean) => void;
+  onMoveStep?: (id: string, direction: -1 | 1) => void;
   gridContainerRef?: React.RefObject<HTMLDivElement | null>;
   children: React.ReactNode;
 }
@@ -52,6 +53,7 @@ export function SortableCard({
   isCustomizing,
   onHide,
   onResize,
+  onMoveStep,
   gridContainerRef,
   children,
 }: GridCardProps) {
@@ -61,7 +63,7 @@ export function SortableCard({
     setNodeRef,
     transform,
     isDragging,
-  } = useDraggable({ id, disabled: !isCustomizing });
+  } = useDraggable({ id, disabled: !isCustomizing || activeCols <= 4 });
 
   const [isResizing, setIsResizing] = useState(false);
   const startStateRef = useRef<{
@@ -181,11 +183,35 @@ export function SortableCard({
             </div>
           )}
 
-          {/* Drag Handle */}
+          {/* Single-pointer accessible reorder controls (WCAG 2.2 SC 2.5.7 / F108) */}
+          {onMoveStep && (
+            <div className="flex items-center gap-0.5 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+              <button
+                type="button"
+                onClick={() => onMoveStep(id, -1)}
+                aria-label="Move card earlier"
+                title="Move card earlier"
+                className="p-1 rounded text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onMoveStep(id, 1)}
+                aria-label="Move card later"
+                title="Move card later"
+                className="p-1 rounded text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Drag Handle (hidden below md breakpoint so touch scrolling isn't hijacked) */}
           <div
             {...attributes}
             {...listeners}
-            className="cursor-grab active:cursor-grabbing text-zinc-300 hover:text-white p-1 rounded hover:bg-zinc-800 transition touch-none"
+            className="hidden md:flex cursor-grab active:cursor-grabbing text-zinc-300 hover:text-white p-1 rounded hover:bg-zinc-800 transition touch-none"
             title="Drag card anywhere on 2D grid"
           >
             <GripVertical className="w-4 h-4" />

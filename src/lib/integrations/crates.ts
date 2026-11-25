@@ -31,25 +31,24 @@ export async function fetchRustCrateStats(crateName: string): Promise<RustCrateS
       Accept: "application/json",
     };
 
-    // Parallel fetch: Crate info, reverse dependencies, and download trends
-    const [crateRes, revRes, dlRes] = await Promise.all([
-      fetch(`https://crates.io/api/v1/crates/${cleanName}`, {
-        headers,
-        next: { revalidate: 3600 },
-      }).catch(() => null),
-      fetch(`https://crates.io/api/v1/crates/${cleanName}/reverse_dependencies`, {
-        headers,
-        next: { revalidate: 7200 },
-      }).catch(() => null),
-      fetch(`https://crates.io/api/v1/crates/${cleanName}/downloads`, {
-        headers,
-        next: { revalidate: 3600 },
-      }).catch(() => null),
-    ]);
-
+    // Respect crates.io <=1 req/sec crawler policy via sequential/cached requests
+    const crateRes = await fetch(`https://crates.io/api/v1/crates/${cleanName}`, {
+      headers,
+      next: { revalidate: 3600 },
+    }).catch(() => null);
     if (!crateRes || !crateRes.ok) {
       return null;
     }
+
+    const revRes = await fetch(`https://crates.io/api/v1/crates/${cleanName}/reverse_dependencies`, {
+      headers,
+      next: { revalidate: 7200 },
+    }).catch(() => null);
+
+    const dlRes = await fetch(`https://crates.io/api/v1/crates/${cleanName}/downloads`, {
+      headers,
+      next: { revalidate: 3600 },
+    }).catch(() => null);
 
     const crateJson = await crateRes.json();
     const c = crateJson.crate;

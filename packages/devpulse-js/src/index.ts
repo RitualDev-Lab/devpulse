@@ -307,11 +307,15 @@ export class DevPulseClient {
 
   private async postJson(url: string, payload: Record<string, unknown>): Promise<boolean> {
     try {
+      const body = JSON.stringify(payload).slice(0, 49_152); // Hard 48 KiB cap
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body,
         keepalive: true,
+        ...(typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+          ? { signal: AbortSignal.timeout(1500) }
+          : {}),
       });
       return res.ok;
     } catch {
@@ -422,8 +426,13 @@ export class DevPulseClient {
         void this.captureException(evt.reason, { errorName: "UnhandledRejection" });
       });
     } else if (typeof process !== "undefined" && typeof process.on === "function") {
+      let fatalInFlight = false;
       process.on("uncaughtException", (err) => {
-        void this.captureException(err, { errorName: "UncaughtException" });
+        if (fatalInFlight) return;
+        fatalInFlight = true;
+        void this.captureException(err, { errorName: "UncaughtException" }).finally(() => {
+          fatalInFlight = false;
+        });
       });
       process.on("unhandledRejection", (reason) => {
         void this.captureException(reason, { errorName: "UnhandledRejection" });

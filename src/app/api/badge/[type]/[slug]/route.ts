@@ -85,7 +85,9 @@ export async function GET(_req: NextRequest, { params }: BadgeRouteParams) {
         status: 404,
         headers: {
           "Content-Type": "image/svg+xml; charset=utf-8",
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; script-src 'none'; object-src 'none'; style-src 'unsafe-inline'; sandbox",
+          "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=600",
         },
       });
     }
@@ -163,7 +165,9 @@ export async function GET(_req: NextRequest, { params }: BadgeRouteParams) {
       status: 200,
       headers: {
         "Content-Type": "image/svg+xml; charset=utf-8",
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; script-src 'none'; object-src 'none'; style-src 'unsafe-inline'; sandbox",
+        "Cache-Control": "public, max-age=300, s-maxage=300, stale-while-revalidate=86400",
       },
     });
   } catch (outerErr: any) {
@@ -173,7 +177,9 @@ export async function GET(_req: NextRequest, { params }: BadgeRouteParams) {
       status: 200,
       headers: {
         "Content-Type": "image/svg+xml; charset=utf-8",
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; script-src 'none'; object-src 'none'; style-src 'unsafe-inline'; sandbox",
+        "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=600",
       },
     });
   }

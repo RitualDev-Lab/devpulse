@@ -237,10 +237,39 @@ async function handleUploadSourcemaps(rawArgs) {
   console.log(`\n✨ Done: ${uploaded}/${mapFiles.length} source maps uploaded to Cloudflare R2.\n`);
 }
 
+function handleDoctor(rawArgs) {
+  printHeader();
+  const flags = parseFlags(rawArgs);
+  const endpoint = (flags.endpoint || DEFAULT_HOST).replace(/\/$/, "");
+  const apiKey = flags.key || process.env.DEVPULSE_API_KEY || "";
+  console.log("🩺 Running DevPulse Environment Doctor...\n");
+  console.log(`   • Target Endpoint : ${endpoint}`);
+  console.log(`   • Telemetry Key   : ${apiKey ? apiKey.slice(0, 12) + "..." : "❌ Missing (set DEVPULSE_API_KEY)"}`);
+  console.log(`   • Node Runtime    : ${process.version}`);
+  fetchJson(`${endpoint}/api/v1/feedback?projectSlug=devpulse`)
+    .then((res) => {
+      console.log(`   • Edge API Ping   : ${res ? "✅ Reachable (HTTP 200)" : "⚠️ Unreachable"}`);
+      console.log("");
+    })
+    .catch(() => console.log("   • Edge API Ping   : ❌ Network error\n"));
+}
+
+function handleInit() {
+  printHeader();
+  console.log("🚀 Quickstart Configuration (Zero-Leak Sovereign Telemetry):\n");
+  console.log("  npm install @ritualdev/devpulse");
+  console.log("  # or Python: pip install devpulse-sdk");
+  console.log("  # or Rust:   cargo add devpulse-rs\n");
+  console.log("  # Upload TC39/Source Maps during CI:");
+  console.log("  npx @ritualdev/pulse upload-sourcemaps --key $DEVPULSE_API_KEY --release $GIT_SHA --dir ./dist\n");
+}
+
 function handleHelp() {
   printHeader();
   console.log("Usage: devpulse <command> [options]\n");
   console.log("Commands:");
+  console.log("  \x1b[36minit\x1b[0m                      Print SDK setup & CI quickstart");
+  console.log("  \x1b[36mdoctor\x1b[0m            [flags] Verify CLI keys, runtime & edge reachability");
   console.log("  \x1b[36mstatus\x1b[0m            [slug]  Print package downloads, release status & badges");
   console.log("  \x1b[36mcrashes\x1b[0m           [slug]  Stream live crashes (--key, --project, --tail, --json)");
   console.log("  \x1b[36mupload-sourcemaps\x1b[0m [flags] Upload .map & Rust .dwarf.json files to R2");
@@ -249,7 +278,7 @@ function handleHelp() {
   console.log("      --dir <distDir>         Build output directory (default: ./dist)");
   console.log("  \x1b[36mhelp\x1b[0m                      Display this help manual\n");
   console.log("Examples:");
-  console.log("  $ npx @ritualdev/pulse status");
+  console.log("  $ npx @ritualdev/pulse doctor --key dp_live_xxx");
   console.log("  $ devpulse upload-sourcemaps --key dp_live_xxx --release v1.2.0 --dir .next\n");
 }
 
@@ -258,6 +287,12 @@ const command = args[0] || "status";
 const targetSlug = args[1] || DEFAULT_SLUG;
 
 switch (command) {
+  case "init":
+    handleInit();
+    break;
+  case "doctor":
+    handleDoctor(args.slice(1));
+    break;
   case "status":
     handleStatus(targetSlug);
     break;

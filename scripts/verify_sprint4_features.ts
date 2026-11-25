@@ -4,12 +4,44 @@ import { featureRequests, featureVotes, statusSubscribers } from "../src/db/sche
 import { eq } from "drizzle-orm";
 import { getEffectiveEntitlements } from "../src/lib/billing/plans";
 import { fetchGa4Report } from "../src/lib/integrations/ga4";
+import { scrubTelemetryText } from "../src/lib/security/ingest-scrub";
+import { verifyAuditChain } from "../src/lib/security/audit";
+import { symbolicateStackTrace } from "../src/lib/telemetry/symbolicator";
 
 async function main() {
   const freeEntitlements = getEffectiveEntitlements({ storageTier: "free" });
   const proEntitlements = getEffectiveEntitlements({ storageTier: "pro" });
   assert.equal(freeEntitlements.maxProjects, 5);
   assert.equal(proEntitlements.maxProjects, 25);
+
+  const scrubbed = scrubTelemetryText(
+    "Bearer my_secret_token_99 AKIA1234567890ABCDEF dev@ritualdev.in ?token=abc123"
+  );
+  assert.ok(!scrubbed.includes("my_secret_token_99"));
+  assert.ok(!scrubbed.includes("AKIA1234567890ABCDEF"));
+  assert.ok(!scrubbed.includes("dev@ritualdev.in"));
+  assert.ok(!scrubbed.includes("abc123"));
+
+  const validEmpty = await verifyAuditChain([]);
+  assert.equal(validEmpty.valid, true);
+
+  const debugSym = symbolicateStackTrace(
+    "Error: boom\n  at fn (https://cdn.example.com/chunk-999.js:1:1)\n//# debugId=11111111-2222-3333-4444-555555555555",
+    [
+      {
+        filePath: "arbitrary/name.map",
+        content: JSON.stringify({
+          version: 3,
+          debugId: "11111111-2222-3333-4444-555555555555",
+          sources: ["src/checkout.ts"],
+          names: ["submitOrder"],
+          mappings: "AAAA",
+        }),
+      },
+    ]
+  );
+  assert.equal(debugSym.symbolicatedCount, 1);
+  assert.equal(debugSym.frames[1].originalFile, "src/checkout.ts");
 
   await assert.rejects(
     () => fetchGa4Report({ propertyId: "invalid-id", credential: "tok" }),

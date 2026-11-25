@@ -349,6 +349,28 @@ export function DragDropGrid({
     persistLayout(nextLayout);
   };
 
+  const [a11yAnnouncement, setA11yAnnouncement] = useState<string>("");
+
+  const handleMoveStep = (id: string, direction: -1 | 1) => {
+    const ordered = [...desktopLayout].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const idx = ordered.findIndex((item) => item.id === id);
+    if (idx === -1) return;
+    const swapIdx = idx + direction;
+    if (swapIdx < 0 || swapIdx >= ordered.length) return;
+
+    const current = ordered[idx];
+    const target = ordered[swapIdx];
+    const swapped = ordered.map((item) => {
+      if (item.id === current.id) return { ...item, x: target.x, y: target.y };
+      if (item.id === target.id) return { ...item, x: current.x, y: current.y };
+      return item;
+    });
+    const packed = compactLayout(swapped, 12);
+    setDesktopLayout(packed);
+    persistLayout(packed);
+    setA11yAnnouncement(`Moved ${current.title} ${direction < 0 ? "earlier" : "later"} in workspace grid.`);
+  };
+
   const handleResizeCard = (id: string, nextW: number, nextH: number, commit = true) => {
     // Map back to 12-col desktop width if currently on tablet
     const canonicalW = activeCols === 8 ? (nextW >= 8 ? 12 : 4) : nextW;
@@ -595,6 +617,7 @@ export function DragDropGrid({
               isCustomizing={isCustomizing}
               onHide={hideWidget}
               onResize={handleResizeCard}
+              onMoveStep={handleMoveStep}
               gridContainerRef={gridContainerRef}
             >
               {renderWidgetContent(widget.id)}
@@ -602,6 +625,9 @@ export function DragDropGrid({
           ))}
         </div>
       </DndContext>
+      <div className="sr-only" aria-live="polite">
+        {a11yAnnouncement}
+      </div>
     </div>
   );
 }

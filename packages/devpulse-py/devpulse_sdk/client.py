@@ -1,8 +1,10 @@
+import atexit
 import json
 import logging
 import os
 from pathlib import Path
 import platform
+import queue
 import re
 import sys
 import threading
@@ -81,6 +83,13 @@ class DevPulseClient:
         )
         self._lock = threading.Lock()
         self._queue = self._load_queue()
+        self._async_q: queue.Queue = queue.Queue(maxsize=100)
+        self._stop_event = threading.Event()
+        self._sender_thread = threading.Thread(
+            target=self._drain_async_queue, daemon=True, name="devpulse-sender"
+        )
+        self._sender_thread.start()
+        atexit.register(self.shutdown, 1.5)
 
         if attach_logging:
             logging.getLogger().addHandler(DevPulseLoggingHandler(self.breadcrumbs))
@@ -97,7 +106,8 @@ class DevPulseClient:
         orig_hook = sys.excepthook
 
         def _hook(exc_type, exc_val, exc_tb):
-            self.capture_exception((exc_type, exc_val, exc_tb))
+            if not issubclass(exc_type, (KeyboardInterrupt, SystemExit)):
+                self.capture_exception((exc_type, exc_val, exc_tb))
             return orig_hook(exc_type, exc_val, exc_tb)
 
         sys.excepthook = _hook
@@ -106,10 +116,29 @@ class DevPulseClient:
             orig_thread_hook = threading.excepthook
 
             def _thread_hook(args):
-                self.capture_exception((args.exc_type, args.exc_value, args.exc_traceback))
+                if args.exc_type and not issubclass(args.exc_type, (KeyboardInterrupt, SystemExit)):
+                    try:
+                        self._async_q.put_nowait((args.exc_type, args.exc_value, args.exc_traceback))
+                    except queue.Full:
+                        pass
                 return orig_thread_hook(args)
 
             threading.excepthook = _thread_hook
+
+    def _drain_async_queue(self) -> None:
+        while not self._stop_event.is_set() or not self._async_q.empty():
+            try:
+                exc_info = self._async_q.get(timeout=0.2)
+                self.capture_exception(exc_info)
+            except queue.Empty:
+                continue
+            except Exception:
+                continue
+
+    def shutdown(self, timeout: float = 1.5) -> None:
+        self._stop_event.set()
+        if self._sender_thread.is_alive():
+            self._sender_thread.join(timeout=timeout)
 
     def add_breadcrumb(
         self,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { projects, pageviews, dailyMetrics } from "@/db/schema";
+import { projects, pageviews, dailyMetrics, metricsHourly } from "@/db/schema";
 import { eq, or, sql } from "drizzle-orm";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 
@@ -68,7 +68,8 @@ export async function POST(req: NextRequest) {
 
     let body: any = {};
     try {
-      body = await req.json();
+      const rawText = await req.text();
+      body = rawText ? JSON.parse(rawText) : {};
     } catch {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
@@ -138,21 +139,43 @@ export async function POST(req: NextRequest) {
       ? `metric:${rawMetricName.trim().slice(0, 56)}`
       : eventName;
     const finalPath = hasCustomMetric ? String(rawMetricValue) : path;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const nowIso = new Date().toISOString();
+    const todayStr = nowIso.slice(0, 10);
+    const hourBucket = nowIso.slice(0, 13); // YYYY-MM-DDTHH
+    const hourlyId = `mh_${project.id}_${hourBucket}_${sourceType}`;
 
-    await db.insert(pageviews).values({
-      id: hitId,
-      projectId: project.id,
-      path: finalPath,
-      referrer,
-      country,
-      device,
-      browser,
-      sourceType,
-      eventName: finalEventName,
-      os,
-      appVersion,
-    });
+    await db.batch([
+      db.insert(pageviews).values({
+        id: hitId,
+        projectId: project.id,
+        path: finalPath,
+        referrer,
+        country,
+        device,
+        browser,
+        sourceType,
+        eventName: finalEventName,
+        os,
+        appVersion,
+      }),
+      db
+        .insert(metricsHourly)
+        .values({
+          id: hourlyId,
+          projectId: project.id,
+          hourBucket,
+          sourceType,
+          hits: 1,
+          updatedAt: nowIso,
+        })
+        .onConflictDoUpdate({
+          target: metricsHourly.id,
+          set: {
+            hits: sql`${metricsHourly.hits} + 1`,
+            updatedAt: nowIso,
+          },
+        }),
+    ]);
 
     if (hasCustomMetric) {
       const metricId = `dm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
