@@ -6,6 +6,8 @@ import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchRustCrateStats } from "@/lib/integrations/crates";
 import { fetchGoModuleStats } from "@/lib/integrations/go";
 import { fetchDockerRepoStats } from "@/lib/integrations/docker";
+import { decryptSecret } from "@/lib/security/crypto";
+import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 
 export interface SyncResult {
   projectId: string;
@@ -203,10 +205,12 @@ export async function syncAllProjects(): Promise<SyncResult[]> {
       }
     }
 
-    // 5. Sync GitHub Repo Metrics (Stars, Forks, Issues, PR Velocity)
+    // 5. Sync GitHub Repo Metrics (Stars, Forks, Issues, PR Velocity + Daily Clones & Views)
     if (proj.githubRepo) {
       try {
-        const ghStats = await fetchGitHubRepoStats(proj.githubRepo);
+        const projGhToken = await decryptSecret(proj.githubTokenEncrypted).catch(() => null);
+        const userGhToken = projGhToken || (await getUserGitHubAccessToken(proj.userId).catch(() => null));
+        const ghStats = await fetchGitHubRepoStats(proj.githubRepo, userGhToken || undefined);
         if (ghStats) {
           const starMetricId = `met_gh_stars_${proj.id}_${todayStr}`;
           await db
@@ -247,6 +251,46 @@ export async function syncAllProjects(): Promise<SyncResult[]> {
                 }),
               },
             });
+
+          // Persist daily GitHub clones & views into dailyMetrics so 14-day traffic never expires
+          for (const cDay of ghStats.trafficClones?.daily || []) {
+            const cloneId = `met_gh_clones_${proj.id}_${cDay.date}`;
+            await db
+              .insert(dailyMetrics)
+              .values({
+                id: cloneId,
+                projectId: proj.id,
+                source: "github",
+                metricType: "clones",
+                date: cDay.date,
+                value: cDay.count,
+                metadataJson: JSON.stringify({ uniques: cDay.uniques }),
+              })
+              .onConflictDoUpdate({
+                target: dailyMetrics.id,
+                set: { value: cDay.count, metadataJson: JSON.stringify({ uniques: cDay.uniques }) },
+              });
+          }
+
+          for (const vDay of ghStats.trafficViews?.daily || []) {
+            const viewId = `met_gh_views_${proj.id}_${vDay.date}`;
+            await db
+              .insert(dailyMetrics)
+              .values({
+                id: viewId,
+                projectId: proj.id,
+                source: "github",
+                metricType: "views",
+                date: vDay.date,
+                value: vDay.count,
+                metadataJson: JSON.stringify({ uniques: vDay.uniques }),
+              })
+              .onConflictDoUpdate({
+                target: dailyMetrics.id,
+                set: { value: vDay.count, metadataJson: JSON.stringify({ uniques: vDay.uniques }) },
+              });
+          }
+
           syncedSources.push("github");
         }
       } catch (err: any) {

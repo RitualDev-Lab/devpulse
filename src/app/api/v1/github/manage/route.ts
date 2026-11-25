@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db";
+import { dailyMetrics } from "@/db/schema";
+import { and, asc, eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { decryptSecret } from "@/lib/security/crypto";
@@ -16,7 +19,11 @@ async function resolveGitHubTokenForProject(userId: string, encryptedProjectToke
 export async function GET(req: NextRequest) {
   try {
     const projectId = req.nextUrl.searchParams.get("projectId");
+    const mode = req.nextUrl.searchParams.get("mode");
+    const issueNumber = req.nextUrl.searchParams.get("number");
     const state = req.nextUrl.searchParams.get("state") === "closed" ? "closed" : "open";
+    const filterQ = (req.nextUrl.searchParams.get("q") || "").trim().toLowerCase();
+
     if (!projectId) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
@@ -45,15 +52,55 @@ export async function GET(req: NextRequest) {
       headers.Authorization = `Bearer ${token}`;
     }
 
-    const [issuesRes, prsRes, clonesRes, viewsRes] = await Promise.all([
-      fetch(`https://api.github.com/repos/${repoSlug}/issues?state=${state}&per_page=30`, { headers }),
-      fetch(`https://api.github.com/repos/${repoSlug}/pulls?state=${state}&per_page=30`, { headers }),
+    // Inspect Issue / PR Thread Mode
+    if (mode === "thread" && issueNumber) {
+      const [issueRes, commentsRes] = await Promise.all([
+        fetch(`https://api.github.com/repos/${repoSlug}/issues/${Number(issueNumber)}`, { headers }),
+        fetch(`https://api.github.com/repos/${repoSlug}/issues/${Number(issueNumber)}/comments?per_page=30`, { headers }),
+      ]);
+      const issueData = issueRes.ok ? await issueRes.json() : null;
+      const commentsData = commentsRes.ok ? await commentsRes.json() : [];
+      if (!issueData) {
+        return NextResponse.json({ error: "Issue or PR not found" }, { status: 404 });
+      }
+      return NextResponse.json({
+        number: issueData.number,
+        title: issueData.title,
+        body: issueData.body || "",
+        state: issueData.state,
+        author: issueData.user?.login || "unknown",
+        htmlUrl: issueData.html_url,
+        labels: Array.isArray(issueData.labels)
+          ? issueData.labels.map((l: any) => ({ name: l.name, color: l.color }))
+          : [],
+        comments: Array.isArray(commentsData)
+          ? commentsData.map((c: any) => ({
+              id: c.id,
+              author: c.user?.login || "unknown",
+              body: c.body || "",
+              createdAt: c.created_at,
+              htmlUrl: c.html_url,
+            }))
+          : [],
+      });
+    }
+
+    const [issuesRes, prsRes, clonesRes, viewsRes, storedMetrics] = await Promise.all([
+      fetch(`https://api.github.com/repos/${repoSlug}/issues?state=${state}&per_page=40`, { headers }),
+      fetch(`https://api.github.com/repos/${repoSlug}/pulls?state=${state}&per_page=40`, { headers }),
       token
         ? fetch(`https://api.github.com/repos/${repoSlug}/traffic/clones`, { headers }).catch(() => null)
         : Promise.resolve(null),
       token
         ? fetch(`https://api.github.com/repos/${repoSlug}/traffic/views`, { headers }).catch(() => null)
         : Promise.resolve(null),
+      db
+        .select()
+        .from(dailyMetrics)
+        .where(and(eq(dailyMetrics.projectId, projectId), eq(dailyMetrics.source, "github")))
+        .orderBy(asc(dailyMetrics.date))
+        .limit(180)
+        .catch(() => []),
     ]);
 
     const rawIssues = issuesRes.ok ? await issuesRes.json() : [];
@@ -61,13 +108,90 @@ export async function GET(req: NextRequest) {
     const clonesJson = clonesRes && clonesRes.ok ? await clonesRes.json() : null;
     const viewsJson = viewsRes && viewsRes.ok ? await viewsRes.json() : null;
 
+    // Persist live 14d traffic snapshots to daily_metrics so GitHub traffic history never expires
+    const clonesMap = new Map<string, { date: string; count: number; uniques: number }>();
+    const viewsMap = new Map<string, { date: string; count: number; uniques: number }>();
+    const starsMap = new Map<string, { date: string; stars: number }>();
+
+    for (const row of storedMetrics) {
+      let meta: any = {};
+      try {
+        meta = row.metadataJson ? JSON.parse(row.metadataJson) : {};
+      } catch {
+        meta = {};
+      }
+      if (row.metricType === "clones") {
+        clonesMap.set(row.date, { date: row.date, count: row.value, uniques: Number(meta.uniques || 0) });
+      } else if (row.metricType === "views") {
+        viewsMap.set(row.date, { date: row.date, count: row.value, uniques: Number(meta.uniques || 0) });
+      } else if (row.metricType === "stars") {
+        starsMap.set(row.date, { date: row.date, stars: row.value });
+      }
+    }
+
+    if (Array.isArray(clonesJson?.clones)) {
+      for (const d of clonesJson.clones) {
+        const dt = String(d.timestamp || "").slice(0, 10);
+        if (!dt) continue;
+        clonesMap.set(dt, { date: dt, count: d.count || 0, uniques: d.uniques || 0 });
+        db.insert(dailyMetrics)
+          .values({
+            id: `met_gh_clones_${projectId}_${dt}`,
+            projectId,
+            source: "github",
+            metricType: "clones",
+            date: dt,
+            value: d.count || 0,
+            metadataJson: JSON.stringify({ uniques: d.uniques || 0 }),
+          })
+          .onConflictDoUpdate({
+            target: dailyMetrics.id,
+            set: { value: d.count || 0, metadataJson: JSON.stringify({ uniques: d.uniques || 0 }) },
+          })
+          .catch(() => {});
+      }
+    }
+
+    if (Array.isArray(viewsJson?.views)) {
+      for (const d of viewsJson.views) {
+        const dt = String(d.timestamp || "").slice(0, 10);
+        if (!dt) continue;
+        viewsMap.set(dt, { date: dt, count: d.count || 0, uniques: d.uniques || 0 });
+        db.insert(dailyMetrics)
+          .values({
+            id: `met_gh_views_${projectId}_${dt}`,
+            projectId,
+            source: "github",
+            metricType: "views",
+            date: dt,
+            value: d.count || 0,
+            metadataJson: JSON.stringify({ uniques: d.uniques || 0 }),
+          })
+          .onConflictDoUpdate({
+            target: dailyMetrics.id,
+            set: { value: d.count || 0, metadataJson: JSON.stringify({ uniques: d.uniques || 0 }) },
+          })
+          .catch(() => {});
+      }
+    }
+
+    const clonesDaily = Array.from(clonesMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const viewsDaily = Array.from(viewsMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const starsDaily = Array.from(starsMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+    const matchQuery = (title: string, author: string, num: number) =>
+      !filterQ ||
+      title.toLowerCase().includes(filterQ) ||
+      author.toLowerCase().includes(filterQ) ||
+      String(num).includes(filterQ);
+
     return NextResponse.json({
       repo: repoSlug,
       htmlUrl: `https://github.com/${repoSlug}`,
       hasWriteToken: Boolean(token),
       issues: Array.isArray(rawIssues)
         ? rawIssues
-            .filter((i: any) => !i.pull_request)
+            .filter((i: any) => !i.pull_request && matchQuery(i.title || "", i.user?.login || "", i.number))
             .map((i: any) => ({
               id: i.id,
               number: i.number,
@@ -83,47 +207,41 @@ export async function GET(req: NextRequest) {
             }))
         : [],
       pulls: Array.isArray(rawPrs)
-        ? rawPrs.map((p: any) => ({
-            id: p.id,
-            number: p.number,
-            title: p.title,
-            state: p.state,
-            draft: Boolean(p.draft),
-            author: p.user?.login || "unknown",
-            avatarUrl: p.user?.avatar_url || null,
-            headRef: p.head?.ref || "",
-            baseRef: p.base?.ref || "",
-            htmlUrl: p.html_url,
-            createdAt: p.created_at,
-            updatedAt: p.updated_at,
-          }))
+        ? rawPrs
+            .filter((p: any) => matchQuery(p.title || "", p.user?.login || "", p.number))
+            .map((p: any) => ({
+              id: p.id,
+              number: p.number,
+              title: p.title,
+              state: p.state,
+              draft: Boolean(p.draft),
+              author: p.user?.login || "unknown",
+              avatarUrl: p.user?.avatar_url || null,
+              labels: Array.isArray(p.labels) ? p.labels.map((l: any) => ({ name: l.name, color: l.color })) : [],
+              headRef: p.head?.ref || "",
+              baseRef: p.base?.ref || "",
+              htmlUrl: p.html_url,
+              createdAt: p.created_at,
+              updatedAt: p.updated_at,
+            }))
         : [],
-      trafficClones: clonesJson
-        ? {
-            count: clonesJson.count || 0,
-            uniques: clonesJson.uniques || 0,
-            daily: Array.isArray(clonesJson.clones)
-              ? clonesJson.clones.map((d: any) => ({
-                  date: String(d.timestamp || "").slice(0, 10),
-                  count: d.count || 0,
-                  uniques: d.uniques || 0,
-                }))
-              : [],
-          }
-        : null,
-      trafficViews: viewsJson
-        ? {
-            count: viewsJson.count || 0,
-            uniques: viewsJson.uniques || 0,
-            daily: Array.isArray(viewsJson.views)
-              ? viewsJson.views.map((d: any) => ({
-                  date: String(d.timestamp || "").slice(0, 10),
-                  count: d.count || 0,
-                  uniques: d.uniques || 0,
-                }))
-              : [],
-          }
-        : null,
+      trafficClones:
+        clonesDaily.length > 0 || clonesJson
+          ? {
+              count: clonesJson?.count ?? clonesDaily.reduce((s, d) => s + d.count, 0),
+              uniques: clonesJson?.uniques ?? clonesDaily.reduce((s, d) => s + d.uniques, 0),
+              daily: clonesDaily,
+            }
+          : null,
+      trafficViews:
+        viewsDaily.length > 0 || viewsJson
+          ? {
+              count: viewsJson?.count ?? viewsDaily.reduce((s, d) => s + d.count, 0),
+              uniques: viewsJson?.uniques ?? viewsDaily.reduce((s, d) => s + d.uniques, 0),
+              daily: viewsDaily,
+            }
+          : null,
+      starsDaily,
     });
   } catch (err: any) {
     console.error("GET /api/v1/github/manage error:", err);
@@ -192,6 +310,22 @@ export async function POST(req: NextRequest) {
         headers,
         body: JSON.stringify({ body: commentBody }),
       });
+    } else if (action === "add_label") {
+      const labelName = String(body.label || "").trim().slice(0, 50);
+      if (!labelName) {
+        return NextResponse.json({ error: "Label name is required" }, { status: 400 });
+      }
+      ghRes = await fetch(`https://api.github.com/repos/${repoSlug}/issues/${itemNumber}/labels`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ labels: [labelName] }),
+      });
+    } else if (action === "remove_label") {
+      const labelName = String(body.label || "").trim().slice(0, 50);
+      ghRes = await fetch(
+        `https://api.github.com/repos/${repoSlug}/issues/${itemNumber}/labels/${encodeURIComponent(labelName)}`,
+        { method: "DELETE", headers }
+      );
     } else if (action === "merge_pr") {
       ghRes = await fetch(`https://api.github.com/repos/${repoSlug}/pulls/${itemNumber}/merge`, {
         method: "PUT",

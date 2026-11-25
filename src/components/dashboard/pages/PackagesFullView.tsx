@@ -106,34 +106,141 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
           )}
         </div>
 
-        {/* Full-Width 30-Day Daily Download Velocity Chart */}
-        {npmDaily.length > 0 && (
-          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Download className="w-4 h-4 text-red-400" />
-                  <span>Daily Downloads ({project.npmPackage}) — Last 30 Days</span>
-                </h2>
-                <p className="text-xs text-zinc-400">
-                  {initialData.npmStats?.downloadsLastMonth.toLocaleString()} total downloads last 30d
-                </p>
+        {/* Side-by-Side Daily Download Charts across npm, PyPI, Crates, Go, Docker, VS Code */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {npmDaily.length > 0 && (
+            <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <Download className="w-4 h-4 text-red-400" />
+                    <span>npm Daily Downloads ({project.npmPackage})</span>
+                  </h2>
+                  <p className="text-xs text-zinc-400">
+                    {initialData.npmStats?.downloadsLastMonth.toLocaleString()} downloads last 30d
+                  </p>
+                </div>
+              </div>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={npmDaily}>
+                    <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
+                    <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
+                    />
+                    <Area type="monotone" dataKey="downloads" name="npm" stroke="#ef4444" fill="#ef444425" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </div>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={npmDaily}>
-                  <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
-                  />
-                  <Area type="monotone" dataKey="downloads" stroke="#ef4444" fill="#ef444425" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
+          )}
+
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Download className="w-4 h-4 text-indigo-400" />
+                <span>Multi-Registry Historical Velocity (PyPI, Crates, Docker, Go)</span>
+              </h2>
+              <p className="text-xs text-zinc-400">
+                Daily metrics persisted in Turso across package registries
+              </p>
+            </div>
+            <div className="h-48">
+              {(initialData.packageHistory || []).length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={initialData.packageHistory || []}>
+                    <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
+                    <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
+                    />
+                    <Area type="monotone" dataKey="pypi" name="PyPI" stroke="#3b82f6" fill="#3b82f620" />
+                    <Area type="monotone" dataKey="crates" name="Crates.io" stroke="#f97316" fill="#f9731620" />
+                    <Area type="monotone" dataKey="docker" name="Docker" stroke="#06b6d4" fill="#06b6d420" />
+                    <Area type="monotone" dataKey="go" name="Go" stroke="#14b8a6" fill="#14b8a620" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800/70 flex items-center justify-center text-xs text-zinc-500 text-center px-4">
+                  Multi-registry daily points appear here as daily cron sync snapshots PyPI, Crates.io, Docker Hub &amp; Go metrics.
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Release Version Adoption & Registry Matrix Table */}
+        <div className="rounded-2xl bg-zinc-900/90 border border-zinc-800 overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-zinc-800 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white">Release Version Adoption &amp; Registry Versions</h2>
+              <p className="text-xs text-zinc-400">Live SDK session adoption, crash-free rates, and latest published versions</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 text-[11px] font-mono">
+              {initialData.npmStats?.latestVersion && (
+                <span className="px-2 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">
+                  npm: v{initialData.npmStats.latestVersion}
+                </span>
+              )}
+              {initialData.pypiStats?.latestVersion && (
+                <span className="px-2 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                  PyPI: v{initialData.pypiStats.latestVersion}
+                </span>
+              )}
+              {initialData.rustStats?.maxVersion && (
+                <span className="px-2 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30">
+                  Crates: v{initialData.rustStats.maxVersion}
+                </span>
+              )}
+              {initialData.vscodeStats?.version && (
+                <span className="px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                  VS Code: v{initialData.vscodeStats.version}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-950/70 text-zinc-400 border-b border-zinc-800">
+                <tr>
+                  <th className="px-4 py-2.5">Release Tag</th>
+                  <th className="px-4 py-2.5">Commit</th>
+                  <th className="px-4 py-2.5">Sessions</th>
+                  <th className="px-4 py-2.5">Crashes</th>
+                  <th className="px-4 py-2.5">Crash-Free Rate</th>
+                  <th className="px-4 py-2.5">Published</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {(initialData.releases || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-zinc-500">
+                      No SDK release adoption sessions recorded yet — initialize <code className="text-zinc-300">DevPulse(&#123; release: &quot;v1.0.0&quot; &#125;)</code> to track version adoption.
+                    </td>
+                  </tr>
+                ) : (
+                  (initialData.releases || []).map((rel) => (
+                    <tr key={rel.id} className="hover:bg-zinc-950/50">
+                      <td className="px-4 py-2.5 font-mono font-semibold text-white">{rel.version}</td>
+                      <td className="px-4 py-2.5 font-mono text-zinc-400">{rel.commitSha ? rel.commitSha.slice(0, 7) : "—"}</td>
+                      <td className="px-4 py-2.5 font-mono text-zinc-200">{rel.totalSessions.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 font-mono text-amber-300">{rel.crashCount}</td>
+                      <td className="px-4 py-2.5 font-mono">
+                        <span className={rel.crashFreeRate >= 99 ? "text-emerald-300" : "text-amber-300"}>
+                          {rel.crashFreeRate}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-400">
+                        {new Date(rel.releasedAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
         {/* Active Ecosystem Cards */}
         {hasAnyPackage && (

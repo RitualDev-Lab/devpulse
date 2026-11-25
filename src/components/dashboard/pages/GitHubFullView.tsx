@@ -15,6 +15,10 @@ import {
   Loader2,
   ShieldAlert,
   TrendingUp,
+  Search,
+  Tag,
+  Eye,
+  X,
 } from "lucide-react";
 import {
   AreaChart,
@@ -38,6 +42,7 @@ interface GitHubManagePayload {
     state: string;
     comments: number;
     author: string;
+    labels?: Array<{ name: string; color: string }>;
     htmlUrl: string;
     createdAt: string;
   }>;
@@ -48,6 +53,7 @@ interface GitHubManagePayload {
     state: string;
     draft: boolean;
     author: string;
+    labels?: Array<{ name: string; color: string }>;
     headRef: string;
     baseRef: string;
     htmlUrl: string;
@@ -63,6 +69,7 @@ interface GitHubManagePayload {
     uniques: number;
     daily: Array<{ date: string; count: number; uniques: number }>;
   } | null;
+  starsDaily?: Array<{ date: string; stars: number }>;
 }
 
 export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
@@ -72,12 +79,55 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
 
   const [stateFilter, setStateFilter] = useState<"open" | "closed">("open");
   const [activeTab, setActiveTab] = useState<"issues" | "pulls">("pulls");
+  const [searchQuery, setSearchQuery] = useState("");
   const [liveData, setLiveData] = useState<GitHubManagePayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyNumber, setBusyNumber] = useState<number | null>(null);
   const [commentTarget, setCommentTarget] = useState<number | null>(null);
   const [commentText, setCommentText] = useState("");
+  const [labelTarget, setLabelTarget] = useState<number | null>(null);
+  const [labelText, setLabelText] = useState("");
+  const [threadModal, setThreadModal] = useState<{
+    number: number;
+    title: string;
+    body: string;
+    author: string;
+    state: string;
+    htmlUrl: string;
+    labels: Array<{ name: string; color: string }>;
+    comments: Array<{ id: number; author: string; body: string; createdAt: string }>;
+  } | null>(null);
+  const [loadingThread, setLoadingThread] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const inspectThread = async (itemNumber: number, fallback: { title: string; author: string; state: string; htmlUrl: string }) => {
+    setLoadingThread(true);
+    setThreadModal({
+      number: itemNumber,
+      title: fallback.title,
+      body: isDemo ? "Sign in with GitHub to inspect live issue & PR discussion threads directly from GitHub API." : "Loading discussion thread...",
+      author: fallback.author,
+      state: fallback.state,
+      htmlUrl: fallback.htmlUrl,
+      labels: [],
+      comments: [],
+    });
+    if (isDemo) {
+      setLoadingThread(false);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/v1/github/manage?projectId=${encodeURIComponent(project.id)}&mode=thread&number=${itemNumber}`
+      );
+      if (res.ok) {
+        const d = await res.json();
+        setThreadModal(d);
+      }
+    } finally {
+      setLoadingThread(false);
+    }
+  };
 
   const loadGitHubData = useCallback(async () => {
     if (!project.githubRepo || isDemo) return;
@@ -100,9 +150,9 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
   }, [loadGitHubData]);
 
   const handleGitHubAction = async (
-    action: "close_issue" | "reopen_issue" | "comment" | "merge_pr",
+    action: "close_issue" | "reopen_issue" | "comment" | "merge_pr" | "add_label" | "remove_label",
     num: number,
-    body?: string
+    payloadArg?: string
   ) => {
     if (isDemo) {
       setFeedback({ ok: false, msg: "Sign in with GitHub to manage Issues and Pull Requests." });
@@ -114,13 +164,22 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
       const res = await fetch("/api/v1/github/manage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: project.id, action, number: num, body }),
+        body: JSON.stringify({
+          projectId: project.id,
+          action,
+          number: num,
+          ...(action === "add_label" || action === "remove_label"
+            ? { label: payloadArg }
+            : { body: payloadArg }),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "GitHub operation failed");
       setFeedback({ ok: true, msg: `Updated #${num} on GitHub (${action}).` });
       setCommentTarget(null);
       setCommentText("");
+      setLabelTarget(null);
+      setLabelText("");
       await loadGitHubData();
     } catch (e: any) {
       setFeedback({ ok: false, msg: e.message || "Action failed" });
@@ -129,7 +188,17 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
     }
   };
 
-  const displayIssues =
+  const matchQuery = (item: { title: string; author: string; number: number }) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      item.title.toLowerCase().includes(q) ||
+      item.author.toLowerCase().includes(q) ||
+      String(item.number).includes(q)
+    );
+  };
+
+  const displayIssues = (
     liveData?.issues ??
     (gh?.recentIssues || [])
       .filter((i) => !i.isPullRequest)
@@ -140,11 +209,13 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
         state: i.state,
         comments: 0,
         author: i.author,
+        labels: [] as Array<{ name: string; color: string }>,
         htmlUrl: i.htmlUrl,
         createdAt: i.createdAt,
-      }));
+      }))
+  ).filter(matchQuery);
 
-  const displayPulls =
+  const displayPulls = (
     liveData?.pulls ??
     (gh?.pulls || []).map((p) => ({
       id: p.id,
@@ -153,14 +224,28 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
       state: p.state,
       draft: p.draft,
       author: p.author,
+      labels: [] as Array<{ name: string; color: string }>,
       headRef: p.headRef,
       baseRef: p.baseRef,
       htmlUrl: p.htmlUrl,
       createdAt: p.createdAt,
-    }));
+    }))
+  ).filter(matchQuery);
 
-  const clonesSeries = liveData?.trafficClones?.daily || gh?.trafficClones?.daily || [];
-  const viewsSeries = liveData?.trafficViews?.daily || gh?.trafficViews?.daily || [];
+  const clonesSeries =
+    liveData?.trafficClones?.daily ||
+    gh?.trafficClones?.daily ||
+    initialData.githubHistory?.clonesDaily ||
+    [];
+  const viewsSeries =
+    liveData?.trafficViews?.daily ||
+    gh?.trafficViews?.daily ||
+    initialData.githubHistory?.viewsDaily ||
+    [];
+  const starsSeries =
+    liveData?.starsDaily && liveData.starsDaily.length > 0
+      ? liveData.starsDaily
+      : initialData.githubHistory?.starsDaily || [];
 
   return (
     <WorkspaceShell
@@ -238,19 +323,19 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
           </div>
         </div>
 
-        {/* Daily Clones & Daily Views Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Daily Clones, Views & Daily Star Growth Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
                   <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  <span>Daily Git Clones (14-Day)</span>
+                  <span>Daily Git Clones</span>
                 </h2>
                 <p className="text-xs text-zinc-400">
                   {liveData?.trafficClones
-                    ? `${liveData.trafficClones.count.toLocaleString()} total clones • ${liveData.trafficClones.uniques.toLocaleString()} unique cloners`
-                    : "Requires GitHub push permission / PAT in Settings -> Quick Connect"}
+                    ? `${liveData.trafficClones.count.toLocaleString()} clones • ${liveData.trafficClones.uniques.toLocaleString()} unique`
+                    : "Archived daily in Turso (never expires)"}
                 </p>
               </div>
             </div>
@@ -280,12 +365,12 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
                   <TrendingUp className="w-4 h-4 text-indigo-400" />
-                  <span>Daily Repository Views (14-Day)</span>
+                  <span>Daily Repository Views</span>
                 </h2>
                 <p className="text-xs text-zinc-400">
                   {liveData?.trafficViews
-                    ? `${liveData.trafficViews.count.toLocaleString()} views • ${liveData.trafficViews.uniques.toLocaleString()} unique visitors`
-                    : "Tracks daily GitHub repository traffic & unique visitors"}
+                    ? `${liveData.trafficViews.count.toLocaleString()} views • ${liveData.trafficViews.uniques.toLocaleString()} unique`
+                    : "Tracks daily repo views & unique visitors"}
                 </p>
               </div>
             </div>
@@ -305,6 +390,38 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
               ) : (
                 <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800/70 flex items-center justify-center text-xs text-zinc-500 text-center px-4">
                   Daily repository page views appear here once GitHub traffic scope is enabled.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-amber-400" />
+                  <span>Daily Star Growth</span>
+                </h2>
+                <p className="text-xs text-zinc-400">
+                  Historical star snapshots persisted in Turso daily_metrics
+                </p>
+              </div>
+            </div>
+            <div className="h-44">
+              {starsSeries.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={starsSeries}>
+                    <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
+                    <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={32} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
+                    />
+                    <Area type="monotone" dataKey="stars" name="Stars" stroke="#f59e0b" fill="#f59e0b25" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800/70 flex items-center justify-center text-xs text-zinc-500 text-center px-4">
+                  Star history populates as daily sync records snapshots for {project.githubRepo || "your repository"}.
                 </div>
               )}
             </div>
@@ -349,7 +466,17 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filter #number, author, title..."
+                  className="pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 w-52"
+                />
+              </div>
               {(["open", "closed"] as const).map((st) => (
                 <button
                   key={st}
@@ -378,17 +505,24 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-mono text-zinc-500">#{item.number}</span>
-                        <a
-                          href={item.htmlUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm font-semibold text-white hover:text-indigo-300 transition truncate"
+                        <button
+                          type="button"
+                          onClick={() => inspectThread(item.number, item)}
+                          className="text-sm font-semibold text-white hover:text-indigo-300 transition truncate text-left"
                         >
                           {item.title}
-                        </a>
+                        </button>
                         {"draft" in item && item.draft && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">Draft</span>
                         )}
+                        {(item.labels || []).map((lbl) => (
+                          <span
+                            key={lbl.name}
+                            className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300 font-medium"
+                          >
+                            {lbl.name}
+                          </span>
+                        ))}
                       </div>
                       <div className="text-[11px] text-zinc-500 mt-0.5 font-mono">
                         @{item.author} &bull; {new Date(item.createdAt).toLocaleDateString()}
@@ -396,7 +530,25 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0 text-xs">
+                    <div className="flex items-center gap-1.5 shrink-0 text-xs flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => inspectThread(item.number, item)}
+                        className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 flex items-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>Inspect</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLabelTarget(labelTarget === item.number ? null : item.number)
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 flex items-center gap-1"
+                      >
+                        <Tag className="w-3 h-3" />
+                        <span>Label</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() =>
@@ -454,6 +606,26 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
                     </div>
                   </div>
 
+                  {labelTarget === item.number && (
+                    <div className="flex gap-2 pt-2">
+                      <input
+                        type="text"
+                        value={labelText}
+                        onChange={(e) => setLabelText(e.target.value)}
+                        placeholder={`Label name (e.g. bug, priority:high)...`}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white"
+                      />
+                      <button
+                        type="button"
+                        disabled={busyNumber === item.number || !labelText.trim()}
+                        onClick={() => handleGitHubAction("add_label", item.number, labelText)}
+                        className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold disabled:opacity-40"
+                      >
+                        Apply Label
+                      </button>
+                    </div>
+                  )}
+
                   {commentTarget === item.number && (
                     <div className="flex gap-2 pt-2">
                       <input
@@ -479,6 +651,62 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
           </div>
         </div>
       </div>
+
+      {/* Issue / PR Thread Inspector Modal */}
+      {threadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl p-6 max-h-[85vh] flex flex-col">
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-zinc-800">
+              <div>
+                <div className="text-xs font-mono text-zinc-400">
+                  #{threadModal.number} &bull; {threadModal.state.toUpperCase()} &bull; @{threadModal.author}
+                </div>
+                <h3 className="text-base font-bold text-white mt-0.5">{threadModal.title}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={threadModal.htmlUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-white flex items-center gap-1"
+                >
+                  <span>Open on GitHub</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setThreadModal(null)}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto py-4 space-y-3 text-xs">
+              {loadingThread ? (
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                  <span>Loading thread from GitHub...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-200 whitespace-pre-wrap leading-relaxed">
+                    {threadModal.body || "No description provided."}
+                  </div>
+                  {threadModal.comments.map((c) => (
+                    <div key={c.id} className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800/80 space-y-1">
+                      <div className="text-[11px] font-mono text-zinc-400">
+                        @{c.author} &bull; {new Date(c.createdAt).toLocaleString()}
+                      </div>
+                      <div className="text-zinc-200 whitespace-pre-wrap">{c.body}</div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </WorkspaceShell>
   );
 }

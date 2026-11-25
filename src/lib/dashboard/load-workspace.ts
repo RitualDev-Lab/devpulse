@@ -9,6 +9,7 @@ import {
   uptimeChecks,
   projectConnectors,
   dailyMetrics,
+  sourceMaps,
 } from "@/db/schema";
 import { eq, desc, and, gte } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
@@ -57,6 +58,34 @@ export interface LoadedWorkspaceReady {
       samples: number;
       lastRecordedAt: string;
     }>;
+    sourceMaps?: Array<{
+      id: string;
+      version: string;
+      filePath: string;
+      sizeBytes: number;
+      createdAt: string;
+    }>;
+    githubHistory?: {
+      starsDaily: Array<{ date: string; stars: number }>;
+      clonesDaily: Array<{ date: string; count: number; uniques: number }>;
+      viewsDaily: Array<{ date: string; count: number; uniques: number }>;
+    };
+    packageHistory?: Array<{
+      date: string;
+      npm: number;
+      pypi: number;
+      crates: number;
+      docker: number;
+      go: number;
+    }>;
+    analyticsSummary?: DashboardData["analyticsSummary"] & {
+      dau?: number;
+      wau?: number;
+      mau?: number;
+      dailyCohorts?: Array<{ date: string; web: number; appCli: number; total: number }>;
+      topPages?: Array<{ path: string; count: number }>;
+      topCustomEvents?: Array<{ event: string; count: number }>;
+    };
   };
   projects: ProjectSummary[];
   customDomain: string | null;
@@ -183,6 +212,7 @@ export async function loadDashboardWorkspace(searchParams?: {
     rawUptimeChecks,
     rawDailyMetrics,
     rawPageviews,
+    rawSourceMaps,
   ] = await Promise.all([
     activeProject.githubRepo
       ? withEdgeCache(`gh:${activeProject.githubRepo}:${Boolean(effectiveGhToken)}`, 300, 2600, () =>
@@ -272,14 +302,14 @@ export async function loadDashboardWorkspace(searchParams?: {
       .from(uptimeChecks)
       .where(eq(uptimeChecks.projectId, activeProject.id))
       .orderBy(desc(uptimeChecks.checkedAt))
-      .limit(60)
+      .limit(120)
       .catch(() => []),
     db
       .select()
       .from(dailyMetrics)
       .where(eq(dailyMetrics.projectId, activeProject.id))
-      .orderBy(desc(dailyMetrics.createdAt))
-      .limit(100)
+      .orderBy(desc(dailyMetrics.date))
+      .limit(180)
       .catch(() => []),
     db
       .select()
@@ -291,6 +321,13 @@ export async function loadDashboardWorkspace(searchParams?: {
         )
       )
       .limit(500)
+      .catch(() => []),
+    db
+      .select()
+      .from(sourceMaps)
+      .where(eq(sourceMaps.projectId, activeProject.id))
+      .orderBy(desc(sourceMaps.createdAt))
+      .limit(40)
       .catch(() => []),
   ]);
 
@@ -327,31 +364,61 @@ export async function loadDashboardWorkspace(searchParams?: {
   const refMap: Record<string, number> = {};
   const countryMap: Record<string, number> = {};
   const pathMap: Record<string, number> = {};
+  const pageOnlyMap: Record<string, number> = {};
+  const customEventMap: Record<string, number> = {};
   const osMap: Record<string, number> = {};
   const dailyMap: Record<string, number> = {};
+  const cohortMap: Record<string, { web: number; appCli: number; total: number }> = {};
   let desktopCount = 0;
   let mobileCount = 0;
   let webHits = 0;
   let appHits = 0;
 
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const weekCutoffIso = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
+  const monthCutoffIso = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+  const dauSet = new Set<string>();
+  const wauSet = new Set<string>();
+  const mauSet = new Set<string>();
+
   for (const pv of rawPageviews || []) {
     refMap[pv.referrer] = (refMap[pv.referrer] || 0) + 1;
     countryMap[pv.country] = (countryMap[pv.country] || 0) + 1;
-    const pKey =
-      pv.eventName && pv.eventName !== "pageview" ? `event:${pv.eventName}` : pv.path || "/";
+    const isCustom = pv.eventName && pv.eventName !== "pageview";
+    const pKey = isCustom ? `event:${pv.eventName}` : pv.path || "/";
     pathMap[pKey] = (pathMap[pKey] || 0) + 1;
+    if (isCustom) {
+      customEventMap[pv.eventName] = (customEventMap[pv.eventName] || 0) + 1;
+    } else {
+      pageOnlyMap[pv.path || "/"] = (pageOnlyMap[pv.path || "/"] || 0) + 1;
+    }
     const osKey = pv.os || "Unknown";
     osMap[osKey] = (osMap[osKey] || 0) + 1;
-    const dayKey = String(pv.createdAt || "").slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const dayKey = String(pv.createdAt || "").slice(0, 10) || todayIso;
     dailyMap[dayKey] = (dailyMap[dayKey] || 0) + 1;
+    if (!cohortMap[dayKey]) cohortMap[dayKey] = { web: 0, appCli: 0, total: 0 };
+    cohortMap[dayKey].total += 1;
+    if (pv.sourceType && pv.sourceType !== "web") {
+      appHits++;
+      cohortMap[dayKey].appCli += 1;
+    } else {
+      webHits++;
+      cohortMap[dayKey].web += 1;
+    }
     if (pv.device === "mobile" || pv.device === "tablet") mobileCount++;
     else desktopCount++;
-    if (pv.sourceType && pv.sourceType !== "web") appHits++;
-    else webHits++;
+
+    const sig = `${pv.country || ""}:${pv.os || ""}:${pv.browser || ""}:${pv.device || ""}:${pv.sourceType || "web"}`;
+    if (dayKey === todayIso) dauSet.add(sig);
+    if (dayKey >= weekCutoffIso) wauSet.add(sig);
+    if (dayKey >= monthCutoffIso) mauSet.add(sig);
   }
 
   const analyticsSummary = {
     totalPageviews: rawPageviews.length,
+    dau: dauSet.size,
+    wau: wauSet.size,
+    mau: mauSet.size,
     uniqueReferrers: Object.keys(refMap).length,
     topReferrers: Object.entries(refMap)
       .map(([referrer, count]) => ({ referrer, count }))
@@ -362,6 +429,12 @@ export async function loadDashboardWorkspace(searchParams?: {
     topPaths: Object.entries(pathMap)
       .map(([path, count]) => ({ path, count }))
       .sort((a, b) => b.count - a.count),
+    topPages: Object.entries(pageOnlyMap)
+      .map(([path, count]) => ({ path, count }))
+      .sort((a, b) => b.count - a.count),
+    topCustomEvents: Object.entries(customEventMap)
+      .map(([event, count]) => ({ event, count }))
+      .sort((a, b) => b.count - a.count),
     topOs: Object.entries(osMap)
       .map(([os, count]) => ({ os, count }))
       .sort((a, b) => b.count - a.count),
@@ -369,6 +442,10 @@ export async function loadDashboardWorkspace(searchParams?: {
       .map(([date, hits]) => ({ date, hits }))
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-14),
+    dailyCohorts: Object.entries(cohortMap)
+      .map(([date, c]) => ({ date, ...c }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-30),
     sources: { web: webHits, app: appHits },
     devices: { desktop: desktopCount, mobile: mobileCount },
   };
@@ -427,12 +504,59 @@ export async function loadDashboardWorkspace(searchParams?: {
         uptimePercent: (m.uptimeBasisPoints / 100).toFixed(2),
         lastCheckedAt: m.lastCheckedAt,
       })),
-      recentChecks: (rawUptimeChecks || []).slice(0, 30).reverse(),
+      recentChecks: (rawUptimeChecks || []).slice(0, 100).reverse(),
       overallP95Ms: computeP95Latency((rawUptimeChecks || []).map((c) => c.latencyMs)),
       overallUptimePercent: (
         computeUptimeBasisPoints((rawUptimeChecks || []).map((c) => c.status)) / 100
       ).toFixed(2),
     },
+    sourceMaps: (rawSourceMaps || []).map((s) => ({
+      id: s.id,
+      version: s.version,
+      filePath: s.filePath,
+      sizeBytes: s.sizeBytes,
+      createdAt: s.createdAt,
+    })),
+    githubHistory: (() => {
+      const starsDaily: Array<{ date: string; stars: number }> = [];
+      const clonesDaily: Array<{ date: string; count: number; uniques: number }> = [];
+      const viewsDaily: Array<{ date: string; count: number; uniques: number }> = [];
+      for (const m of rawDailyMetrics || []) {
+        if (m.source !== "github") continue;
+        let meta: any = {};
+        try {
+          meta = m.metadataJson ? JSON.parse(m.metadataJson) : {};
+        } catch {
+          meta = {};
+        }
+        if (m.metricType === "stars") starsDaily.push({ date: m.date, stars: m.value });
+        if (m.metricType === "clones") clonesDaily.push({ date: m.date, count: m.value, uniques: Number(meta.uniques || 0) });
+        if (m.metricType === "views") viewsDaily.push({ date: m.date, count: m.value, uniques: Number(meta.uniques || 0) });
+      }
+      return {
+        starsDaily: starsDaily.sort((a, b) => a.date.localeCompare(b.date)),
+        clonesDaily: clonesDaily.sort((a, b) => a.date.localeCompare(b.date)),
+        viewsDaily: viewsDaily.sort((a, b) => a.date.localeCompare(b.date)),
+      };
+    })(),
+    packageHistory: (() => {
+      const dayMap: Record<string, { date: string; npm: number; pypi: number; crates: number; docker: number; go: number }> = {};
+      const ensure = (d: string) => {
+        if (!dayMap[d]) dayMap[d] = { date: d, npm: 0, pypi: 0, crates: 0, docker: 0, go: 0 };
+        return dayMap[d];
+      };
+      for (const h of npmStats?.dailyHistory || []) {
+        ensure(h.date).npm = h.downloads;
+      }
+      for (const m of rawDailyMetrics || []) {
+        if (m.source === "npm" && !ensure(m.date).npm) ensure(m.date).npm = m.value;
+        if (m.source === "pypi") ensure(m.date).pypi = m.value;
+        if (m.source === "crates") ensure(m.date).crates = m.value;
+        if (m.source === "docker") ensure(m.date).docker = m.value;
+        if (m.source === "go") ensure(m.date).go = m.value;
+      }
+      return Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date)).slice(-30);
+    })(),
     connectors: (rawConnectors || []).map((c) => ({
       id: c.id,
       category: c.category,
