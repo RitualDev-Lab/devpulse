@@ -3,6 +3,12 @@ import { initDb } from "./setup";
 import { users, projects } from "./schema";
 
 export async function seedDemoData() {
+  if (process.env.NODE_ENV !== "development" && process.env.ALLOW_DEV_SEED !== "1") {
+    throw new Error(
+      "seedDemoData() is restricted to development (NODE_ENV=development or ALLOW_DEV_SEED=1)."
+    );
+  }
+
   await initDb();
 
   const demoUserId = "usr_ritualdev_demo";

@@ -4,6 +4,7 @@ import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchRustCrateStats } from "@/lib/integrations/crates";
+import { fetchGoModuleStats } from "@/lib/integrations/go";
 import { fetchDockerRepoStats } from "@/lib/integrations/docker";
 
 export interface SyncResult {
@@ -250,6 +251,45 @@ export async function syncAllProjects(): Promise<SyncResult[]> {
         }
       } catch (err: any) {
         errors.push(`github: ${err?.message || "Failed to fetch GitHub stats"}`);
+      }
+    }
+
+    // 6. Sync Go Module Metrics
+    if (proj.goModule) {
+      try {
+        const goStats = await fetchGoModuleStats(proj.goModule);
+        if (goStats) {
+          const goMetricId = `met_go_${proj.id}_${todayStr}`;
+          await db
+            .insert(dailyMetrics)
+            .values({
+              id: goMetricId,
+              projectId: proj.id,
+              source: "go",
+              metricType: "versions",
+              date: todayStr,
+              value: goStats.versionCount,
+              metadataJson: JSON.stringify({
+                latestVersion: goStats.latestVersion,
+                versionCount: goStats.versionCount,
+                publishedAt: goStats.publishedAt,
+              }),
+            })
+            .onConflictDoUpdate({
+              target: dailyMetrics.id,
+              set: {
+                value: goStats.versionCount,
+                metadataJson: JSON.stringify({
+                  latestVersion: goStats.latestVersion,
+                  versionCount: goStats.versionCount,
+                  publishedAt: goStats.publishedAt,
+                }),
+              },
+            });
+          syncedSources.push("go");
+        }
+      } catch (err: any) {
+        errors.push(`go: ${err?.message || "Failed to fetch Go module stats"}`);
       }
     }
 
