@@ -12,11 +12,13 @@ import {
 } from "recharts";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
+import { useWorkspaceData } from "../WorkspaceCacheContext";
 import { WebAnalyticsCard } from "../widgets/WebAnalyticsCard";
 import { LanguageSdkTabs } from "../LanguageSdkTabs";
 
 export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
-  const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
+  const { projects, customDomain, storageTier, isDemo } = workspace;
+  const initialData = useWorkspaceData(workspace.initialData);
   const project = initialData.project;
   const summary = initialData.analyticsSummary;
   const dailySeries = summary?.dailySeries || [];

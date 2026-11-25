@@ -21,6 +21,7 @@ import {
 } from "recharts";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
+import { useWorkspaceData } from "../WorkspaceCacheContext";
 import { RevenueStatsCard } from "../widgets/RevenueStatsCard";
 import { BillingModal } from "../BillingModal";
 
@@ -36,7 +37,8 @@ const PAYMENT_PROVIDERS = [
 ];
 
 export function RevenueFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
-  const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
+  const { projects, customDomain, storageTier, isDemo } = workspace;
+  const initialData = useWorkspaceData(workspace.initialData);
   const project = initialData.project;
   const connectors = (initialData.connectors || []).filter((c) => c.category === "payment");
 

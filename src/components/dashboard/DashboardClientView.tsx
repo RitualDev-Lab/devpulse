@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Sliders, Palette, RefreshCw } from "lucide-react";
 import { WorkspaceShell } from "./WorkspaceShell";
+import { useWorkspaceData } from "./WorkspaceCacheContext";
 import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
@@ -36,7 +37,7 @@ export function DashboardClientView({
   accessRole = "owner",
   isDemo = false,
 }: DashboardClientViewProps) {
-  const [data] = useState<DashboardData>(initialData);
+  const data = useWorkspaceData(initialData);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isStylingOpen, setIsStylingOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);

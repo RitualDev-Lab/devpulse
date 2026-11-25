@@ -30,6 +30,7 @@ import {
 } from "recharts";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
+import { useWorkspaceData } from "../WorkspaceCacheContext";
 
 interface GitHubManagePayload {
   repo: string;
@@ -73,7 +74,8 @@ interface GitHubManagePayload {
 }
 
 export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
-  const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
+  const { projects, customDomain, storageTier, isDemo } = workspace;
+  const initialData = useWorkspaceData(workspace.initialData);
   const gh = initialData.githubStats;
   const project = initialData.project;
 

@@ -34,6 +34,7 @@ import { fetchVsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats } from "@/lib/integrations/mcp";
 import { fetchRevenueStats } from "@/lib/integrations/revenue";
 import { computeP95Latency, computeUptimeBasisPoints } from "@/lib/monitors/checker";
+import { readProjectSnapshots, refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
 import type { ProjectSummary } from "@/components/dashboard/ProjectWorkspaceSwitcher";
 import type { DashboardData } from "@/components/dashboard/DragDropGrid";
 
@@ -92,6 +93,8 @@ export interface LoadedWorkspaceReady {
       topPages?: Array<{ path: string; count: number }>;
       topCustomEvents?: Array<{ event: string; count: number }>;
     };
+    staleSnapshots?: boolean;
+    snapshotUpdatedAt?: string | null;
   };
   projects: ProjectSummary[];
   customDomain: string | null;
@@ -267,68 +270,12 @@ export async function loadDashboardWorkspace(
   const needSettings = needAll || scope === "settings";
   const needConnectors = needRevenue || needPackages || needSettings;
   const needDailyMetrics = needGithub || needPackages || needRevenue;
+  const needExternal = needGithub || needPackages || needRevenue;
 
+  // Single parallel DB wave (~40-100ms total): snapshots + connectors + hot indexed telemetry tables
   const [
-    userGhToken,
-    projectGhToken,
-    decryptedNpmToken,
-    decryptedStripeKey,
-    decryptedDodoKey,
+    initialSnapshotBundle,
     rawConnectors,
-  ] = await Promise.all([
-    needGithub && user ? getUserGitHubAccessToken(user.id).catch(() => null) : Promise.resolve(null),
-    needGithub ? decryptSecret(activeProject.githubTokenEncrypted).catch(() => null) : Promise.resolve(null),
-    needPackages ? decryptSecret(activeProject.npmTokenEncrypted).catch(() => null) : Promise.resolve(null),
-    needRevenue ? decryptSecret(activeProject.stripeApiKey).catch(() => null) : Promise.resolve(null),
-    needRevenue ? decryptSecret(activeProject.dodoPaymentsApiKey).catch(() => null) : Promise.resolve(null),
-    needConnectors
-      ? db
-          .select()
-          .from(projectConnectors)
-          .where(eq(projectConnectors.projectId, activeProject.id))
-          .orderBy(desc(projectConnectors.createdAt))
-          .limit(30)
-          .catch(() => [])
-      : Promise.resolve([]),
-  ]);
-
-  const effectiveGhToken = projectGhToken || userGhToken;
-
-  const [decryptedPaymentConnectors, decryptedDockerToken] = await Promise.all([
-    needRevenue
-      ? Promise.all(
-          rawConnectors
-            .filter((c) => c.category === "payment")
-            .map(async (c) => ({
-              id: c.id,
-              provider: c.provider,
-              label: c.label,
-              targetUrl: c.targetUrl,
-              apiKey: await decryptSecret(c.credentialsEncrypted).catch(() => null),
-            }))
-        )
-      : Promise.resolve([]),
-    (() => {
-      if (!needPackages) return Promise.resolve(null);
-      const dockerTokenConn = rawConnectors.find(
-        (c) => c.category === "package" && c.provider === "docker" && c.credentialsEncrypted
-      );
-      return dockerTokenConn
-        ? decryptSecret(dockerTokenConn.credentialsEncrypted).catch(() => null)
-        : Promise.resolve(null);
-    })(),
-  ]);
-
-  const [
-    githubStats,
-    npmStats,
-    pypiStats,
-    rustStats,
-    goStats,
-    dockerStats,
-    vscodeStats,
-    mcpStats,
-    revenueStats,
     rawErrors,
     rawWidgets,
     rawReleases,
@@ -338,60 +285,16 @@ export async function loadDashboardWorkspace(
     rawPageviews,
     rawSourceMaps,
   ] = await Promise.all([
-    needGithub && activeProject.githubRepo
-      ? withEdgeCache(`gh:${activeProject.githubRepo}:${Boolean(effectiveGhToken)}`, 300, 1400, () =>
-          fetchGitHubRepoStats(activeProject.githubRepo!, effectiveGhToken || undefined)
-        )
-      : Promise.resolve(null),
-    needPackages && activeProject.npmPackage
-      ? withEdgeCache(`npm:${activeProject.npmPackage}:${Boolean(decryptedNpmToken)}`, 300, 1400, () =>
-          fetchNpmStats(activeProject.npmPackage!, decryptedNpmToken)
-        )
-      : Promise.resolve(null),
-    needPackages && activeProject.pypiPackage
-      ? withEdgeCache(`pypi:${activeProject.pypiPackage}`, 300, 1400, () =>
-          fetchPyPiStats(activeProject.pypiPackage!)
-        )
-      : Promise.resolve(null),
-    needPackages && activeProject.rustCrate
-      ? withEdgeCache(`crates:${activeProject.rustCrate}`, 300, 1400, () =>
-          fetchRustCrateStats(activeProject.rustCrate!)
-        )
-      : Promise.resolve(null),
-    needPackages && activeProject.goModule
-      ? withEdgeCache(`go:${activeProject.goModule}`, 300, 1400, () =>
-          fetchGoModuleStats(activeProject.goModule!)
-        )
-      : Promise.resolve(null),
-    needPackages && activeProject.dockerImage
-      ? withEdgeCache(`docker:${activeProject.dockerImage}:${Boolean(decryptedDockerToken)}`, 300, 1400, () =>
-          fetchDockerRepoStats(activeProject.dockerImage!, decryptedDockerToken)
-        )
-      : Promise.resolve(null),
-    needPackages && activeProject.vscodeExtension
-      ? withEdgeCache(`vscode:${activeProject.vscodeExtension}`, 300, 1400, () =>
-          fetchVsCodeStats(activeProject.vscodeExtension!)
-        )
-      : Promise.resolve(null),
-    needPackages && activeProject.mcpServerName
-      ? withEdgeCache(
-          `mcp:${activeProject.mcpServerName}:${activeProject.githubRepo || ""}`,
-          300,
-          1400,
-          () => fetchMcpStats(activeProject.mcpServerName!, activeProject.githubRepo)
-        )
-      : Promise.resolve(null),
-    needRevenue
-      ? withEdgeCache(`rev:${activeProject.id}:${decryptedPaymentConnectors.length}`, 180, 1400, () =>
-          fetchRevenueStats({
-            stripeKey: decryptedStripeKey,
-            dodoKey: decryptedDodoKey,
-            dodoEnv: activeProject.dodoPaymentsEnvironment,
-            githubSponsorsUsername: activeProject.githubSponsorsUsername,
-            modularConnectors: decryptedPaymentConnectors,
-          })
-        )
-      : Promise.resolve(null),
+    needExternal ? readProjectSnapshots(activeProject.id) : Promise.resolve(null),
+    needConnectors
+      ? db
+          .select()
+          .from(projectConnectors)
+          .where(eq(projectConnectors.projectId, activeProject.id))
+          .orderBy(desc(projectConnectors.createdAt))
+          .limit(30)
+          .catch(() => [])
+      : Promise.resolve([]),
     needCrashes
       ? db
           .select()
@@ -472,6 +375,26 @@ export async function loadDashboardWorkspace(
           .catch(() => [])
       : Promise.resolve([]),
   ]);
+
+  // Serve Turso DB snapshots immediately when present; only warm inline once for brand-new projects
+  let snapshotBundle = initialSnapshotBundle;
+  if (needExternal && (!snapshotBundle || snapshotBundle.presentKeys.size === 0)) {
+    snapshotBundle = await refreshProjectSnapshots(activeProject, {
+      userIdForOAuth: user?.id || null,
+    }).catch(() => snapshotBundle);
+  }
+
+  const githubStats = needGithub ? snapshotBundle?.githubStats ?? null : null;
+  const npmStats = needPackages ? snapshotBundle?.npmStats ?? null : null;
+  const pypiStats = needPackages ? snapshotBundle?.pypiStats ?? null : null;
+  const rustStats = needPackages ? snapshotBundle?.rustStats ?? null : null;
+  const goStats = needPackages ? snapshotBundle?.goStats ?? null : null;
+  const dockerStats = needPackages ? snapshotBundle?.dockerStats ?? null : null;
+  const vscodeStats = needPackages ? snapshotBundle?.vscodeStats ?? null : null;
+  const mcpStats = needPackages ? snapshotBundle?.mcpStats ?? null : null;
+  const revenueStats = needRevenue ? snapshotBundle?.revenueStats ?? null : null;
+  const staleSnapshots = Boolean(needExternal && snapshotBundle?.isStale);
+  const snapshotUpdatedAt = snapshotBundle?.snapshotUpdatedAt ?? null;
 
   const initialLayout = (rawWidgets || []).map((w) => ({
     id: w.widgetType,
@@ -676,6 +599,8 @@ export async function loadDashboardWorkspace(
     vscodeStats,
     mcpStats,
     revenueStats,
+    staleSnapshots,
+    snapshotUpdatedAt,
     analyticsSummary,
     uptimeSummary: {
       monitors: (rawMonitors || []).map((m) => ({

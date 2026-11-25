@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
+import { useWorkspaceData } from "../WorkspaceCacheContext";
 import { NpmDownloadsCard } from "../widgets/NpmDownloadsCard";
 import { PyPiDownloadsCard } from "../widgets/PyPiDownloadsCard";
 import { RustCratesCard } from "../widgets/RustCratesCard";
@@ -22,7 +23,8 @@ import { McpStatsCard } from "../widgets/McpStatsCard";
 import { QuickConnectPanel } from "../QuickConnectPanel";
 
 export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
-  const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
+  const { projects, customDomain, storageTier, isDemo } = workspace;
+  const initialData = useWorkspaceData(workspace.initialData);
   const project = initialData.project;
   const npmDaily = initialData.npmStats?.dailyHistory || [];
   const packageConnectors = (initialData.connectors || []).filter(

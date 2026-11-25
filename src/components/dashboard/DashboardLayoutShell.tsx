@@ -4,6 +4,7 @@ import React, { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import type { DashboardShellMeta } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "./WorkspaceShell";
+import { WorkspaceCacheProvider } from "./WorkspaceCacheContext";
 
 function DashboardLayoutShellInner({
   shellMeta,
@@ -63,10 +64,12 @@ export function DashboardLayoutShell({
   children: React.ReactNode;
 }) {
   return (
-    <Suspense fallback={<>{children}</>}>
-      <DashboardLayoutShellInner shellMeta={shellMeta}>
-        {children}
-      </DashboardLayoutShellInner>
-    </Suspense>
+    <WorkspaceCacheProvider isAuthenticated={Boolean(shellMeta.user)}>
+      <Suspense fallback={<>{children}</>}>
+        <DashboardLayoutShellInner shellMeta={shellMeta}>
+          {children}
+        </DashboardLayoutShellInner>
+      </Suspense>
+    </WorkspaceCacheProvider>
   );
 }

@@ -697,3 +697,15 @@ export const structuredLogs = sqliteTable("structured_logs", {
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
+/**
+ * Turso-Backed Snapshot Cache for Overview & Integration Widgets
+ * Eliminates external API stalls during user SSR page loads (~80-150ms DB reads).
+ */
+export const projectSnapshots = sqliteTable("project_snapshots", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  snapshotKey: text("snapshot_key").notNull(), // 'github' | 'npm' | 'pypi' | 'crates' | 'go' | 'docker' | 'vscode' | 'mcp' | 'revenue'
+  payloadJson: text("payload_json").notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+

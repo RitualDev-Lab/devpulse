@@ -1,9 +1,17 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { createClient } from "./supabase/server";
 import { db } from "@/db";
 import { users, organizationMembers, organizations } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getSsoSessionFromCookies } from "@/lib/saml/sso-session";
+import {
+  SESSION_CACHE_COOKIE,
+  SESSION_CACHE_TTL_SECONDS,
+  computeSupabaseCookieFingerprint,
+  createSignedSessionCacheToken,
+  verifySignedSessionCacheToken,
+} from "@/lib/security/session-cache";
 
 export interface AuthenticatedUser {
   id: string;
@@ -25,6 +33,22 @@ export interface AuthenticatedUser {
  */
 export const getCurrentUser = cache(async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   try {
+    const cookieStore = await cookies();
+    const allCookies = cookieStore.getAll();
+    const sbFp = await computeSupabaseCookieFingerprint(allCookies);
+
+    // Fast path 1: No Supabase auth cookies -> skip Supabase Auth network roundtrip completely
+    if (!sbFp) {
+      return await getSsoAuthenticatedUser();
+    }
+
+    // Fast path 2: Verified short-lived HMAC Edge Session Cookie Cache (60s TTL, bound to sb-* cookies)
+    const cachedCookie = cookieStore.get(SESSION_CACHE_COOKIE)?.value;
+    const cachedUser = await verifySignedSessionCacheToken(cachedCookie, sbFp);
+    if (cachedUser) {
+      return cachedUser;
+    }
+
     const supabase = await createClient();
     const {
       data: { user },
@@ -66,6 +90,8 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<Aut
       existingUser.email !== email ||
       existingUser.avatarUrl !== avatarUrl;
 
+    let resolvedUser: AuthenticatedUser;
+
     if (needsSync) {
       try {
         await db
@@ -100,23 +126,33 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<Aut
         .where(eq(users.id, user.id))
         .limit(1);
 
-      if (refreshed) {
-        return {
-          id: refreshed.id,
-          githubUsername: refreshed.githubUsername,
-          name: refreshed.name,
-          email: refreshed.email,
-          avatarUrl: refreshed.avatarUrl,
-          storageTier: refreshed.storageTier,
-          subdomain: refreshed.subdomain || defaultSubdomain,
-          customDomain: refreshed.customDomain,
-          customDomainVerified: refreshed.customDomainVerified,
-        };
-      }
-    }
-
-    if (existingUser) {
-      return {
+      resolvedUser = refreshed
+        ? {
+            id: refreshed.id,
+            githubUsername: refreshed.githubUsername,
+            name: refreshed.name,
+            email: refreshed.email,
+            avatarUrl: refreshed.avatarUrl,
+            storageTier: refreshed.storageTier,
+            subdomain: refreshed.subdomain || defaultSubdomain,
+            customDomain: refreshed.customDomain,
+            customDomainVerified: refreshed.customDomainVerified,
+            authMethod: "github",
+          }
+        : {
+            id: user.id,
+            githubUsername,
+            name,
+            email,
+            avatarUrl,
+            storageTier: "free",
+            subdomain: defaultSubdomain,
+            customDomain: null,
+            customDomainVerified: false,
+            authMethod: "github",
+          };
+    } else if (existingUser) {
+      resolvedUser = {
         id: existingUser.id,
         githubUsername: existingUser.githubUsername,
         name: existingUser.name,
@@ -126,21 +162,39 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<Aut
         subdomain: existingUser.subdomain || defaultSubdomain,
         customDomain: existingUser.customDomain,
         customDomainVerified: existingUser.customDomainVerified,
+        authMethod: "github",
+      };
+    } else {
+      resolvedUser = {
+        id: user.id,
+        githubUsername,
+        name,
+        email,
+        avatarUrl,
+        storageTier: "free",
+        subdomain: defaultSubdomain,
+        customDomain: null,
+        customDomainVerified: false,
+        authMethod: "github",
       };
     }
 
-    return {
-      id: user.id,
-      githubUsername,
-      name,
-      email,
-      avatarUrl,
-      storageTier: "free",
-      subdomain: defaultSubdomain,
-      customDomain: null,
-      customDomainVerified: false,
-      authMethod: "github",
-    };
+    try {
+      const signed = await createSignedSessionCacheToken(resolvedUser, sbFp, SESSION_CACHE_TTL_SECONDS);
+      if (signed) {
+        cookieStore.set(SESSION_CACHE_COOKIE, signed, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: SESSION_CACHE_TTL_SECONDS,
+        });
+      }
+    } catch {
+      // Cookie mutation only works in route handlers / actions
+    }
+
+    return resolvedUser;
   } catch (err) {
     console.error("getCurrentUser error:", err);
     return await getSsoAuthenticatedUser();

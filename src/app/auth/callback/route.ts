@@ -5,6 +5,13 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { encryptSecret } from "@/lib/security/crypto";
+import {
+  SESSION_CACHE_COOKIE,
+  SESSION_CACHE_TTL_SECONDS,
+  computeSupabaseCookieFingerprint,
+  createSignedSessionCacheToken,
+} from "@/lib/security/session-cache";
+import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -23,6 +30,7 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      let signedSessionCookie: string | null = null;
       try {
         const synced = await getCurrentUser();
         const providerToken = data?.session?.provider_token;
@@ -36,10 +44,29 @@ export async function GET(request: Request) {
             })
             .where(eq(users.id, synced.id));
         }
+        if (synced) {
+          const cStore = await cookies();
+          const sbFp = await computeSupabaseCookieFingerprint(cStore.getAll());
+          signedSessionCookie = await createSignedSessionCacheToken(
+            synced,
+            sbFp,
+            SESSION_CACHE_TTL_SECONDS
+          );
+        }
       } catch (e) {
         console.error("User sync error in callback:", e);
       }
-      return NextResponse.redirect(`${baseUrl}${next}`);
+      const res = NextResponse.redirect(`${baseUrl}${next}`);
+      if (signedSessionCookie) {
+        res.cookies.set(SESSION_CACHE_COOKIE, signedSessionCookie, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: SESSION_CACHE_TTL_SECONDS,
+        });
+      }
+      return res;
     }
   }
 

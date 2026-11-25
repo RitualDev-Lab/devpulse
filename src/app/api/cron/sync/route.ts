@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { sendProjectDigest } from "@/lib/alerts/digest";
 import { processPendingEscalations } from "@/lib/alerts/smart-engine";
 import { runDueSyntheticTests } from "@/lib/synthetics/yaml-runner";
+import { refreshAllProjectSnapshots } from "@/lib/dashboard/snapshots";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,10 @@ async function handleSync(req: NextRequest) {
 
     const startedAt = new Date().toISOString();
     const results = await syncAllProjects();
+    const snapshotSummary = await refreshAllProjectSnapshots().catch(() => ({
+      refreshed: 0,
+      projectIds: [],
+    }));
     const uptimeSummary = await runDueUptimeChecks().catch((e) => ({
       checked: 0,
       error: e instanceof Error ? e.message : "Uptime check failed",
@@ -76,6 +81,7 @@ async function handleSync(req: NextRequest) {
       startedAt,
       completedAt,
       projectsSynced: results.length,
+      snapshotSummary,
       uptimeSummary,
       escalationSummary,
       syntheticsSummary,

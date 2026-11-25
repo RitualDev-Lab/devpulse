@@ -64,6 +64,7 @@ export function AuthButton() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    await fetch("/api/auth/session-cache", { method: "DELETE" }).catch(() => {});
     if (ssoUser) {
       await fetch("/api/auth/saml", { method: "DELETE" }).catch(() => {});
     }

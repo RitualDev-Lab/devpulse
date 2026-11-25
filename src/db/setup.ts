@@ -679,7 +679,52 @@ export async function initDb() {
   `);
 
   await client.execute(`
+    CREATE TABLE IF NOT EXISTS project_snapshots (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      snapshot_key TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
     CREATE UNIQUE INDEX IF NOT EXISTS projects_slug_unique ON projects(slug);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_project_snapshots_proj_key
+    ON project_snapshots(project_id, snapshot_key);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_pageviews_project_created
+    ON pageviews(project_id, created_at);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_error_events_project_created
+    ON error_events(project_id, created_at);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_structured_logs_project_created
+    ON structured_logs(project_id, created_at);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_structured_logs_project_ts
+    ON structured_logs(project_id, timestamp_ms);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_uptime_checks_project_checked
+    ON uptime_checks(project_id, checked_at);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_daily_metrics_project_date
+    ON daily_metrics(project_id, date);
   `).catch(() => {});
 
   console.log("DevPulse Database tables verified successfully.");
