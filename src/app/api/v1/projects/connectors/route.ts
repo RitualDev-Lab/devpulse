@@ -357,7 +357,9 @@ export async function POST(req: NextRequest) {
             }
           }
         } else if (provider === "gumroad") {
-          const res = await fetch(`https://api.gumroad.com/v2/sales?access_token=${encodeURIComponent(rawSecret)}`).catch(() => null);
+          const res = await fetch("https://api.gumroad.com/v2/sales", {
+            headers: { Authorization: `Bearer ${rawSecret}` },
+          }).catch(() => null);
           if (res?.ok) {
             const json = await res.json();
             if (Array.isArray(json.sales)) {

@@ -330,7 +330,8 @@ async function fetchModularConnectorRevenue(
       };
     }
     if (provider === "gumroad" && apiKey) {
-      const res = await fetch(`https://api.gumroad.com/v2/sales?access_token=${encodeURIComponent(apiKey)}`, {
+      const res = await fetch("https://api.gumroad.com/v2/sales", {
+        headers: { Authorization: `Bearer ${apiKey}` },
         next: { revalidate: 300 },
       }).catch(() => null);
       if (!res?.ok) return null;
