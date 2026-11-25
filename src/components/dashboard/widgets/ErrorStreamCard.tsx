@@ -641,7 +641,7 @@ export function ErrorStreamCard({
                 onChange={(e) => setSortMode(e.target.value as any)}
                 className="px-2.5 py-1 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-200"
               >
-                <option value="impact">Priority: Business Impact ($)</option>
+                <option value="impact">Priority: Estimated Revenue at Risk</option>
                 <option value="regressions">Priority: Regressions First</option>
                 <option value="frequency">Sort: Crash Count</option>
                 <option value="recent">Sort: Most Recent</option>
@@ -738,7 +738,7 @@ export function ErrorStreamCard({
                         <TrendingDown className="w-2.5 h-2.5 text-red-400" />
                         <span>
                           {group.totalAffectedUsers.toLocaleString()} users &bull; est. $
-                          {Math.round(group.totalLostRevenueCents / 100).toLocaleString()} MRR
+                          est. {Math.round(group.totalLostRevenueCents / 100).toLocaleString()} at risk
                         </span>
                       </span>
                     )}
@@ -990,7 +990,7 @@ export function ErrorStreamCard({
                   <span className="font-mono text-emerald-300">
                     Impact: {(inspectedEvent.affectedUsersCount || 1).toLocaleString()} user(s)
                     {inspectedEvent.estimatedLostRevenueCents
-                      ? ` • est. $${Math.round(inspectedEvent.estimatedLostRevenueCents / 100).toLocaleString()} lost MRR`
+                      ? ` • est. $${Math.round(inspectedEvent.estimatedLostRevenueCents / 100).toLocaleString()} at risk (assumed ARPU)`
                       : ""}
                     {inspectedEvent.routePath ? ` on ${inspectedEvent.routePath}` : ""}
                   </span>

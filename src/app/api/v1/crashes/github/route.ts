@@ -23,7 +23,7 @@ async function resolveGitHubTokenForProject(userId: string, encryptedProjectToke
  * Full Two-Way GitHub Integration:
  *  - create_issue: Creates a GitHub Issue directly from a crash in DevPulse
  *  - link_pr: Links a PR # to a crash (auto-closes crash when PR merges)
- *  - comment_stats: Posts live crash occurrences, users & MRR impact onto linked Issue/PR
+ *  - comment_stats: Posts live crash occurrences, users & estimated revenue impact onto linked Issue/PR
  */
 export async function POST(req: NextRequest) {
   try {
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
         `- **Error:** \`${errRow.errorName}\``,
         `- **Platform / Runtime:** \`${errRow.platform}\` / \`${errRow.runtime}\``,
         `- **Release:** \`${errRow.version || "N/A"}\``,
-        `- **Business Impact:** ${errRow.affectedUsersCount || 1} user(s) • est. \$${lostUsd} lost MRR`,
+        `- **Business Impact:** ${errRow.affectedUsersCount || 1} user(s) • est. \$${lostUsd} revenue at risk (assumed ARPU)`,
         errRow.routePath ? `- **Route:** \`${errRow.routePath}\`` : null,
         errRow.isRegression ? `- **Status Flag:** REGRESSION (re-appeared after earlier fix)` : null,
         "",
@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
         `### 📊 DevPulse Live Crash Telemetry Update`,
         `- **Occurrences:** ${totalOccurrences}`,
         `- **Affected Users:** ${totalUsers.toLocaleString()}`,
-        `- **Estimated Lost MRR:** \$${totalLostUsd.toLocaleString()}`,
+        `- **Estimated revenue at risk (assumed ARPU):** \$${totalLostUsd.toLocaleString()}`,
         `- **Seen In Releases:** ${versions || "N/A"}`,
         `- **Latest Seen:** ${errRow.createdAt}`,
       ].join("\n");

@@ -153,14 +153,14 @@ export function computeBusinessImpact(params: {
     users * arpuCents * conversionLossRate * envWeight
   );
 
-  // Score combines route severity, log-scaled affected users, and estimated lost MRR
+  // Score combines route severity, log-scaled affected users, and estimated revenue at risk
   const userScore = Math.min(350, Math.round(Math.log10(users + 1) * 115));
   const revScore = Math.min(400, Math.round((estimatedLostRevenueCents / 10000) * 12));
   const rawScore = Math.round((routeMultiplier * 70 + userScore + revScore) * envWeight);
   const impactScore = Math.max(10, Math.min(1000, rawScore));
 
   const dollars = Math.round(estimatedLostRevenueCents / 100);
-  const summaryLabel = `${users.toLocaleString()} user${users === 1 ? "" : "s"} • est. $${dollars.toLocaleString()} lost MRR`;
+  const summaryLabel = `${users.toLocaleString()} user${users === 1 ? "" : "s"} • est. $${dollars.toLocaleString()} revenue at risk (assumes $${(arpuCents / 100).toLocaleString()}/mo ARPU)`;
 
   return {
     impactScore,
