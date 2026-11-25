@@ -123,7 +123,7 @@ export function ReleaseHealthCard({ releases, githubRepo }: ReleaseHealthCardPro
                       <span>{rel.crashFreeRate === null ? "No session data" : `${rel.crashFreeRate}%`}</span>
                     </div>
                     <div className="text-[10px] text-zinc-500">
-                      {rel.crashCount} crashes / {Math.max(rel.totalSessions, rel.crashCount)} sess
+                      {rel.crashCount} crashes / {rel.totalSessions.toLocaleString()} sess
                     </div>
                   </div>
                 </div>
