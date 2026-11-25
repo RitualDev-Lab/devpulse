@@ -39,7 +39,7 @@ export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady
         <ErrorStreamCard
           initialErrors={initialData.errors}
           projectId={project.id}
-          telemetryApiKey={project.telemetryApiKey}
+          telemetryApiKey={project.telemetryApiKey || undefined}
         />
 
         <div className="grid grid-cols-1 gap-5">

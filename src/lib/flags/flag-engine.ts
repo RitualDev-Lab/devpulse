@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { errorEvents, featureFlags, flagExposures, projects } from "@/db/schema";
 import { and, eq, gte } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/security/audit";
-import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { decryptSecret } from "@/lib/security/crypto";
 
 export interface FlagVariant {
@@ -177,20 +177,9 @@ export async function checkAndAutoRollbackFlags(projectId: string) {
           metadata: { taggedCrashes, exposures, crashRatePct, reason },
         });
 
-        const opsKey = proj.opsgenieApiKeyEncrypted
-          ? await decryptSecret(proj.opsgenieApiKeyEncrypted).catch(() => null)
-          : null;
+        const webhookConfig = await resolveDecryptedWebhookConfig(proj);
         await dispatchCrashAlerts(
-          {
-            discordWebhookUrl: proj.discordWebhookUrl,
-            slackWebhookUrl: proj.slackWebhookUrl,
-            telegramBotToken: proj.telegramBotToken,
-            telegramChatId: proj.telegramChatId,
-            genericWebhookUrl: proj.genericWebhookUrl,
-            pagerdutyRoutingKey: proj.pagerdutyRoutingKey,
-            opsgenieApiKey: opsKey,
-            teamsWebhookUrl: proj.teamsWebhookUrl,
-          },
+          webhookConfig,
           {
             eventId: `flg_${flag.id}`,
             projectName: proj.name,

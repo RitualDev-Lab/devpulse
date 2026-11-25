@@ -46,8 +46,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const encryptedStripe = stripeApiKey ? await encryptSecret(String(stripeApiKey)) : null;
-    const encryptedDodo = dodoPaymentsApiKey ? await encryptSecret(String(dodoPaymentsApiKey)) : null;
+    const rawStripe = typeof stripeApiKey === "string" ? stripeApiKey.trim() : "";
+    const rawDodo = typeof dodoPaymentsApiKey === "string" ? dodoPaymentsApiKey.trim() : "";
+
+    const encryptedStripe =
+      rawStripe && (rawStripe.startsWith("••") || rawStripe.includes("••••"))
+        ? access.project.stripeApiKey
+        : rawStripe
+        ? await encryptSecret(rawStripe)
+        : null;
+    const encryptedDodo =
+      rawDodo && (rawDodo.startsWith("••") || rawDodo.includes("••••"))
+        ? access.project.dodoPaymentsApiKey
+        : rawDodo
+        ? await encryptSecret(rawDodo)
+        : null;
 
     // Update project revenue keys encrypted at rest in Turso database
     await db

@@ -212,7 +212,7 @@ export function TracesFullView({ workspace }: { workspace: LoadedWorkspaceReady 
 
   const otlpEndpoint = `https://devpulse.ritualdev.in/api/v1/ingest/otlp/traces`;
   const otlpSnippet = `export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="${otlpEndpoint}"
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${project.telemetryApiKey}"`;
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${project.telemetryApiKey || "YOUR_API_KEY"}"`;
 
   return (
     <WorkspaceShell

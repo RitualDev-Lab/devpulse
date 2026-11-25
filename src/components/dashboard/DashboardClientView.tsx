@@ -257,13 +257,14 @@ export function DashboardClientView({
         isOpen={isAlertsOpen}
         onClose={() => setIsAlertsOpen(false)}
         projectId={data.project.id}
-        initialDiscord={data.project.discordWebhookUrl}
-        initialSlack={data.project.slackWebhookUrl}
-        initialTelegramToken={data.project.telegramBotToken}
-        initialTelegramChatId={data.project.telegramChatId}
-        initialGenericWebhook={data.project.genericWebhookUrl}
-        initialPagerDuty={data.project.pagerdutyRoutingKey}
-        initialNotificationEmail={data.project.notificationEmail}
+        initialHasDiscord={Boolean(data.project.hasDiscordWebhook)}
+        initialHasSlack={Boolean(data.project.hasSlackWebhook)}
+        initialHasTelegram={Boolean(data.project.hasTelegramWebhook)}
+        initialHasGeneric={Boolean(data.project.hasGenericWebhook)}
+        initialHasPagerDuty={Boolean(data.project.hasPagerDuty)}
+        initialHasOpsgenie={Boolean(data.project.hasOpsgenieApiKey)}
+        initialHasTeams={Boolean(data.project.hasTeamsWebhook)}
+        initialHasNotificationEmail={Boolean(data.project.hasNotificationEmail)}
         initialEmailProvider={data.project.emailProvider}
         initialHasEmailApiKey={data.project.hasEmailApiKey}
         initialDigestEnabled={data.project.digestEnabled}

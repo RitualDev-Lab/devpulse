@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { projects, syntheticRuns, syntheticTests } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { computeP95Latency, isValidPublicMonitorUrl } from "@/lib/monitors/checker";
-import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { decryptSecret } from "@/lib/security/crypto";
 
 export const EDGE_REGIONS = [
@@ -337,20 +337,9 @@ export async function executeSyntheticTestAcrossRegions(testId: string) {
       .where(eq(projects.id, test.projectId))
       .limit(1);
     if (proj) {
-      const opsKey = proj.opsgenieApiKeyEncrypted
-        ? await decryptSecret(proj.opsgenieApiKeyEncrypted).catch(() => null)
-        : null;
+      const webhookConfig = await resolveDecryptedWebhookConfig(proj);
       await dispatchCrashAlerts(
-        {
-          discordWebhookUrl: proj.discordWebhookUrl,
-          slackWebhookUrl: proj.slackWebhookUrl,
-          telegramBotToken: proj.telegramBotToken,
-          telegramChatId: proj.telegramChatId,
-          genericWebhookUrl: proj.genericWebhookUrl,
-          pagerdutyRoutingKey: proj.pagerdutyRoutingKey,
-          opsgenieApiKey: opsKey,
-          teamsWebhookUrl: proj.teamsWebhookUrl,
-        },
+        webhookConfig,
         {
           eventId: `syn_${test.id}`,
           projectName: proj.name,

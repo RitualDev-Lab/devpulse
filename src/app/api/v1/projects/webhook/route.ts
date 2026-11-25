@@ -3,11 +3,12 @@ import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { canUseAlertChannel } from "@/lib/billing/plans";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { decryptSecret, encryptSecret } from "@/lib/security/crypto";
+import { validatePublicUrl } from "@/lib/security/ssrf";
 import { sendTransactionalEmail } from "@/lib/alerts/email";
 
 export async function POST(req: NextRequest) {
@@ -82,40 +83,94 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let nextOpsgenieKeyEncrypted = access.project.opsgenieApiKeyEncrypted || null;
-    if (typeof opsgenieApiKey === "string") {
-      const trimmedOg = opsgenieApiKey.trim();
-      if (!trimmedOg) {
-        nextOpsgenieKeyEncrypted = null;
-      } else if (!trimmedOg.startsWith("••") && !trimmedOg.includes("••••")) {
-        nextOpsgenieKeyEncrypted = await encryptSecret(trimmedOg);
+    const resolveChannelField = async (
+      incoming: unknown,
+      existingValue: string | null,
+      options?: { validateHttpsUrl?: boolean; label?: string }
+    ): Promise<{ encrypted: string | null; error?: string }> => {
+      if (incoming === undefined) return { encrypted: existingValue };
+      const trimmed = typeof incoming === "string" ? incoming.trim() : "";
+      if (!trimmed) return { encrypted: null };
+      if (trimmed.startsWith("••") || trimmed.includes("••••")) {
+        return { encrypted: existingValue };
       }
+      if (options?.validateHttpsUrl) {
+        const urlCheck = validatePublicUrl(trimmed, { allowHttp: false });
+        if (!urlCheck.valid || !urlCheck.normalized) {
+          return {
+            encrypted: existingValue,
+            error: `Invalid ${options.label || "webhook"} URL: ${urlCheck.reason}`,
+          };
+        }
+        return { encrypted: await encryptSecret(urlCheck.normalized) };
+      }
+      return { encrypted: await encryptSecret(trimmed) };
+    };
+
+    const [
+      nextDiscordRes,
+      nextSlackRes,
+      nextTelegramTokenRes,
+      nextGenericRes,
+      nextPagerDutyRes,
+      nextOpsgenieRes,
+      nextTeamsRes,
+      nextEmailKeyRes,
+    ] = await Promise.all([
+      resolveChannelField(discordWebhookUrl, access.project.discordWebhookUrl, { validateHttpsUrl: true, label: "Discord webhook" }),
+      resolveChannelField(slackWebhookUrl, access.project.slackWebhookUrl, { validateHttpsUrl: true, label: "Slack webhook" }),
+      resolveChannelField(telegramBotToken, access.project.telegramBotToken),
+      resolveChannelField(genericWebhookUrl, access.project.genericWebhookUrl, { validateHttpsUrl: true, label: "Generic webhook" }),
+      resolveChannelField(pagerdutyRoutingKey, access.project.pagerdutyRoutingKey),
+      resolveChannelField(opsgenieApiKey, access.project.opsgenieApiKeyEncrypted),
+      resolveChannelField(teamsWebhookUrl, access.project.teamsWebhookUrl, { validateHttpsUrl: true, label: "Teams webhook" }),
+      resolveChannelField(emailApiKey, access.project.emailApiKeyEncrypted),
+    ]);
+
+    const firstUrlError =
+      nextDiscordRes.error ||
+      nextSlackRes.error ||
+      nextGenericRes.error ||
+      nextTeamsRes.error;
+    if (firstUrlError) {
+      return NextResponse.json({ error: firstUrlError }, { status: 400 });
     }
 
-    // Preserve existing encrypted email API key unless explicitly changed or cleared
-    let nextEmailKeyEncrypted = access.project.emailApiKeyEncrypted || null;
-    if (typeof emailApiKey === "string") {
-      const trimmedKey = emailApiKey.trim();
-      if (!trimmedKey) {
-        nextEmailKeyEncrypted = null;
-      } else if (!trimmedKey.startsWith("••") && !trimmedKey.includes("••••")) {
-        nextEmailKeyEncrypted = await encryptSecret(trimmedKey);
-      }
-    }
+    const nextDiscordEncrypted = nextDiscordRes.encrypted;
+    const nextSlackEncrypted = nextSlackRes.encrypted;
+    const nextTelegramTokenEncrypted = nextTelegramTokenRes.encrypted;
+    const nextGenericEncrypted = nextGenericRes.encrypted;
+    const nextPagerDutyEncrypted = nextPagerDutyRes.encrypted;
+    const nextOpsgenieKeyEncrypted = nextOpsgenieRes.encrypted;
+    const nextTeamsEncrypted = nextTeamsRes.encrypted;
+    const nextEmailKeyEncrypted = nextEmailKeyRes.encrypted;
+    const nextTelegramChatId =
+      typeof telegramChatId === "string"
+        ? telegramChatId.trim().startsWith("••")
+          ? access.project.telegramChatId
+          : telegramChatId.trim() || null
+        : access.project.telegramChatId;
 
-    // Update webhook & email settings scoped by RBAC
+    const nextNotificationEmail =
+      notificationEmail === undefined
+        ? access.project.notificationEmail
+        : String(notificationEmail).trim().startsWith("••")
+        ? access.project.notificationEmail
+        : String(notificationEmail).trim() || null;
+
+    // Update webhook & email settings encrypted at rest & scoped by RBAC
     await db
       .update(projects)
       .set({
-        discordWebhookUrl: discordWebhookUrl || null,
-        slackWebhookUrl: slackWebhookUrl || null,
-        telegramBotToken: telegramBotToken || null,
-        telegramChatId: telegramChatId || null,
-        genericWebhookUrl: genericWebhookUrl || null,
-        pagerdutyRoutingKey: pagerdutyRoutingKey || null,
+        discordWebhookUrl: nextDiscordEncrypted,
+        slackWebhookUrl: nextSlackEncrypted,
+        telegramBotToken: nextTelegramTokenEncrypted,
+        telegramChatId: nextTelegramChatId,
+        genericWebhookUrl: nextGenericEncrypted,
+        pagerdutyRoutingKey: nextPagerDutyEncrypted,
         opsgenieApiKeyEncrypted: nextOpsgenieKeyEncrypted,
-        teamsWebhookUrl: teamsWebhookUrl || null,
-        notificationEmail: notificationEmail ? String(notificationEmail).trim() : null,
+        teamsWebhookUrl: nextTeamsEncrypted,
+        notificationEmail: nextNotificationEmail,
         emailProvider: emailProvider === "postmark" ? "postmark" : "resend",
         emailApiKeyEncrypted: nextEmailKeyEncrypted,
         digestEnabled: Boolean(digestEnabled),
@@ -132,32 +187,32 @@ export async function POST(req: NextRequest) {
       resourceId: access.project.id,
       headers: req.headers,
       metadata: {
-        hasDiscord: Boolean(discordWebhookUrl),
-        hasSlack: Boolean(slackWebhookUrl),
-        hasTelegram: Boolean(telegramBotToken && telegramChatId),
-        hasGeneric: Boolean(genericWebhookUrl),
-        hasPagerDuty: Boolean(pagerdutyRoutingKey),
+        hasDiscord: Boolean(nextDiscordEncrypted),
+        hasSlack: Boolean(nextSlackEncrypted),
+        hasTelegram: Boolean(nextTelegramTokenEncrypted && nextTelegramChatId),
+        hasGeneric: Boolean(nextGenericEncrypted),
+        hasPagerDuty: Boolean(nextPagerDutyEncrypted),
         hasOpsGenie: Boolean(nextOpsgenieKeyEncrypted),
-        hasTeams: Boolean(teamsWebhookUrl),
+        hasTeams: Boolean(nextTeamsEncrypted),
         hasEmailAlerts: Boolean(notificationEmail),
         digestEnabled: Boolean(digestEnabled),
       },
     });
 
-    // If testPing requested, dispatch a test notification
+    // If testPing requested, decrypt configured channels & dispatch test alert
     if (testPing) {
-      const plainOpsgenie = await decryptSecret(nextOpsgenieKeyEncrypted);
+      const decryptedCfg = await resolveDecryptedWebhookConfig({
+        discordWebhookUrl: nextDiscordEncrypted,
+        slackWebhookUrl: nextSlackEncrypted,
+        telegramBotToken: nextTelegramTokenEncrypted,
+        telegramChatId: nextTelegramChatId,
+        genericWebhookUrl: nextGenericEncrypted,
+        pagerdutyRoutingKey: nextPagerDutyEncrypted,
+        opsgenieApiKeyEncrypted: nextOpsgenieKeyEncrypted,
+        teamsWebhookUrl: nextTeamsEncrypted,
+      });
       await dispatchCrashAlerts(
-        {
-          discordWebhookUrl,
-          slackWebhookUrl,
-          telegramBotToken,
-          telegramChatId,
-          genericWebhookUrl,
-          pagerdutyRoutingKey,
-          opsgenieApiKey: plainOpsgenie,
-          teamsWebhookUrl,
-        },
+        decryptedCfg,
         {
           eventId: "err_test_ping",
           projectName: "DevPulse Alert Test",
@@ -172,10 +227,10 @@ export async function POST(req: NextRequest) {
         }
       );
 
-      if (notificationEmail) {
+      if (nextNotificationEmail) {
         const plainEmailKey = await decryptSecret(nextEmailKeyEncrypted);
         await sendTransactionalEmail({
-          to: String(notificationEmail).trim(),
+          to: nextNotificationEmail,
           subject: "[DevPulse] Test Crash & Uptime Email Connected",
           html: `<p>Your DevPulse email alert channel (<strong>${emailProvider === "postmark" ? "Postmark" : "Resend"}</strong>) is connected and ready for fatal crash alerts, uptime downtime notifications, and weekly maintainer digests.</p>`,
           provider: emailProvider,

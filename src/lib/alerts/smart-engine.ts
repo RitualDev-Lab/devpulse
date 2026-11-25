@@ -10,7 +10,7 @@ import {
 } from "@/db/schema";
 import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
 import { decryptSecret } from "@/lib/security/crypto";
-import { dispatchTargetedChannels, type WebhookConfig } from "./webhook";
+import { dispatchTargetedChannels, resolveDecryptedWebhookConfig, type WebhookConfig } from "./webhook";
 import { sendTransactionalEmail } from "./email";
 import { recordAuditEvent } from "@/lib/security/audit";
 
@@ -120,19 +120,12 @@ function parseChannelsJson(raw?: string | null): string[] {
 async function resolveProjectWebhookConfig(
   proj: typeof projects.$inferSelect
 ): Promise<WebhookConfig & { emailKey: string | null }> {
-  const [opsgenieApiKey, emailKey] = await Promise.all([
-    proj.opsgenieApiKeyEncrypted ? decryptSecret(proj.opsgenieApiKeyEncrypted) : null,
-    proj.emailApiKeyEncrypted ? decryptSecret(proj.emailApiKeyEncrypted) : null,
+  const [cfg, emailKey] = await Promise.all([
+    resolveDecryptedWebhookConfig(proj),
+    proj.emailApiKeyEncrypted ? decryptSecret(proj.emailApiKeyEncrypted).catch(() => null) : Promise.resolve(null),
   ]);
   return {
-    discordWebhookUrl: proj.discordWebhookUrl,
-    slackWebhookUrl: proj.slackWebhookUrl,
-    telegramBotToken: proj.telegramBotToken,
-    telegramChatId: proj.telegramChatId,
-    genericWebhookUrl: proj.genericWebhookUrl,
-    pagerdutyRoutingKey: proj.pagerdutyRoutingKey,
-    opsgenieApiKey,
-    teamsWebhookUrl: proj.teamsWebhookUrl,
+    ...cfg,
     emailKey,
   };
 }

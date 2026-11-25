@@ -19,7 +19,7 @@ import { STACK_PRESETS, type StackPresetId } from "@/lib/dashboard/presets";
 interface QuickConnectPanelProps {
   projectId: string;
   projectSlug: string;
-  telemetryApiKey: string;
+  telemetryApiKey?: string | null;
   initialPreset?: string | null;
   hasNpmToken?: boolean;
   hasGithubToken?: boolean;

@@ -678,5 +678,9 @@ export async function initDb() {
     );
   `);
 
+  await client.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS projects_slug_unique ON projects(slug);
+  `).catch(() => {});
+
   console.log("DevPulse Database tables verified successfully.");
 }

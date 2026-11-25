@@ -3,6 +3,9 @@
  * Sends crash & bug reports to Discord, Slack, and Telegram
  */
 
+import { decryptSecret } from "@/lib/security/crypto";
+import { validatePublicUrl } from "@/lib/security/ssrf";
+
 export interface AlertPayload {
   eventId?: string;
   projectName: string;
@@ -38,6 +41,51 @@ export type AlertChannelId =
   | "pagerduty"
   | "opsgenie"
   | "teams";
+
+/**
+ * Decrypts at-rest encrypted alert channel credentials from a project record.
+ */
+export async function resolveDecryptedWebhookConfig(proj: {
+  discordWebhookUrl?: string | null;
+  slackWebhookUrl?: string | null;
+  telegramBotToken?: string | null;
+  telegramChatId?: string | null;
+  genericWebhookUrl?: string | null;
+  pagerdutyRoutingKey?: string | null;
+  opsgenieApiKeyEncrypted?: string | null;
+  teamsWebhookUrl?: string | null;
+}): Promise<WebhookConfig> {
+  const [
+    discordWebhookUrl,
+    slackWebhookUrl,
+    telegramBotToken,
+    telegramChatId,
+    genericWebhookUrl,
+    pagerdutyRoutingKey,
+    opsgenieApiKey,
+    teamsWebhookUrl,
+  ] = await Promise.all([
+    decryptSecret(proj.discordWebhookUrl).catch(() => null),
+    decryptSecret(proj.slackWebhookUrl).catch(() => null),
+    decryptSecret(proj.telegramBotToken).catch(() => null),
+    decryptSecret(proj.telegramChatId).catch(() => null),
+    decryptSecret(proj.genericWebhookUrl).catch(() => null),
+    decryptSecret(proj.pagerdutyRoutingKey).catch(() => null),
+    decryptSecret(proj.opsgenieApiKeyEncrypted).catch(() => null),
+    decryptSecret(proj.teamsWebhookUrl).catch(() => null),
+  ]);
+
+  return {
+    discordWebhookUrl,
+    slackWebhookUrl,
+    telegramBotToken,
+    telegramChatId,
+    genericWebhookUrl,
+    pagerdutyRoutingKey,
+    opsgenieApiKey,
+    teamsWebhookUrl,
+  };
+}
 
 /**
  * Dispatch alerts to all configured webhooks concurrently.
@@ -96,6 +144,8 @@ export async function dispatchTargetedChannels(
  * Send rich Discord Embed alert
  */
 export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
+  const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
+  if (!urlCheck.valid || !urlCheck.normalized) return false;
   const url = data.dashboardUrl || `https://devpulse.ritualdev.in`;
 
   const body = {
@@ -140,6 +190,8 @@ export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
  * Send Slack Block Kit alert
  */
 export async function sendSlackAlert(webhookUrl: string, data: AlertPayload) {
+  const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
+  if (!urlCheck.valid || !urlCheck.normalized) return false;
   const url = data.dashboardUrl || `https://devpulse.ritualdev.in`;
 
   const body = {
@@ -230,6 +282,11 @@ export async function sendTelegramAlert(
  * Send standardized JSON payload to a Generic Webhook endpoint
  */
 export async function sendGenericWebhookAlert(webhookUrl: string, data: AlertPayload) {
+  const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
+  if (!urlCheck.valid || !urlCheck.normalized) {
+    console.warn("Blocked unsafe generic webhook URL:", urlCheck.reason);
+    return false;
+  }
   const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
 
   const body = {
@@ -360,6 +417,8 @@ export async function sendOpsGenieAlert(apiKey: string, data: AlertPayload) {
  * Send Microsoft Teams Webhook MessageCard Alert
  */
 export async function sendTeamsAlert(webhookUrl: string, data: AlertPayload) {
+  const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
+  if (!urlCheck.valid || !urlCheck.normalized) return false;
   const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
 
   const body = {

@@ -123,7 +123,7 @@ export function FlagsFullView({ workspace }: { workspace: LoadedWorkspaceReady }
   };
 
   const sdkCode = `import { DevPulse } from "@ritualdev/devpulse";
-const pulse = new DevPulse({ apiKey: "${project.telemetryApiKey}" }).init();
+const pulse = new DevPulse({ apiKey: "${project.telemetryApiKey || "YOUR_API_KEY"}" }).init();
 
 if (await pulse.flag("new-checkout", { userId: "usr_123" })) {
   const variant = await pulse.getFlagVariant("new-checkout", "usr_123"); // "control" | "treatment"

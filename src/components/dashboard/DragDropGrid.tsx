@@ -60,15 +60,25 @@ export interface DashboardData {
     dockerImage?: string | null;
     vscodeExtension?: string | null;
     mcpServerName?: string | null;
-    telemetryApiKey: string;
+    telemetryApiKey?: string | null;
+    hasTelemetryApiKey?: boolean;
     discordWebhookUrl?: string | null;
     slackWebhookUrl?: string | null;
     telegramBotToken?: string | null;
     telegramChatId?: string | null;
     genericWebhookUrl?: string | null;
     pagerdutyRoutingKey?: string | null;
+    teamsWebhookUrl?: string | null;
     notificationEmail?: string | null;
     emailProvider?: string | null;
+    hasDiscordWebhook?: boolean;
+    hasSlackWebhook?: boolean;
+    hasTelegramWebhook?: boolean;
+    hasGenericWebhook?: boolean;
+    hasPagerDuty?: boolean;
+    hasOpsgenieApiKey?: boolean;
+    hasTeamsWebhook?: boolean;
+    hasNotificationEmail?: boolean;
     hasEmailApiKey?: boolean;
     digestEnabled?: boolean;
     stripeApiKey?: string | null;
@@ -462,11 +472,11 @@ export function DragDropGrid({
           <ErrorStreamCard
             initialErrors={data.errors}
             projectId={data.project.id}
-            telemetryApiKey={data.project.telemetryApiKey}
+            telemetryApiKey={data.project.telemetryApiKey || undefined}
           />
         );
       case "telemetry_setup":
-        return <TelemetrySetupCard apiKey={data.project.telemetryApiKey} />;
+        return <TelemetrySetupCard apiKey={data.project.telemetryApiKey || "YOUR_API_KEY"} />;
       case "release_health":
         return (
           <ReleaseHealthCard

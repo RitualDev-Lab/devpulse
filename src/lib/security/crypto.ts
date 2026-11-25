@@ -1,16 +1,23 @@
 /**
- * Envelope Encryption Helper (AES-256-GCM)
+ * Envelope Encryption Helper (AES-256-GCM) with Versioned Key Support
  * Encrypts sensitive user tokens & provider credentials at rest in Turso
- * using ENCRYPTION_MASTER_KEY (stored strictly in Cloudflare / server env).
+ * using SECRET_ENCRYPTION_KEY (or ENCRYPTION_MASTER_KEY) stored in server env.
  *
- * Ciphertext format: `enc:v1:<12-byte-iv-base64>:<ciphertext+tag-base64>`
+ * Ciphertext format: `enc:<keyVersion>:<12-byte-iv-base64>:<ciphertext+tag-base64>`
+ * Supports key rotation via SECRET_ENCRYPTION_KEY_VERSION (default `v1`) and
+ * optional legacy decryption keys (`ENCRYPTION_MASTER_KEY`, `SECRET_ENCRYPTION_KEY_PREVIOUS`).
  */
 
-const PREFIX = "enc:v1:";
+const CURRENT_KEY_VERSION = (
+  process.env.SECRET_ENCRYPTION_KEY_VERSION?.trim() || "v1"
+).replace(/[^a-zA-Z0-9_-]/g, "");
+
+function prefixForVersion(version: string): string {
+  return `enc:${version}:`;
+}
 
 function decodeKeyBytes(raw: string): Uint8Array {
   const trimmed = raw.trim();
-  // Support 64-char hex or base64-encoded 32-byte key or fallback SHA-256 derivation
   if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
     const out = new Uint8Array(32);
     for (let i = 0; i < 32; i++) {
@@ -24,49 +31,80 @@ function decodeKeyBytes(raw: string): Uint8Array {
       return Uint8Array.from(bin, (c) => c.charCodeAt(0));
     }
   } catch {
-    // fall through
+    // fall through to SHA-256 KDF
   }
-  throw new Error("ENCRYPTION_MASTER_KEY must be a 32-byte base64 or 64-char hex string.");
+  throw new Error("Encryption key must be a 32-byte base64 or 64-char hex string.");
 }
 
-async function importMasterKey(): Promise<CryptoKey> {
-  const raw = process.env.ENCRYPTION_MASTER_KEY?.trim();
-  if (!raw) {
-    throw new Error("ENCRYPTION_MASTER_KEY is not configured in server environment.");
-  }
-
+async function importAesKeyFromString(raw: string): Promise<CryptoKey> {
   let keyBytes: Uint8Array;
   try {
     keyBytes = decodeKeyBytes(raw);
   } catch {
-    // Derive exact 256-bit AES key via SHA-256 if non-standard length string supplied
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
     keyBytes = new Uint8Array(digest);
   }
-
-  const cleanBytes = new Uint8Array(keyBytes);
   return crypto.subtle.importKey(
     "raw",
-    cleanBytes,
+    new Uint8Array(keyBytes),
     { name: "AES-GCM" },
     false,
     ["encrypt", "decrypt"]
   );
 }
 
+function getPrimaryKeyMaterial(): string {
+  const raw =
+    process.env.SECRET_ENCRYPTION_KEY?.trim() ||
+    process.env.ENCRYPTION_MASTER_KEY?.trim();
+  if (!raw) {
+    throw new Error(
+      "SECRET_ENCRYPTION_KEY or ENCRYPTION_MASTER_KEY must be configured in server environment."
+    );
+  }
+  return raw;
+}
+
+function getCandidateKeyMaterials(version?: string): string[] {
+  const candidates: string[] = [];
+  if (version) {
+    const versionSpecific = process.env[`SECRET_ENCRYPTION_KEY_${version.toUpperCase()}`]?.trim();
+    if (versionSpecific) candidates.push(versionSpecific);
+  }
+  const secretKey = process.env.SECRET_ENCRYPTION_KEY?.trim();
+  const masterKey = process.env.ENCRYPTION_MASTER_KEY?.trim();
+  const prevKey = process.env.SECRET_ENCRYPTION_KEY_PREVIOUS?.trim();
+
+  for (const k of [secretKey, masterKey, prevKey]) {
+    if (k && !candidates.includes(k)) candidates.push(k);
+  }
+  if (candidates.length === 0) {
+    throw new Error(
+      "SECRET_ENCRYPTION_KEY or ENCRYPTION_MASTER_KEY must be configured in server environment."
+    );
+  }
+  return candidates;
+}
+
 export function isEncryptedValue(val?: string | null): boolean {
-  return Boolean(val && val.startsWith(PREFIX));
+  return Boolean(val && /^enc:[a-zA-Z0-9_-]+:/.test(val));
 }
 
 export async function encryptSecret(plaintext?: string | null): Promise<string | null> {
   if (!plaintext) return null;
   const trimmed = plaintext.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith(PREFIX)) return trimmed;
 
-  const key = await importMasterKey();
+  const targetPrefix = prefixForVersion(CURRENT_KEY_VERSION);
+  if (trimmed.startsWith(targetPrefix)) return trimmed;
+
+  // If re-encrypting an older envelope version, decrypt first and re-wrap under active key version
+  const rawPlain = isEncryptedValue(trimmed) ? await decryptSecret(trimmed) : trimmed;
+  if (!rawPlain) return null;
+
+  const key = await importAesKeyFromString(getPrimaryKeyMaterial());
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoded = new TextEncoder().encode(trimmed);
+  const encoded = new TextEncoder().encode(rawPlain);
 
   const cipherBuf = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
@@ -76,7 +114,7 @@ export async function encryptSecret(plaintext?: string | null): Promise<string |
 
   const ivB64 = btoa(String.fromCharCode(...iv));
   const ctB64 = btoa(String.fromCharCode(...new Uint8Array(cipherBuf)));
-  return `${PREFIX}${ivB64}:${ctB64}`;
+  return `${targetPrefix}${ivB64}:${ctB64}`;
 }
 
 export async function decryptSecret(stored?: string | null): Promise<string | null> {
@@ -84,24 +122,37 @@ export async function decryptSecret(stored?: string | null): Promise<string | nu
   const trimmed = stored.trim();
   if (!trimmed) return null;
 
-  // Transparent migration compatibility for pre-encryption plaintext records
-  if (!trimmed.startsWith(PREFIX)) {
+  // Backward compatibility for legacy pre-encryption records
+  if (!isEncryptedValue(trimmed)) {
     return trimmed;
   }
 
-  const parts = trimmed.slice(PREFIX.length).split(":");
-  if (parts.length !== 2) {
+  const match = trimmed.match(/^enc:([a-zA-Z0-9_-]+):([^:]+):([^:]+)$/);
+  if (!match) {
     throw new Error("Malformed encrypted secret envelope.");
   }
 
-  const iv = Uint8Array.from(atob(parts[0]), (c) => c.charCodeAt(0));
-  const cipherBytes = Uint8Array.from(atob(parts[1]), (c) => c.charCodeAt(0));
-  const key = await importMasterKey();
+  const [, version, ivB64, ctB64] = match;
+  const iv = Uint8Array.from(atob(ivB64), (c) => c.charCodeAt(0));
+  const cipherBytes = Uint8Array.from(atob(ctB64), (c) => c.charCodeAt(0));
 
-  const plainBuf = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    key,
-    cipherBytes
-  );
-  return new TextDecoder().decode(plainBuf);
+  const candidates = getCandidateKeyMaterials(version);
+  let lastError: unknown = null;
+  for (const rawKey of candidates) {
+    try {
+      const key = await importAesKeyFromString(rawKey);
+      const plainBuf = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        key,
+        cipherBytes
+      );
+      return new TextDecoder().decode(plainBuf);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Failed to decrypt secret with available encryption keys.");
 }

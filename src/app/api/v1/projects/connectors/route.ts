@@ -15,6 +15,7 @@ import { fetchNpmOrgPackages } from "@/lib/integrations/npm";
 import { scanGitHubRepository } from "@/lib/scanner/github-scanner";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { decryptSecret } from "@/lib/security/crypto";
+import { validatePublicUrl } from "@/lib/security/ssrf";
 
 export const dynamic = "force-dynamic";
 
@@ -307,6 +308,15 @@ export async function POST(req: NextRequest) {
       const provider = String(body.provider || "custom").trim().slice(0, 48);
       const label = String(body.label || provider).trim().slice(0, 80);
       const targetUrl = body.targetUrl ? String(body.targetUrl).trim().slice(0, 500) : null;
+      if (targetUrl) {
+        const urlCheck = validatePublicUrl(targetUrl, { allowHttp: false });
+        if (!urlCheck.valid) {
+          return NextResponse.json(
+            { error: `Unsafe connector targetUrl: ${urlCheck.reason}` },
+            { status: 400 }
+          );
+        }
+      }
       const identifier = body.identifier ? String(body.identifier).trim().slice(0, 160) : null;
       const rawSecret = body.apiKey ? String(body.apiKey).trim() : "";
 

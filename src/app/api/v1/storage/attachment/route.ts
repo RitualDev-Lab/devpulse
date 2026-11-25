@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { errorEvents, projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
+import { resolveProjectAccess } from "@/lib/security/rbac";
+import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 import { resolveUserStorageContext } from "@/lib/storage/quota";
 import { createPresignedUrl, getR2ObjectText } from "@/lib/storage/r2";
 
@@ -37,11 +39,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Tenant scoping: allow demo project preview OR authenticated owner
+    // Tenant scoping & RBAC: allow demo preview OR any authorized org/project member
     if (project.id !== "prj_ritual_core") {
       const user = await getCurrentUser();
-      if (!user || user.id !== project.userId) {
+      if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const access = await resolveProjectAccess(project.id, user);
+      if (!access || !access.canRead) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
 
@@ -57,8 +63,11 @@ export async function GET(req: NextRequest) {
       if (!event.attachmentUrl) {
         return NextResponse.json({ error: "No attachment for this event" }, { status: 404 });
       }
-      if (event.attachmentUrl.startsWith("http://") || event.attachmentUrl.startsWith("https://")) {
-        return NextResponse.json({ url: event.attachmentUrl, objectKey: null });
+      if (!isValidProjectR2ObjectKey(event.attachmentUrl, project.id, project.userId)) {
+        return NextResponse.json(
+          { error: "Invalid attachment object key for this project." },
+          { status: 400 }
+        );
       }
       const url = await createPresignedUrl(storageCtx.credentials, {
         method: "GET",
@@ -80,6 +89,13 @@ export async function GET(req: NextRequest) {
         sizeBytes: event.payloadSizeBytes || 0,
         provider: "turso",
       });
+    }
+
+    if (!isValidProjectR2ObjectKey(event.r2ObjectKey, project.id, project.userId)) {
+      return NextResponse.json(
+        { error: "Invalid R2 payload key for this project." },
+        { status: 400 }
+      );
     }
 
     const rawContent = await getR2ObjectText(storageCtx.credentials, event.r2ObjectKey);

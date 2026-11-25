@@ -5,7 +5,8 @@ import { eq } from "drizzle-orm";
 import { checkRateLimit, getClientIp, verifyTurnstileToken } from "@/lib/security/rate-limit";
 import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
-import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
+import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096;
 const MAX_TURSO_PREVIEW_CHARS = 2000;
@@ -104,6 +105,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    let validatedAttachmentKey: string | null = null;
+    if (attachmentKey) {
+      if (!isValidProjectR2ObjectKey(attachmentKey, project.id, project.userId)) {
+        return NextResponse.json(
+          { error: "Invalid attachmentKey: must be a project-scoped R2 object key." },
+          { status: 400 }
+        );
+      }
+      validatedAttachmentKey = attachmentKey.trim();
+    }
+
     await db.insert(errorEvents).values({
       id: eventId,
       projectId: project.id,
@@ -113,7 +125,7 @@ export async function POST(req: NextRequest) {
       runtime: String(runtime || "cli").slice(0, 50),
       environment: "production",
       status: "unresolved",
-      attachmentUrl: attachmentKey ? String(attachmentKey).slice(0, 512) : null,
+      attachmentUrl: validatedAttachmentKey,
       r2ObjectKey,
       payloadSizeBytes: payloadBytes,
       storageProvider,
@@ -125,17 +137,13 @@ export async function POST(req: NextRequest) {
       project.slackWebhookUrl ||
       (project.telegramBotToken && project.telegramChatId) ||
       project.genericWebhookUrl ||
-      project.pagerdutyRoutingKey
+      project.pagerdutyRoutingKey ||
+      project.opsgenieApiKeyEncrypted ||
+      project.teamsWebhookUrl
     ) {
+      const webhookConfig = await resolveDecryptedWebhookConfig(project);
       await dispatchCrashAlerts(
-        {
-          discordWebhookUrl: project.discordWebhookUrl,
-          slackWebhookUrl: project.slackWebhookUrl,
-          telegramBotToken: project.telegramBotToken,
-          telegramChatId: project.telegramChatId,
-          genericWebhookUrl: project.genericWebhookUrl,
-          pagerdutyRoutingKey: project.pagerdutyRoutingKey,
-        },
+        webhookConfig,
         {
           eventId,
           projectName: project.name,

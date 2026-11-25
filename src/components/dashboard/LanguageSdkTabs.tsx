@@ -16,7 +16,7 @@ type LangTabId =
   | "cli";
 
 interface LanguageSdkTabsProps {
-  apiKey: string;
+  apiKey?: string | null;
   projectSlug: string;
   isDemo?: boolean;
   onMetricSent?: () => void;
@@ -35,7 +35,7 @@ const LANG_TABS: Array<{ id: LangTabId; label: string; file: string }> = [
   { id: "cli", label: "CLI Apps", file: "beacon.sh" },
 ];
 
-function buildLanguageSnippet(tab: LangTabId, apiKey: string): string {
+function buildLanguageSnippet(tab: LangTabId, apiKey?: string | null): string {
   const key = apiKey || "dp_live_your_api_key";
   switch (tab) {
     case "nextjs":

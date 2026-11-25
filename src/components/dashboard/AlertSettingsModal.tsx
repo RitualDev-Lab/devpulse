@@ -13,9 +13,16 @@ interface AlertSettingsModalProps {
   initialTelegramChatId?: string | null;
   initialGenericWebhook?: string | null;
   initialPagerDuty?: string | null;
+  initialHasDiscord?: boolean;
+  initialHasSlack?: boolean;
+  initialHasTelegram?: boolean;
+  initialHasGeneric?: boolean;
+  initialHasPagerDuty?: boolean;
   initialHasOpsgenie?: boolean;
   initialTeamsWebhook?: string | null;
+  initialHasTeams?: boolean;
   initialNotificationEmail?: string | null;
+  initialHasNotificationEmail?: boolean;
   initialEmailProvider?: string | null;
   initialHasEmailApiKey?: boolean;
   initialDigestEnabled?: boolean;
@@ -31,22 +38,45 @@ export function AlertSettingsModal({
   initialTelegramChatId,
   initialGenericWebhook,
   initialPagerDuty,
+  initialHasDiscord,
+  initialHasSlack,
+  initialHasTelegram,
+  initialHasGeneric,
+  initialHasPagerDuty,
   initialHasOpsgenie,
   initialTeamsWebhook,
+  initialHasTeams,
   initialNotificationEmail,
+  initialHasNotificationEmail,
   initialEmailProvider,
   initialHasEmailApiKey,
   initialDigestEnabled,
 }: AlertSettingsModalProps) {
-  const [discordUrl, setDiscordUrl] = useState(initialDiscord || "");
-  const [slackUrl, setSlackUrl] = useState(initialSlack || "");
-  const [telegramToken, setTelegramToken] = useState(initialTelegramToken || "");
-  const [telegramChatId, setTelegramChatId] = useState(initialTelegramChatId || "");
-  const [genericWebhookUrl, setGenericWebhookUrl] = useState(initialGenericWebhook || "");
-  const [pagerdutyRoutingKey, setPagerdutyRoutingKey] = useState(initialPagerDuty || "");
+  const [discordUrl, setDiscordUrl] = useState(
+    initialDiscord || (initialHasDiscord ? "••••••••" : "")
+  );
+  const [slackUrl, setSlackUrl] = useState(
+    initialSlack || (initialHasSlack ? "••••••••" : "")
+  );
+  const [telegramToken, setTelegramToken] = useState(
+    initialTelegramToken || (initialHasTelegram ? "••••••••" : "")
+  );
+  const [telegramChatId, setTelegramChatId] = useState(
+    initialTelegramChatId || (initialHasTelegram ? "••••••••" : "")
+  );
+  const [genericWebhookUrl, setGenericWebhookUrl] = useState(
+    initialGenericWebhook || (initialHasGeneric ? "••••••••" : "")
+  );
+  const [pagerdutyRoutingKey, setPagerdutyRoutingKey] = useState(
+    initialPagerDuty || (initialHasPagerDuty ? "••••••••" : "")
+  );
   const [opsgenieApiKey, setOpsgenieApiKey] = useState(initialHasOpsgenie ? "••••••••" : "");
-  const [teamsWebhookUrl, setTeamsWebhookUrl] = useState(initialTeamsWebhook || "");
-  const [notificationEmail, setNotificationEmail] = useState(initialNotificationEmail || "");
+  const [teamsWebhookUrl, setTeamsWebhookUrl] = useState(
+    initialTeamsWebhook || (initialHasTeams ? "••••••••" : "")
+  );
+  const [notificationEmail, setNotificationEmail] = useState(
+    initialNotificationEmail || (initialHasNotificationEmail ? "••••••••" : "")
+  );
   const [emailProvider, setEmailProvider] = useState(initialEmailProvider === "postmark" ? "postmark" : "resend");
   const [emailApiKey, setEmailApiKey] = useState(initialHasEmailApiKey ? "••••••••" : "");
   const [digestEnabled, setDigestEnabled] = useState(Boolean(initialDigestEnabled));
@@ -142,7 +172,7 @@ export function AlertSettingsModal({
               Discord Webhook URL
             </label>
             <input
-              type="url"
+              type="text"
               value={discordUrl}
               onChange={(e) => setDiscordUrl(e.target.value)}
               placeholder="https://discord.com/api/webhooks/..."
@@ -159,7 +189,7 @@ export function AlertSettingsModal({
               Slack Incoming Webhook URL
             </label>
             <input
-              type="url"
+              type="text"
               value={slackUrl}
               onChange={(e) => setSlackUrl(e.target.value)}
               placeholder="https://hooks.slack.com/services/..."
@@ -201,7 +231,7 @@ export function AlertSettingsModal({
               Generic JSON Webhook URL
             </label>
             <input
-              type="url"
+              type="text"
               value={genericWebhookUrl}
               onChange={(e) => setGenericWebhookUrl(e.target.value)}
               placeholder="https://api.yourapp.com/webhooks/devpulse"
@@ -248,7 +278,7 @@ export function AlertSettingsModal({
                 Microsoft Teams Webhook URL
               </label>
               <input
-                type="url"
+                type="text"
                 value={teamsWebhookUrl}
                 onChange={(e) => setTeamsWebhookUrl(e.target.value)}
                 placeholder="https://outlook.office.com/webhook/..."
@@ -275,7 +305,7 @@ export function AlertSettingsModal({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input
-                type="email"
+                type="text"
                 value={notificationEmail}
                 onChange={(e) => setNotificationEmail(e.target.value)}
                 placeholder="alerts@yourcompany.com"

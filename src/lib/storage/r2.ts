@@ -4,6 +4,8 @@
  * Next.js Edge/Server runtimes, and Node.js without bundling heavy AWS SDKs.
  */
 
+import { assertSafePublicHttpsUrl } from "@/lib/security/ssrf";
+
 export interface R2Credentials {
   endpoint: string;
   bucketName: string;
@@ -112,7 +114,8 @@ export async function createPresignedUrl(
   }
 ): Promise<string> {
   const expires = Math.min(Math.max(options.expiresInSeconds ?? 900, 60), 604800);
-  const cleanEndpoint = creds.endpoint.replace(/\/+$/, "");
+  const safeEndpoint = assertSafePublicHttpsUrl(creds.endpoint);
+  const cleanEndpoint = safeEndpoint.replace(/\/+$/, "");
   const endpointUrl = new URL(cleanEndpoint);
   const region = inferRegion(cleanEndpoint, creds.region);
   const { amzDate, dateStamp } = getAmzDates();
@@ -163,7 +166,8 @@ async function signedFetch(
   body?: Uint8Array | string,
   contentType?: string
 ): Promise<Response> {
-  const cleanEndpoint = creds.endpoint.replace(/\/+$/, "");
+  const safeEndpoint = assertSafePublicHttpsUrl(creds.endpoint);
+  const cleanEndpoint = safeEndpoint.replace(/\/+$/, "");
   const endpointUrl = new URL(cleanEndpoint);
   const region = inferRegion(cleanEndpoint, creds.region);
   const { amzDate, dateStamp } = getAmzDates();
@@ -252,6 +256,7 @@ export async function getR2ObjectText(
 
 export async function headR2Bucket(creds: R2Credentials): Promise<boolean> {
   try {
+    assertSafePublicHttpsUrl(creds.endpoint);
     const res = await signedFetch(creds, "HEAD", "");
     return res.ok;
   } catch {

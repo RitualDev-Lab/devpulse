@@ -38,7 +38,7 @@ export function DeploymentsPanel({
   isDemo = false,
 }: {
   projectId: string;
-  telemetryApiKey: string;
+  telemetryApiKey?: string | null;
   isDemo?: boolean;
 }) {
   const [items, setItems] = useState<DeploymentRow[]>([]);
@@ -69,7 +69,7 @@ export function DeploymentsPanel({
     loadDeployments();
   }, [loadDeployments]);
 
-  const webhookUrl = `https://devpulse.ritualdev.in/api/v1/webhooks/deploy?apiKey=${telemetryApiKey}`;
+  const webhookUrl = `https://devpulse.ritualdev.in/api/v1/webhooks/deploy?apiKey=${telemetryApiKey || "YOUR_API_KEY"}`;
 
   const handleRecordDeploy = async (e: React.FormEvent) => {
     e.preventDefault();

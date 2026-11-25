@@ -16,7 +16,12 @@ import { eq, desc, and, gte } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { withEdgeCache } from "@/lib/integrations/cached";
 import { getPlanDefinition } from "@/lib/billing/plans";
-import { listAccessibleProjects } from "@/lib/security/rbac";
+import {
+  listAccessibleProjects,
+  roleAllowsSecurityAdmin,
+  roleAllowsWrite,
+  type OrgRole,
+} from "@/lib/security/rbac";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { decryptSecret } from "@/lib/security/crypto";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
@@ -126,7 +131,7 @@ export interface DashboardShellMeta {
   customDomain: string | null;
 }
 
-function toProjectSummary(p: any): ProjectSummary {
+function toProjectSummary(p: any, includeTelemetryKey = false): ProjectSummary {
   return {
     id: p.id,
     name: p.name,
@@ -137,7 +142,7 @@ function toProjectSummary(p: any): ProjectSummary {
     rustCrate: p.rustCrate,
     goModule: p.goModule,
     dockerImage: p.dockerImage,
-    telemetryApiKey: p.telemetryApiKey,
+    telemetryApiKey: includeTelemetryKey ? p.telemetryApiKey : null,
   };
 }
 
@@ -159,7 +164,9 @@ export const loadDashboardShellMeta = cache(async (): Promise<DashboardShellMeta
         customDomain: user.customDomain,
         customDomainVerified: user.customDomainVerified,
       },
-      projects: userProjects.map(toProjectSummary),
+      projects: userProjects.map((p) =>
+        toProjectSummary(p, roleAllowsSecurityAdmin((p as any).accessRole || "viewer"))
+      ),
       demoProject: null,
       storageTier: user.storageTier || "free",
       customDomain: user.customDomainVerified ? user.customDomain : null,
@@ -176,7 +183,7 @@ export const loadDashboardShellMeta = cache(async (): Promise<DashboardShellMeta
   return {
     user: null,
     projects: [],
-    demoProject: demoRows[0] ? toProjectSummary(demoRows[0]) : null,
+    demoProject: demoRows[0] ? toProjectSummary(demoRows[0], false) : null,
     storageTier: "free",
     customDomain: null,
   };
@@ -607,6 +614,12 @@ export async function loadDashboardWorkspace(
     devices: { desktop: desktopCount, mobile: mobileCount },
   };
 
+  const effectiveRole: OrgRole = isDemoView
+    ? "viewer"
+    : ((activeProject?.accessRole as OrgRole) || "owner");
+  const canManageSecrets = !isDemoView && roleAllowsSecurityAdmin(effectiveRole);
+  const canSeeWebhookStatus = !isDemoView && roleAllowsWrite(effectiveRole);
+
   const initialData = {
     project: {
       id: activeProject.id,
@@ -621,23 +634,36 @@ export async function loadDashboardWorkspace(
       vscodeExtension: activeProject.vscodeExtension,
       mcpServerName: activeProject.mcpServerName,
       stackPreset: activeProject.stackPreset || "saas",
-      hasNpmToken: Boolean(activeProject.npmTokenEncrypted),
-      hasGithubToken: Boolean(activeProject.githubTokenEncrypted),
-      telemetryApiKey: activeProject.telemetryApiKey,
-      discordWebhookUrl: activeProject.discordWebhookUrl,
-      slackWebhookUrl: activeProject.slackWebhookUrl,
-      telegramBotToken: activeProject.telegramBotToken,
-      telegramChatId: activeProject.telegramChatId,
-      genericWebhookUrl: activeProject.genericWebhookUrl,
-      pagerdutyRoutingKey: activeProject.pagerdutyRoutingKey,
-      hasOpsgenieApiKey: Boolean(activeProject.opsgenieApiKeyEncrypted),
-      teamsWebhookUrl: activeProject.teamsWebhookUrl,
-      notificationEmail: activeProject.notificationEmail,
-      emailProvider: activeProject.emailProvider,
-      hasEmailApiKey: Boolean(activeProject.emailApiKeyEncrypted),
-      digestEnabled: activeProject.digestEnabled,
-      stripeApiKey: activeProject.stripeApiKey ? "••••••••" : null,
-      dodoPaymentsApiKey: activeProject.dodoPaymentsApiKey ? "••••••••" : null,
+      hasNpmToken: canSeeWebhookStatus ? Boolean(activeProject.npmTokenEncrypted) : false,
+      hasGithubToken: canSeeWebhookStatus ? Boolean(activeProject.githubTokenEncrypted) : false,
+      telemetryApiKey: canManageSecrets ? activeProject.telemetryApiKey : null,
+      hasTelemetryApiKey: Boolean(activeProject.telemetryApiKey),
+      // Strictly gate raw webhook URLs, bot tokens, routing keys, and billing keys out of RSC payloads
+      discordWebhookUrl: null,
+      slackWebhookUrl: null,
+      telegramBotToken: null,
+      telegramChatId: null,
+      genericWebhookUrl: null,
+      pagerdutyRoutingKey: null,
+      teamsWebhookUrl: null,
+      notificationEmail: null,
+      hasDiscordWebhook: canSeeWebhookStatus ? Boolean(activeProject.discordWebhookUrl) : false,
+      hasSlackWebhook: canSeeWebhookStatus ? Boolean(activeProject.slackWebhookUrl) : false,
+      hasTelegramWebhook: canSeeWebhookStatus
+        ? Boolean(activeProject.telegramBotToken && activeProject.telegramChatId)
+        : false,
+      hasGenericWebhook: canSeeWebhookStatus ? Boolean(activeProject.genericWebhookUrl) : false,
+      hasPagerDuty: canSeeWebhookStatus ? Boolean(activeProject.pagerdutyRoutingKey) : false,
+      hasOpsgenieApiKey: canSeeWebhookStatus ? Boolean(activeProject.opsgenieApiKeyEncrypted) : false,
+      hasTeamsWebhook: canSeeWebhookStatus ? Boolean(activeProject.teamsWebhookUrl) : false,
+      hasNotificationEmail: canSeeWebhookStatus ? Boolean(activeProject.notificationEmail) : false,
+      emailProvider: canSeeWebhookStatus ? activeProject.emailProvider : "resend",
+      hasEmailApiKey: canSeeWebhookStatus ? Boolean(activeProject.emailApiKeyEncrypted) : false,
+      digestEnabled: canSeeWebhookStatus ? activeProject.digestEnabled : false,
+      stripeApiKey: canManageSecrets && activeProject.stripeApiKey ? "••••••••" : null,
+      dodoPaymentsApiKey: canManageSecrets && activeProject.dodoPaymentsApiKey ? "••••••••" : null,
+      hasStripeKey: canManageSecrets ? Boolean(activeProject.stripeApiKey) : false,
+      hasDodoKey: canManageSecrets ? Boolean(activeProject.dodoPaymentsApiKey) : false,
       theme: activeProject.theme,
       customCss: activeProject.customCss,
     },
@@ -775,18 +801,9 @@ export async function loadDashboardWorkspace(
     initialLayout,
   };
 
-  const projectSummaries: ProjectSummary[] = userProjects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    slug: p.slug,
-    githubRepo: p.githubRepo,
-    npmPackage: p.npmPackage,
-    pypiPackage: p.pypiPackage,
-    rustCrate: p.rustCrate,
-    goModule: p.goModule,
-    dockerImage: p.dockerImage,
-    telemetryApiKey: p.telemetryApiKey,
-  }));
+  const projectSummaries: ProjectSummary[] = userProjects.map((p) =>
+    toProjectSummary(p, !isDemoView && roleAllowsSecurityAdmin((p as any).accessRole || "viewer"))
+  );
 
   return {
     status: "ready",
@@ -796,7 +813,7 @@ export async function loadDashboardWorkspace(
     projects: projectSummaries,
     customDomain: user?.customDomainVerified ? user.customDomain : null,
     storageTier: user?.storageTier || "free",
-    accessRole: (activeProject?.accessRole as import("@/lib/security/rbac").OrgRole) || "owner",
+    accessRole: effectiveRole,
     isDemo: isDemoView,
   };
 }

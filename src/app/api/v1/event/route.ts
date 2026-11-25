@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { deployments, errorEvents, otelTraces, projectReleases, workspaces } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { evaluateProjectAlertRules } from "@/lib/alerts/smart-engine";
 import { checkAndAutoRollbackFlags } from "@/lib/flags/flag-engine";
 import {
@@ -18,6 +18,7 @@ import { checkRateLimit } from "@/lib/security/rate-limit";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { decryptSecret } from "@/lib/security/crypto";
+import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 import { buildFatalCrashEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096; // Offload payloads > 4KB (e.g. 100KB+ traces & terminal dumps) to R2
@@ -125,9 +126,17 @@ export async function POST(req: NextRequest) {
     const os = body.os ? String(body.os).slice(0, 100) : null;
     const environment = String(body.environment || "production").slice(0, 50);
     const reporterEmail = body.reporterEmail || body.reporter_email ? String(body.reporterEmail || body.reporter_email).slice(0, 255) : null;
-    const attachmentUrl = body.attachmentKey || body.attachmentUrl || body.attachment_url
-      ? String(body.attachmentKey || body.attachmentUrl || body.attachment_url).slice(0, 512)
-      : null;
+    const rawAttachment = body.attachmentKey || body.attachmentUrl || body.attachment_url;
+    let attachmentUrl: string | null = null;
+    if (rawAttachment) {
+      if (!isValidProjectR2ObjectKey(rawAttachment, project.id, project.userId)) {
+        return NextResponse.json(
+          { error: "Invalid attachmentKey: must be a project-scoped R2 object key." },
+          { status: 400 }
+        );
+      }
+      attachmentUrl = rawAttachment.trim();
+    }
 
     const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? body.breadcrumbs.slice(-50) : null;
     const breadcrumbsJson = rawBreadcrumbs ? JSON.stringify(rawBreadcrumbs).slice(0, 12000) : null;
@@ -293,20 +302,9 @@ export async function POST(req: NextRequest) {
     );
 
     if (hasWebhooks) {
-      const opsgenieKey = project.opsgenieApiKeyEncrypted
-        ? await decryptSecret(project.opsgenieApiKeyEncrypted).catch(() => null)
-        : null;
+      const webhookConfig = await resolveDecryptedWebhookConfig(project);
       await dispatchCrashAlerts(
-        {
-          discordWebhookUrl: project.discordWebhookUrl,
-          slackWebhookUrl: project.slackWebhookUrl,
-          telegramBotToken: project.telegramBotToken,
-          telegramChatId: project.telegramChatId,
-          genericWebhookUrl: project.genericWebhookUrl,
-          pagerdutyRoutingKey: project.pagerdutyRoutingKey,
-          opsgenieApiKey: opsgenieKey,
-          teamsWebhookUrl: project.teamsWebhookUrl,
-        },
+        webhookConfig,
         {
           eventId,
           projectName: project.name,

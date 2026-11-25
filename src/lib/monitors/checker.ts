@@ -1,35 +1,13 @@
 import { db } from "@/db";
 import { projects, uptimeChecks, uptimeMonitors } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
-import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { decryptSecret } from "@/lib/security/crypto";
 import { buildDowntimeEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
+import { validatePublicUrl } from "@/lib/security/ssrf";
 
 export function isValidPublicMonitorUrl(rawUrl: string): { valid: boolean; reason?: string; normalized?: string } {
-  try {
-    const parsed = new URL(rawUrl.trim());
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      return { valid: false, reason: "Monitor URL must use http:// or https://" };
-    }
-
-    const host = parsed.hostname.toLowerCase();
-    if (
-      host === "localhost" ||
-      host === "0.0.0.0" ||
-      host === "[::1]" ||
-      host.startsWith("127.") ||
-      host.startsWith("10.") ||
-      host.startsWith("169.254.") ||
-      host.startsWith("192.168.") ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-    ) {
-      return { valid: false, reason: "Private/loopback addresses are blocked for security" };
-    }
-
-    return { valid: true, normalized: parsed.toString() };
-  } catch {
-    return { valid: false, reason: "Invalid URL format" };
-  }
+  return validatePublicUrl(rawUrl, { allowHttp: true });
 }
 
 /**
@@ -159,15 +137,9 @@ async function persistCheckResult(
       .limit(1);
 
     if (project) {
+      const webhookConfig = await resolveDecryptedWebhookConfig(project);
       await dispatchCrashAlerts(
-        {
-          discordWebhookUrl: project.discordWebhookUrl,
-          slackWebhookUrl: project.slackWebhookUrl,
-          telegramBotToken: project.telegramBotToken,
-          telegramChatId: project.telegramChatId,
-          genericWebhookUrl: project.genericWebhookUrl,
-          pagerdutyRoutingKey: project.pagerdutyRoutingKey,
-        },
+        webhookConfig,
         {
           eventId: checkId,
           projectName: project.name,

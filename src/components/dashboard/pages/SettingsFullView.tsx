@@ -241,15 +241,14 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
         isOpen={openModal === "alerts"}
         onClose={() => setOpenModal(null)}
         projectId={project.id}
-        initialDiscord={project.discordWebhookUrl}
-        initialSlack={project.slackWebhookUrl}
-        initialTelegramToken={project.telegramBotToken}
-        initialTelegramChatId={project.telegramChatId}
-        initialGenericWebhook={project.genericWebhookUrl}
-        initialPagerDuty={project.pagerdutyRoutingKey}
+        initialHasDiscord={Boolean((project as any).hasDiscordWebhook)}
+        initialHasSlack={Boolean((project as any).hasSlackWebhook)}
+        initialHasTelegram={Boolean((project as any).hasTelegramWebhook)}
+        initialHasGeneric={Boolean((project as any).hasGenericWebhook)}
+        initialHasPagerDuty={Boolean((project as any).hasPagerDuty)}
         initialHasOpsgenie={Boolean((project as any).hasOpsgenieApiKey)}
-        initialTeamsWebhook={(project as any).teamsWebhookUrl || null}
-        initialNotificationEmail={project.notificationEmail}
+        initialHasTeams={Boolean((project as any).hasTeamsWebhook)}
+        initialHasNotificationEmail={Boolean((project as any).hasNotificationEmail)}
         initialEmailProvider={project.emailProvider}
         initialHasEmailApiKey={project.hasEmailApiKey}
         initialDigestEnabled={project.digestEnabled}

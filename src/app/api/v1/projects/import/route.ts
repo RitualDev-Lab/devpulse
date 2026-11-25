@@ -99,7 +99,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. Generate unique slug for user's project
+    // 3. Generate globally unique slug across all tenants
     const baseSlug = scanned.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -109,9 +109,9 @@ export async function POST(request: Request) {
     let counter = 1;
     while (true) {
       const slugCheck = await db
-        .select()
+        .select({ id: projects.id })
         .from(projects)
-        .where(and(eq(projects.userId, user.id), eq(projects.slug, slug)))
+        .where(eq(projects.slug, slug))
         .limit(1);
       if (slugCheck.length === 0) break;
       slug = `${baseSlug}-${counter++}`;

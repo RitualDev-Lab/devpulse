@@ -3,6 +3,8 @@
  * Aggregates revenue, MRR, and transaction velocity across Stripe, Dodo Payments, and GitHub Sponsors.
  */
 
+import { validatePublicUrl } from "@/lib/security/ssrf";
+
 export interface TransactionItem {
   id: string;
   customer: string;
@@ -447,9 +449,11 @@ async function fetchModularConnectorRevenue(
       };
     }
     if (provider === "custom" && conn.targetUrl) {
+      const urlCheck = validatePublicUrl(conn.targetUrl, { allowHttp: false });
+      if (!urlCheck.valid || !urlCheck.normalized) return null;
       const headers: Record<string, string> = { Accept: "application/json" };
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-      const res = await fetch(conn.targetUrl, { headers, next: { revalidate: 300 } }).catch(() => null);
+      const res = await fetch(urlCheck.normalized, { headers, next: { revalidate: 300 } }).catch(() => null);
       if (!res?.ok) return null;
       const json = await res.json();
       const mrrVal = Number(json.mrr ?? json.monthlyRecurringRevenue ?? 0) || 0;

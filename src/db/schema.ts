@@ -44,7 +44,7 @@ export const projects = sqliteTable("projects", {
   organizationId: text("organization_id"),
   workspaceId: text("workspace_id"),
   name: text("name").notNull(),
-  slug: text("slug").notNull(), // Unique per user for subdomains/paths
+  slug: text("slug").notNull().unique(), // Globally unique across tenants for public embeds & badges
   description: text("description"),
   
   // Ecosystem Identifiers (Null if not applicable)

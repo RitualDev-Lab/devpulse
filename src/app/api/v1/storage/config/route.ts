@@ -8,6 +8,7 @@ import { headR2Bucket } from "@/lib/storage/r2";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { encryptSecret, decryptSecret } from "@/lib/security/crypto";
+import { validatePublicUrl } from "@/lib/security/ssrf";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,13 @@ export async function GET() {
       .where(eq(userStorageConfigs.userId, user.id))
       .limit(1);
 
+    const plainAccess = rawConfig?.accessKeyEncrypted
+      ? await decryptSecret(rawConfig.accessKeyEncrypted).catch(() => null)
+      : null;
+    const plainSecret = rawConfig?.secretKeyEncrypted
+      ? await decryptSecret(rawConfig.secretKeyEncrypted).catch(() => null)
+      : null;
+
     return NextResponse.json({
       tier: ctx.tier,
       tierLabel: getTierMeta(ctx.tier).label,
@@ -44,8 +52,8 @@ export async function GET() {
       byos: {
         endpoint: rawConfig?.endpoint || "",
         bucketName: rawConfig?.bucketName || "",
-        accessKeyMasked: maskSecret(rawConfig?.accessKeyEncrypted),
-        secretKeyMasked: maskSecret(rawConfig?.secretKeyEncrypted),
+        accessKeyMasked: maskSecret(plainAccess),
+        secretKeyMasked: maskSecret(plainSecret),
         hasCredentials: Boolean(rawConfig?.accessKeyEncrypted && rawConfig?.secretKeyEncrypted),
       },
     });
@@ -121,6 +129,15 @@ export async function POST(req: NextRequest) {
     }
 
     const nextEndpoint = endpoint !== undefined ? String(endpoint).trim() : existing?.endpoint || null;
+    if ((nextProvider === "byos_r2" || nextProvider === "byos_s3") && nextEndpoint) {
+      const endpointCheck = validatePublicUrl(nextEndpoint, { allowHttp: false });
+      if (!endpointCheck.valid) {
+        return NextResponse.json(
+          { error: `Invalid BYOS endpoint: ${endpointCheck.reason}` },
+          { status: 400 }
+        );
+      }
+    }
     const nextBucket = bucketName !== undefined ? String(bucketName).trim() : existing?.bucketName || null;
     const plainAccessKey =
       accessKeyId && !String(accessKeyId).startsWith("••")
