@@ -35,6 +35,12 @@ export function proxy(request: NextRequest) {
   const host = stripPort(rawHost);
 
   if (!host || MAIN_APP_HOSTS.has(host) || host.endsWith(".pages.dev")) {
+    // Handle Supabase OAuth code landing on Site URL root (/?code=...) by forwarding to /auth/callback
+    if (pathname === "/" && request.nextUrl.searchParams.has("code")) {
+      const callbackUrl = request.nextUrl.clone();
+      callbackUrl.pathname = "/auth/callback";
+      return NextResponse.redirect(callbackUrl);
+    }
     return NextResponse.next();
   }
 

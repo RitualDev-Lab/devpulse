@@ -47,63 +47,91 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       .replace(/^-+|-+$/g, "")
       .slice(0, 32) || `dev-${user.id.slice(0, 8)}`;
 
-    // Ensure user row exists in Turso
-    try {
-      await db
-        .insert(users)
-        .values({
-          id: user.id,
-          githubUsername,
-          name,
-          email,
-          avatarUrl,
-          storageTier: "free",
-          subdomain: defaultSubdomain,
-          customDomainVerified: false,
-        })
-        .onConflictDoUpdate({
-          target: users.id,
-          set: {
-            githubUsername,
-            name,
-            email,
-            avatarUrl,
-            updatedAt: sql`(CURRENT_TIMESTAMP)`,
-          },
-        });
-
-      // Special claim: if maintainer logs in as ritualdev-lab or ritual-dev-git,
-      // claim prj_ritual_core if it was created under demo id
-      const lowerUser = githubUsername.toLowerCase();
-      if (lowerUser === "ritualdev-lab" || lowerUser === "ritual-dev-git") {
-        await db
-          .update(projects)
-          .set({ userId: user.id })
-          .where(eq(projects.userId, "usr_ritualdev_demo"));
-      }
-    } catch (dbErr) {
-      console.error("Error upserting user into Turso:", dbErr);
-    }
-
-    // Query user profile from Turso
-    const userRows = await db
+    // Fast read first: avoid an unconditional Turso write on every authenticated page load
+    const existingRows = await db
       .select()
       .from(users)
       .where(eq(users.id, user.id))
       .limit(1);
 
-    if (userRows[0]) {
-      const u = userRows[0];
+    const existingUser = existingRows[0];
+    const needsSync =
+      !existingUser ||
+      existingUser.githubUsername !== githubUsername ||
+      existingUser.name !== name ||
+      existingUser.email !== email ||
+      existingUser.avatarUrl !== avatarUrl;
+
+    if (needsSync) {
+      try {
+        await db
+          .insert(users)
+          .values({
+            id: user.id,
+            githubUsername,
+            name,
+            email,
+            avatarUrl,
+            storageTier: "free",
+            subdomain: defaultSubdomain,
+            customDomainVerified: false,
+          })
+          .onConflictDoUpdate({
+            target: users.id,
+            set: {
+              githubUsername,
+              name,
+              email,
+              avatarUrl,
+              updatedAt: sql`(CURRENT_TIMESTAMP)`,
+            },
+          });
+
+        // Special claim: if maintainer logs in as ritualdev-lab or ritual-dev-git,
+        // claim prj_ritual_core if it was created under demo id
+        const lowerUser = githubUsername.toLowerCase();
+        if (lowerUser === "ritualdev-lab" || lowerUser === "ritual-dev-git") {
+          await db
+            .update(projects)
+            .set({ userId: user.id })
+            .where(eq(projects.userId, "usr_ritualdev_demo"));
+        }
+      } catch (dbErr) {
+        console.error("Error upserting user into Turso:", dbErr);
+      }
+
+      const [refreshed] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+
+      if (refreshed) {
+        return {
+          id: refreshed.id,
+          githubUsername: refreshed.githubUsername,
+          name: refreshed.name,
+          email: refreshed.email,
+          avatarUrl: refreshed.avatarUrl,
+          storageTier: refreshed.storageTier,
+          subdomain: refreshed.subdomain || defaultSubdomain,
+          customDomain: refreshed.customDomain,
+          customDomainVerified: refreshed.customDomainVerified,
+        };
+      }
+    }
+
+    if (existingUser) {
       return {
-        id: u.id,
-        githubUsername: u.githubUsername,
-        name: u.name,
-        email: u.email,
-        avatarUrl: u.avatarUrl,
-        storageTier: u.storageTier,
-        subdomain: u.subdomain || defaultSubdomain,
-        customDomain: u.customDomain,
-        customDomainVerified: u.customDomainVerified,
+        id: existingUser.id,
+        githubUsername: existingUser.githubUsername,
+        name: existingUser.name,
+        email: existingUser.email,
+        avatarUrl: existingUser.avatarUrl,
+        storageTier: existingUser.storageTier,
+        subdomain: existingUser.subdomain || defaultSubdomain,
+        customDomain: existingUser.customDomain,
+        customDomainVerified: existingUser.customDomainVerified,
       };
     }
 

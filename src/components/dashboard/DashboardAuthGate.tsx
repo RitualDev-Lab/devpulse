@@ -30,11 +30,10 @@ export function DashboardAuthGate() {
 
   const handleSignIn = async () => {
     setLoading(true);
-    const nextPath = `/dashboard${window.location.search || ""}`;
     await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
   };

@@ -1,8 +1,8 @@
 import { db } from "@/db";
 import { projects, errorEvents, users, pageviews, dashboardWidgets } from "@/db/schema";
 import { eq, desc, and, gte } from "drizzle-orm";
-import { initDb } from "@/db/setup";
 import { getCurrentUser } from "@/lib/auth";
+import { withEdgeCache } from "@/lib/integrations/cached";
 import { getPlanDefinition } from "@/lib/billing/plans";
 import { listAccessibleProjects } from "@/lib/security/rbac";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
@@ -29,12 +29,6 @@ interface DashboardPageProps {
 }
 
 export default async function DashboardPage(props: DashboardPageProps) {
-  try {
-    await initDb();
-  } catch (e) {
-    console.warn("initDb warning:", e);
-  }
-
   const params = (await props.searchParams) || {};
   const requestedProject = params.project;
   const isDemoRequested = params.demo === "1";
@@ -117,35 +111,53 @@ export default async function DashboardPage(props: DashboardPageProps) {
     rawWidgets,
   ] = await Promise.all([
     activeProject.githubRepo
-      ? fetchGitHubRepoStats(activeProject.githubRepo).catch(() => null)
+      ? withEdgeCache(`gh:${activeProject.githubRepo}`, 300, 2600, () =>
+          fetchGitHubRepoStats(activeProject.githubRepo!)
+        )
       : Promise.resolve(null),
     activeProject.npmPackage
-      ? fetchNpmStats(activeProject.npmPackage).catch(() => null)
+      ? withEdgeCache(`npm:${activeProject.npmPackage}`, 300, 2600, () =>
+          fetchNpmStats(activeProject.npmPackage!)
+        )
       : Promise.resolve(null),
     activeProject.pypiPackage
-      ? fetchPyPiStats(activeProject.pypiPackage).catch(() => null)
+      ? withEdgeCache(`pypi:${activeProject.pypiPackage}`, 300, 2600, () =>
+          fetchPyPiStats(activeProject.pypiPackage!)
+        )
       : Promise.resolve(null),
     activeProject.rustCrate
-      ? fetchRustCrateStats(activeProject.rustCrate).catch(() => null)
+      ? withEdgeCache(`crates:${activeProject.rustCrate}`, 300, 2600, () =>
+          fetchRustCrateStats(activeProject.rustCrate!)
+        )
       : Promise.resolve(null),
     activeProject.goModule
-      ? fetchGoModuleStats(activeProject.goModule).catch(() => null)
+      ? withEdgeCache(`go:${activeProject.goModule}`, 300, 2600, () =>
+          fetchGoModuleStats(activeProject.goModule!)
+        )
       : Promise.resolve(null),
     activeProject.dockerImage
-      ? fetchDockerRepoStats(activeProject.dockerImage).catch(() => null)
+      ? withEdgeCache(`docker:${activeProject.dockerImage}`, 300, 2600, () =>
+          fetchDockerRepoStats(activeProject.dockerImage!)
+        )
       : Promise.resolve(null),
     activeProject.vscodeExtension
-      ? fetchVsCodeStats(activeProject.vscodeExtension).catch(() => null)
+      ? withEdgeCache(`vscode:${activeProject.vscodeExtension}`, 300, 2600, () =>
+          fetchVsCodeStats(activeProject.vscodeExtension!)
+        )
       : Promise.resolve(null),
     activeProject.mcpServerName
-      ? fetchMcpStats(activeProject.mcpServerName, activeProject.githubRepo).catch(() => null)
+      ? withEdgeCache(`mcp:${activeProject.mcpServerName}:${activeProject.githubRepo || ""}`, 300, 2600, () =>
+          fetchMcpStats(activeProject.mcpServerName!, activeProject.githubRepo)
+        )
       : Promise.resolve(null),
-    fetchRevenueStats({
-      stripeKey: activeProject.stripeApiKey,
-      dodoKey: activeProject.dodoPaymentsApiKey,
-      dodoEnv: activeProject.dodoPaymentsEnvironment,
-      githubSponsorsUsername: activeProject.githubSponsorsUsername,
-    }).catch(() => null),
+    withEdgeCache(`rev:${activeProject.id}`, 120, 2600, () =>
+      fetchRevenueStats({
+        stripeKey: activeProject.stripeApiKey,
+        dodoKey: activeProject.dodoPaymentsApiKey,
+        dodoEnv: activeProject.dodoPaymentsEnvironment,
+        githubSponsorsUsername: activeProject.githubSponsorsUsername,
+      })
+    ),
     db
       .select()
       .from(errorEvents)
