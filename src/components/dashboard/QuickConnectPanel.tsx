@@ -49,12 +49,55 @@ export function QuickConnectPanel({
   const [applyPresetWidgets, setApplyPresetWidgets] = useState(false);
   const [showTokens, setShowTokens] = useState(Boolean(hasNpmToken || hasGithubToken));
   const [saving, setSaving] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveredSummary, setDiscoveredSummary] = useState<string[]>([]);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const detected = useMemo(() => parseMultipleConnectorInputs(linksText), [linksText]);
+  const detectedGithubItem = useMemo(() => detected.find((d) => d.kind === "github"), [detected]);
   const presetDef = STACK_PRESETS[preset] || STACK_PRESETS.saas;
   const snippetText = presetDef.buildSnippet(telemetryApiKey || "dp_live_your_key", projectSlug);
+
+  const handleAutoDiscoverGitHub = async () => {
+    if (!detectedGithubItem || isDemo) return;
+    setDiscovering(true);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/v1/projects/connectors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "discover_github",
+          projectId,
+          repo: detectedGithubItem.value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Discovery failed");
+      const eco = data.detectedEcosystems || {};
+      const lines: string[] = [];
+      if (eco.npmPackage) lines.push(`https://www.npmjs.com/package/${eco.npmPackage}`);
+      if (eco.pypiPackage) lines.push(`https://pypi.org/project/${eco.pypiPackage}/`);
+      if (eco.rustCrate) lines.push(`https://crates.io/crates/${eco.rustCrate}`);
+      if (eco.dockerImage) lines.push(`https://hub.docker.com/r/${eco.dockerImage}`);
+      if (lines.length > 0) {
+        setLinksText((prev) => `${prev.trim()}\n${lines.join("\n")}`);
+      }
+      setDiscoveredSummary(Array.isArray(data.summary) ? data.summary : []);
+      setFeedback({
+        ok: true,
+        msg:
+          lines.length > 0
+            ? `Auto-discovered ${lines.length} manifest ecosystem(s) from ${detectedGithubItem.value}!`
+            : `Scanned ${detectedGithubItem.value} root manifests cleanly.`,
+      });
+    } catch (err: any) {
+      setFeedback({ ok: false, msg: err?.message || "Auto-discovery failed" });
+    } finally {
+      setDiscovering(false);
+    }
+  };
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,7 +191,7 @@ export function QuickConnectPanel({
         />
 
         {detected.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
             {detected.map((d, idx) => (
               <span
                 key={idx}
@@ -158,6 +201,24 @@ export function QuickConnectPanel({
                 <span>{d.label}</span>
               </span>
             ))}
+            {detectedGithubItem && (
+              <button
+                type="button"
+                disabled={discovering || isDemo}
+                onClick={handleAutoDiscoverGitHub}
+                className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-200 font-semibold transition disabled:opacity-50"
+              >
+                {discovering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                <span>
+                  {discovering ? "Scanning repo manifests..." : "Auto-Discover package.json / Cargo.toml / Dockerfile"}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
+        {discoveredSummary.length > 0 && (
+          <div className="text-[11px] text-emerald-300 font-mono pt-0.5">
+            Scanned manifests: {discoveredSummary.join(" • ")}
           </div>
         )}
       </div>

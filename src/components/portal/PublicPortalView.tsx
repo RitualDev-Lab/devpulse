@@ -118,15 +118,27 @@ export function PublicPortalView({
             )}
 
             {activeProject && (
-              <a
-                href={`https://devpulse.ritualdev.in/report/${activeProject.slug}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-200 transition"
-              >
-                <Bug className="w-3.5 h-3.5 text-amber-400" />
-                <span>Report Issue</span>
-              </a>
+              <div className="flex items-center gap-2">
+                <a
+                  href={
+                    portalHost === "devpulse.ritualdev.in" || portalHost.startsWith("localhost")
+                      ? `/portal/${encodeURIComponent(user.subdomain)}/changelog?project=${encodeURIComponent(activeProject.slug)}`
+                      : `/changelog?project=${encodeURIComponent(activeProject.slug)}`
+                  }
+                  className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-indigo-300 transition"
+                >
+                  Changelog
+                </a>
+                <a
+                  href={`https://devpulse.ritualdev.in/report/${activeProject.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-200 transition"
+                >
+                  <Bug className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Report Issue</span>
+                </a>
+              </div>
             )}
           </div>
         </div>

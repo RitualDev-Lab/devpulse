@@ -25,6 +25,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/auth") ||
     pathname.startsWith("/portal") ||
     pathname.startsWith("/report") ||
+    pathname.startsWith("/embed") ||
     pathname === "/favicon.ico" ||
     /\.(svg|png|jpe?g|gif|webp|ico|css|js|map|txt|xml)$/i.test(pathname)
   ) {
@@ -68,7 +69,8 @@ export function proxy(request: NextRequest) {
   }
 
   const rewriteUrl = request.nextUrl.clone();
-  rewriteUrl.pathname = `/portal/${encodeURIComponent(hostKey)}`;
+  const subPath = pathname === "/changelog" ? "/changelog" : "";
+  rewriteUrl.pathname = `/portal/${encodeURIComponent(hostKey)}${subPath}`;
   if (search) {
     rewriteUrl.search = search;
   }

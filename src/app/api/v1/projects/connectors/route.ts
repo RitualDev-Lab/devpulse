@@ -12,6 +12,9 @@ import { normalizeStackPreset, STACK_PRESETS } from "@/lib/dashboard/presets";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { isValidPublicMonitorUrl, runMonitorCheck } from "@/lib/monitors/checker";
 import { fetchNpmOrgPackages } from "@/lib/integrations/npm";
+import { scanGitHubRepository } from "@/lib/scanner/github-scanner";
+import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
+import { decryptSecret } from "@/lib/security/crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +95,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    if (action === "discover_github") {
+      const repoInput = String(body.repo || "").trim();
+      const ownership = await verifyGitHubRepoOwnership(user, repoInput);
+      if (!ownership.allowed) {
+        return NextResponse.json(
+          { error: ownership.reason || "You can only auto-discover GitHub repos you own or maintain." },
+          { status: 403 }
+        );
+      }
+      const projToken = await decryptSecret(access.project.githubTokenEncrypted).catch(() => null);
+      const token = projToken || ownership.token || (await getUserGitHubAccessToken(user.id).catch(() => null));
+      const scanned = await scanGitHubRepository(ownership.githubRepo, token || undefined);
+      return NextResponse.json({
+        success: true,
+        githubRepo: scanned.githubRepo,
+        detectedEcosystems: scanned.detectedEcosystems,
+        summary: scanned.summary,
+      });
+    }
+
     if (action === "quick_connect") {
       const pastedLinks = String(body.linksText || "");
       const parsedItems = pastedLinks ? parseMultipleConnectorInputs(pastedLinks) : [];
@@ -117,6 +140,44 @@ export async function POST(req: NextRequest) {
             updateFields.githubRepo = item.value;
           }
           detectedSummary.push(item.label);
+
+          // Auto-discover package.json, Cargo.toml, pyproject.toml, go.mod, Dockerfile from GitHub
+          try {
+            const projToken = await decryptSecret(access.project.githubTokenEncrypted).catch(() => null);
+            const ghToken = projToken || (await getUserGitHubAccessToken(user.id).catch(() => null));
+            const scanned = await scanGitHubRepository(updateFields.githubRepo, ghToken || undefined);
+            const eco = scanned.detectedEcosystems;
+            if (eco.npmPackage && !updateFields.npmPackage) {
+              updateFields.npmPackage = eco.npmPackage;
+              detectedSummary.push(`Auto-detected npm (${eco.npmPackage})`);
+            }
+            if (eco.pypiPackage && !updateFields.pypiPackage) {
+              updateFields.pypiPackage = eco.pypiPackage;
+              detectedSummary.push(`Auto-detected PyPI (${eco.pypiPackage})`);
+            }
+            if (eco.rustCrate && !updateFields.rustCrate) {
+              updateFields.rustCrate = eco.rustCrate;
+              detectedSummary.push(`Auto-detected Crate (${eco.rustCrate})`);
+            }
+            if (eco.goModule && !updateFields.goModule) {
+              updateFields.goModule = eco.goModule;
+              detectedSummary.push(`Auto-detected Go (${eco.goModule})`);
+            }
+            if (eco.dockerImage && !updateFields.dockerImage) {
+              updateFields.dockerImage = eco.dockerImage;
+              detectedSummary.push(`Auto-detected Docker (${eco.dockerImage})`);
+            }
+            if (eco.vscodeExtension && !updateFields.vscodeExtension) {
+              updateFields.vscodeExtension = eco.vscodeExtension;
+              detectedSummary.push(`Auto-detected VS Code (${eco.vscodeExtension})`);
+            }
+            if (eco.mcpServerName && !updateFields.mcpServerName) {
+              updateFields.mcpServerName = eco.mcpServerName;
+              detectedSummary.push(`Auto-detected MCP (${eco.mcpServerName})`);
+            }
+          } catch {
+            // Best-effort auto-discovery
+          }
         } else if (item.field) {
           updateFields[item.field] = item.value;
           detectedSummary.push(item.label);

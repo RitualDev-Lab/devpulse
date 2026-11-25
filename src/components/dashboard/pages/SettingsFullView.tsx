@@ -9,6 +9,11 @@ import {
   HardDrive,
   Palette,
   Plug,
+  FileDown,
+  Code2,
+  Copy,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
@@ -27,6 +32,17 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
   const [openModal, setOpenModal] = useState<
     "alerts" | "security" | "domains" | "storage" | "styling" | "integrations" | null
   >(null);
+  const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null);
+
+  const iframeSnippet = `<iframe src="https://devpulse.ritualdev.in/embed/${project.slug}" width="100%" height="220" frameborder="0" style="border-radius:16px;"></iframe>`;
+  const healthBadgeMd = `![DevPulse Health](https://devpulse.ritualdev.in/api/badge/health/${project.slug}.svg)`;
+  const downloadsBadgeMd = `![DevPulse Downloads](https://devpulse.ritualdev.in/api/badge/downloads/${project.slug}.svg)`;
+
+  const copyText = (key: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedEmbed(key);
+    setTimeout(() => setCopiedEmbed(null), 1500);
+  };
 
   const cards = [
     {
@@ -102,6 +118,90 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
           isDemo={isDemo}
           onSuccess={() => window.location.reload()}
         />
+
+        {/* Weekly PDF/CSV Export & Public Metrics Embed Cards (Notion / Docs / README) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <FileDown className="w-4 h-4 text-emerald-400" />
+              <span>Weekly CSV &amp; Printable PDF Reports</span>
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Export 90-day package metrics, GitHub clones/views, uptime P95 latency, release health, and crash logs.
+            </p>
+            <div className="flex flex-wrap gap-2.5 pt-1">
+              <a
+                href={`/api/v1/export?projectId=${encodeURIComponent(project.id)}&format=csv`}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/40 text-emerald-200 text-xs font-semibold transition"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Download Weekly CSV</span>
+              </a>
+              <a
+                href={`/api/v1/export?projectId=${encodeURIComponent(project.id)}&format=report`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-200 text-xs font-semibold transition"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Printable PDF Report</span>
+              </a>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-cyan-400" />
+                <span>Public Metrics Embed Cards (Notion / Docs)</span>
+              </h2>
+              <a
+                href={`/embed/${encodeURIComponent(project.slug)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-cyan-300 hover:underline flex items-center gap-1"
+              >
+                <span>Preview Card</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <div className="space-y-2 text-[11px] font-mono">
+              <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-zinc-950 border border-zinc-800">
+                <span className="truncate text-zinc-300">{iframeSnippet}</span>
+                <button
+                  type="button"
+                  onClick={() => copyText("iframe", iframeSnippet)}
+                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white shrink-0 flex items-center gap-1"
+                >
+                  {copiedEmbed === "iframe" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>iframe</span>
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-zinc-950 border border-zinc-800">
+                <span className="truncate text-zinc-300">{healthBadgeMd}</span>
+                <button
+                  type="button"
+                  onClick={() => copyText("health", healthBadgeMd)}
+                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white shrink-0 flex items-center gap-1"
+                >
+                  {copiedEmbed === "health" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>Health SVG</span>
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-zinc-950 border border-zinc-800">
+                <span className="truncate text-zinc-300">{downloadsBadgeMd}</span>
+                <button
+                  type="button"
+                  onClick={() => copyText("dl", downloadsBadgeMd)}
+                  className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white shrink-0 flex items-center gap-1"
+                >
+                  {copiedEmbed === "dl" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>Downloads SVG</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {cards.map((c) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -18,6 +18,7 @@ import {
   X,
   ExternalLink,
   Sparkles,
+  Search,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 import {
@@ -26,6 +27,7 @@ import {
 } from "./ProjectWorkspaceSwitcher";
 import { ImportRepositoryModal } from "./ImportRepositoryModal";
 import { QuickConnectPanel } from "./QuickConnectPanel";
+import { CommandPalette } from "./CommandPalette";
 
 interface WorkspaceShellProps {
   currentProject: ProjectSummary & {
@@ -66,6 +68,18 @@ export function WorkspaceShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isQuickConnectOpen, setIsQuickConnectOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const projectList = projects.length > 0 ? projects : [currentProject];
 
@@ -236,6 +250,18 @@ export function WorkspaceShell({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsPaletteOpen(true)}
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 transition"
+              title="Open Command Palette (Ctrl+K / Cmd+K)"
+            >
+              <Search className="w-3.5 h-3.5 text-zinc-500" />
+              <span>Search...</span>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-400">
+                ⌘K
+              </kbd>
+            </button>
             {rightActions}
             <button
               type="button"
@@ -259,6 +285,16 @@ export function WorkspaceShell({
       <ImportRepositoryModal
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
+      />
+
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        onClose={() => setIsPaletteOpen(false)}
+        currentProject={currentProject}
+        projects={projectList}
+        isDemo={isDemo}
+        onOpenQuickConnect={() => setIsQuickConnectOpen(true)}
+        onOpenImport={() => setIsImportOpen(true)}
       />
 
       {isQuickConnectOpen && (
