@@ -5,6 +5,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
 import { evaluateProjectAlertRules } from "@/lib/alerts/smart-engine";
+import { checkAndAutoRollbackFlags } from "@/lib/flags/flag-engine";
 import {
   computeBusinessImpact,
   computeSemanticGroupKey,
@@ -133,6 +134,14 @@ export async function POST(req: NextRequest) {
     let commitSha: string | null = body.commitSha || body.commit_sha ? String(body.commitSha || body.commit_sha).slice(0, 64) : null;
     const traceId: string | null = body.traceId || body.trace_id ? String(body.traceId || body.trace_id).slice(0, 64) : null;
     const routePath: string | null = body.routePath || body.route || body.path ? String(body.routePath || body.route || body.path).slice(0, 200) : null;
+    const platform = String(body.platform || (runtime === "browser" ? "web" : runtime)).slice(0, 32);
+    const errorCategory = (["exception", "oom", "anr", "network"].includes(String(body.errorCategory || body.category || "").toLowerCase())
+      ? String(body.errorCategory || body.category).toLowerCase()
+      : "exception") as "exception" | "oom" | "anr" | "network";
+    const deviceModel: string | null = body.deviceModel ? String(body.deviceModel).slice(0, 80) : null;
+    const appBuild: string | null = body.appBuild ? String(body.appBuild).slice(0, 40) : null;
+    const flagKey: string | null = body.flagKey ? String(body.flagKey).slice(0, 80) : null;
+    const flagVariant: string | null = body.flagVariant ? String(body.flagVariant).slice(0, 60) : null;
     const affectedUsersCount = Math.max(1, Number(body.affectedUsersCount || body.usersAffected || 1));
     const countryCode = extractCountryCode(req.headers, body);
     const aiGroupKey = computeSemanticGroupKey(errorName, message, rawStack);
@@ -250,6 +259,12 @@ export async function POST(req: NextRequest) {
       routePath,
       estimatedLostRevenueCents: impact.estimatedLostRevenueCents,
       impactScore: impact.impactScore,
+      platform,
+      errorCategory,
+      deviceModel,
+      appBuild,
+      flagKey,
+      flagVariant,
     });
 
     // Link trace -> crash bi-directionally & increment matching deployment crashCount
@@ -329,10 +344,15 @@ export async function POST(req: NextRequest) {
       }).catch((err) => console.error("Email alert error:", err));
     }
 
-    // Run Smart Alert Rules & Z-Score Anomaly Detector safely
-    await evaluateProjectAlertRules(project.id).catch((err) =>
-      console.error("Smart alert rule evaluation warning:", err)
-    );
+    // Run Smart Alert Rules & Z-Score Anomaly Detector + Feature Flag Crash Auto-Rollback
+    await Promise.all([
+      evaluateProjectAlertRules(project.id).catch((err) =>
+        console.error("Smart alert rule evaluation warning:", err)
+      ),
+      checkAndAutoRollbackFlags(project.id).catch((err) =>
+        console.error("Flag rollback guard warning:", err)
+      ),
+    ]);
 
     return NextResponse.json(
       {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { projects, projectReleases } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { errorEvents, projects, projectReleases } from "@/db/schema";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/security/audit";
 
 export const dynamic = "force-dynamic";
@@ -144,6 +144,61 @@ export async function POST(req: NextRequest) {
             totalSessions: 0,
             crashCount: 0,
             releasedAt: payload.head_commit.timestamp || new Date().toISOString(),
+          });
+        }
+      } else if (
+        ghEvent === "pull_request" &&
+        payload.action === "closed" &&
+        payload.pull_request?.merged === true
+      ) {
+        // Two-way GitHub Auto-Close: resolve linked crashes when PR merges
+        const prNumber = Number(payload.pull_request.number);
+        const prText = `${payload.pull_request.title || ""} ${payload.pull_request.body || ""}`;
+        const referencedIssues = Array.from(prText.matchAll(/#(\d+)/g)).map((m) =>
+          Number(m[1])
+        );
+
+        const openCrashes = await db
+          .select({
+            id: errorEvents.id,
+            githubPrNumber: errorEvents.githubPrNumber,
+            githubIssueNumber: errorEvents.githubIssueNumber,
+          })
+          .from(errorEvents)
+          .where(
+            and(eq(errorEvents.projectId, proj.id), eq(errorEvents.status, "unresolved"))
+          )
+          .limit(300);
+
+        const toResolveIds = openCrashes
+          .filter(
+            (c) =>
+              c.githubPrNumber === prNumber ||
+              (c.githubIssueNumber !== null && referencedIssues.includes(c.githubIssueNumber))
+          )
+          .map((c) => c.id);
+
+        if (toResolveIds.length > 0) {
+          await db
+            .update(errorEvents)
+            .set({ status: "resolved" })
+            .where(inArray(errorEvents.id, toResolveIds));
+
+          await recordAuditEvent({
+            userId: proj.userId,
+            actorUsername: payload.pull_request.merged_by?.login || "github-pr-merge",
+            organizationId: proj.organizationId,
+            workspaceId: proj.workspaceId,
+            projectId: proj.id,
+            action: "crash.auto_resolved_by_pr",
+            resourceType: "error_event",
+            resourceId: `PR#${prNumber}`,
+            headers: req.headers,
+            metadata: {
+              prNumber,
+              resolvedCrashCount: toResolveIds.length,
+              referencedIssues,
+            },
           });
         }
       }

@@ -20,6 +20,8 @@ import {
   Sparkles,
   Search,
   Workflow,
+  ScrollText,
+  Flag,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 import {
@@ -51,6 +53,8 @@ const NAV_ITEMS = [
   { href: "/dashboard/analytics", label: "Daily Users", icon: BarChart3 },
   { href: "/dashboard/crashes", label: "Crashes & Maps", icon: Bug },
   { href: "/dashboard/traces", label: "Traces (OTEL)", icon: Workflow },
+  { href: "/dashboard/logs", label: "Logs (Loki)", icon: ScrollText },
+  { href: "/dashboard/flags", label: "Flags & A/B", icon: Flag },
   { href: "/dashboard/uptime", label: "Uptime & P95", icon: HeartPulse },
   { href: "/dashboard/revenue", label: "Revenue & Plan", icon: CreditCard },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },

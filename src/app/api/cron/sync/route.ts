@@ -6,6 +6,7 @@ import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { sendProjectDigest } from "@/lib/alerts/digest";
 import { processPendingEscalations } from "@/lib/alerts/smart-engine";
+import { runDueSyntheticTests } from "@/lib/synthetics/yaml-runner";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,11 @@ async function handleSync(req: NextRequest) {
       escalated: 0,
     }));
 
+    const syntheticsSummary = await runDueSyntheticTests().catch(() => ({
+      totalActive: 0,
+      executed: 0,
+    }));
+
     // Dispatch weekly maintainer digest for projects opted into digestEnabled (>7 days since lastDigestSentAt)
     let digestsSent = 0;
     try {
@@ -72,6 +78,7 @@ async function handleSync(req: NextRequest) {
       projectsSynced: results.length,
       uptimeSummary,
       escalationSummary,
+      syntheticsSummary,
       digestsSent,
       details: results,
     });

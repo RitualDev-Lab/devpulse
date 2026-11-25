@@ -19,6 +19,8 @@ import {
   ExternalLink,
   X,
   Workflow,
+  ScrollText,
+  Flag,
 } from "lucide-react";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
 
@@ -111,6 +113,8 @@ export function CommandPalette({
       { id: "nav-analytics", group: "Workspace Pages", label: "Daily Users & Telemetry", sublabel: "/dashboard/analytics", icon: BarChart3, action: () => router.push(`/dashboard/analytics${qs}`) },
       { id: "nav-crashes", group: "Workspace Pages", label: "Crash Stream & Source Maps", sublabel: "/dashboard/crashes", icon: Bug, action: () => router.push(`/dashboard/crashes${qs}`) },
       { id: "nav-traces", group: "Workspace Pages", label: "Distributed Traces (OpenTelemetry)", sublabel: "/dashboard/traces", icon: Workflow, action: () => router.push(`/dashboard/traces${qs}`) },
+      { id: "nav-logs", group: "Workspace Pages", label: "Log Explorer (Loki & Pre-Crash)", sublabel: "/dashboard/logs", icon: ScrollText, action: () => router.push(`/dashboard/logs${qs}`) },
+      { id: "nav-flags", group: "Workspace Pages", label: "Feature Flags & A/B Rollouts", sublabel: "/dashboard/flags", icon: Flag, action: () => router.push(`/dashboard/flags${qs}`) },
       { id: "nav-uptime", group: "Workspace Pages", label: "Uptime & P95 Latency", sublabel: "/dashboard/uptime", icon: HeartPulse, action: () => router.push(`/dashboard/uptime${qs}`) },
       { id: "nav-revenue", group: "Workspace Pages", label: "Revenue, Payments & Plan", sublabel: "/dashboard/revenue", icon: CreditCard, action: () => router.push(`/dashboard/revenue${qs}`) },
       { id: "nav-settings", group: "Workspace Pages", label: "Settings, Quick Connect & Embeds", sublabel: "/dashboard/settings", icon: Settings, action: () => router.push(`/dashboard/settings${qs}`) },

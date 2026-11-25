@@ -118,6 +118,16 @@ export async function initDb() {
     "ALTER TABLE error_events ADD COLUMN route_path TEXT;",
     "ALTER TABLE error_events ADD COLUMN estimated_lost_revenue_cents INTEGER DEFAULT 0 NOT NULL;",
     "ALTER TABLE error_events ADD COLUMN impact_score INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE error_events ADD COLUMN platform TEXT DEFAULT 'web' NOT NULL;",
+    "ALTER TABLE error_events ADD COLUMN error_category TEXT DEFAULT 'exception' NOT NULL;",
+    "ALTER TABLE error_events ADD COLUMN device_model TEXT;",
+    "ALTER TABLE error_events ADD COLUMN app_build TEXT;",
+    "ALTER TABLE error_events ADD COLUMN flag_key TEXT;",
+    "ALTER TABLE error_events ADD COLUMN flag_variant TEXT;",
+    "ALTER TABLE error_events ADD COLUMN github_issue_number INTEGER;",
+    "ALTER TABLE error_events ADD COLUMN github_issue_url TEXT;",
+    "ALTER TABLE error_events ADD COLUMN github_pr_number INTEGER;",
+    "ALTER TABLE error_events ADD COLUMN github_pr_url TEXT;",
   ];
 
   for (const query of optionalColumns) {
@@ -587,6 +597,83 @@ export async function initDb() {
       crash_count INTEGER DEFAULT 0 NOT NULL,
       deployed_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       rolled_back_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS synthetic_tests (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      yaml_spec TEXT NOT NULL,
+      regions_json TEXT DEFAULT '["iad","fra","sin","syd","gru"]' NOT NULL,
+      interval_minutes INTEGER DEFAULT 15 NOT NULL,
+      is_active INTEGER DEFAULT 1 NOT NULL,
+      last_status TEXT DEFAULT 'pending' NOT NULL,
+      p95_latency_ms INTEGER DEFAULT 0 NOT NULL,
+      last_run_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS synthetic_runs (
+      id TEXT PRIMARY KEY,
+      test_id TEXT NOT NULL REFERENCES synthetic_tests(id) ON DELETE CASCADE,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      region TEXT NOT NULL,
+      status TEXT NOT NULL,
+      total_latency_ms INTEGER DEFAULT 0 NOT NULL,
+      step_results_json TEXT,
+      error_message TEXT,
+      ran_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS feature_flags (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      description TEXT,
+      is_enabled INTEGER DEFAULT 1 NOT NULL,
+      rollout_percent INTEGER DEFAULT 100 NOT NULL,
+      variants_json TEXT DEFAULT '[{"name":"control","weight":50},{"name":"treatment","weight":50}]' NOT NULL,
+      auto_rollback_enabled INTEGER DEFAULT 1 NOT NULL,
+      crash_rate_threshold_percent INTEGER DEFAULT 5 NOT NULL,
+      status TEXT DEFAULT 'active' NOT NULL,
+      rollback_reason TEXT,
+      rolled_back_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS flag_exposures (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      flag_key TEXT NOT NULL,
+      variant TEXT DEFAULT 'control' NOT NULL,
+      user_key TEXT NOT NULL,
+      converted INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS structured_logs (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      level TEXT DEFAULT 'info' NOT NULL,
+      service_name TEXT DEFAULT 'app' NOT NULL,
+      message TEXT NOT NULL,
+      labels_json TEXT,
+      trace_id TEXT,
+      timestamp_ms INTEGER NOT NULL,
+      timestamp_iso TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);

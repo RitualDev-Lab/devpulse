@@ -14,6 +14,7 @@ import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { UptimeMonitorsCard } from "../widgets/UptimeMonitorsCard";
 import { SlaCompliancePanel } from "../widgets/SlaCompliancePanel";
+import { SyntheticsPanel } from "../widgets/SyntheticsPanel";
 
 export function UptimeFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, user, isDemo } = workspace;
@@ -147,6 +148,8 @@ export function UptimeFullView({ workspace }: { workspace: LoadedWorkspaceReady 
           subdomain={user?.subdomain || undefined}
           isDemo={isDemo}
         />
+
+        <SyntheticsPanel projectId={project.id} isDemo={isDemo} />
       </div>
     </WorkspaceShell>
   );

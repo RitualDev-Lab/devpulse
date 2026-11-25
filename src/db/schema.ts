@@ -163,6 +163,16 @@ export const errorEvents = sqliteTable("error_events", {
   routePath: text("route_path"),
   estimatedLostRevenueCents: integer("estimated_lost_revenue_cents").default(0).notNull(),
   impactScore: integer("impact_score").default(0).notNull(),
+  platform: text("platform").default("web").notNull(), // 'web' | 'node' | 'python' | 'react_native' | 'flutter' | 'ios' | 'android'
+  errorCategory: text("error_category").default("exception").notNull(), // 'exception' | 'oom' | 'anr' | 'network'
+  deviceModel: text("device_model"),
+  appBuild: text("app_build"),
+  flagKey: text("flag_key"),
+  flagVariant: text("flag_variant"),
+  githubIssueNumber: integer("github_issue_number"),
+  githubIssueUrl: text("github_issue_url"),
+  githubPrNumber: integer("github_pr_number"),
+  githubPrUrl: text("github_pr_url"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
@@ -608,6 +618,82 @@ export const deployments = sqliteTable("deployments", {
   crashCount: integer("crash_count").default(0).notNull(),
   deployedAt: text("deployed_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   rolledBackAt: text("rolled_back_at"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Synthetic Monitoring Tests (No-Code YAML E2E across Global Edge Regions)
+ */
+export const syntheticTests = sqliteTable("synthetic_tests", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  yamlSpec: text("yaml_spec").notNull(),
+  regionsJson: text("regions_json").default("[\"iad\",\"fra\",\"sin\",\"syd\",\"gru\"]").notNull(),
+  intervalMinutes: integer("interval_minutes").default(15).notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  lastStatus: text("last_status", { enum: ["pass", "fail", "pending"] }).default("pending").notNull(),
+  p95LatencyMs: integer("p95_latency_ms").default(0).notNull(),
+  lastRunAt: text("last_run_at"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+export const syntheticRuns = sqliteTable("synthetic_runs", {
+  id: text("id").primaryKey(),
+  testId: text("test_id").references(() => syntheticTests.id, { onDelete: "cascade" }).notNull(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  region: text("region").notNull(),
+  status: text("status", { enum: ["pass", "fail"] }).notNull(),
+  totalLatencyMs: integer("total_latency_ms").default(0).notNull(),
+  stepResultsJson: text("step_results_json"),
+  errorMessage: text("error_message"),
+  ranAt: text("ran_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Feature Flags & A/B Testing with Crash-Spike Auto-Rollback
+ */
+export const featureFlags = sqliteTable("feature_flags", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  key: text("key").notNull(),
+  description: text("description"),
+  isEnabled: integer("is_enabled", { mode: "boolean" }).default(true).notNull(),
+  rolloutPercent: integer("rollout_percent").default(100).notNull(),
+  variantsJson: text("variants_json").default("[{\"name\":\"control\",\"weight\":50},{\"name\":\"treatment\",\"weight\":50}]").notNull(),
+  autoRollbackEnabled: integer("auto_rollback_enabled", { mode: "boolean" }).default(true).notNull(),
+  crashRateThresholdPercent: integer("crash_rate_threshold_percent").default(5).notNull(),
+  status: text("status", { enum: ["active", "rolled_back", "paused"] }).default("active").notNull(),
+  rollbackReason: text("rollback_reason"),
+  rolledBackAt: text("rolled_back_at"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+export const flagExposures = sqliteTable("flag_exposures", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  flagKey: text("flag_key").notNull(),
+  variant: text("variant").default("control").notNull(),
+  userKey: text("user_key").notNull(),
+  converted: integer("converted", { mode: "boolean" }).default(false).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Loki-Compatible Structured Log Aggregation (with +-500ms Crash Correlation)
+ */
+export const structuredLogs = sqliteTable("structured_logs", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  level: text("level").default("info").notNull(), // 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+  serviceName: text("service_name").default("app").notNull(),
+  message: text("message").notNull(),
+  labelsJson: text("labels_json"),
+  traceId: text("trace_id"),
+  timestampMs: integer("timestamp_ms").notNull(),
+  timestampIso: text("timestamp_iso").notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

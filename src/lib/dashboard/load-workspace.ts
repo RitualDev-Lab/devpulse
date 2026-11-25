@@ -370,6 +370,16 @@ export async function loadDashboardWorkspace(searchParams?: {
     routePath: err.routePath,
     estimatedLostRevenueCents: err.estimatedLostRevenueCents,
     impactScore: err.impactScore,
+    platform: err.platform,
+    errorCategory: err.errorCategory,
+    deviceModel: err.deviceModel,
+    appBuild: err.appBuild,
+    flagKey: err.flagKey,
+    flagVariant: err.flagVariant,
+    githubIssueNumber: err.githubIssueNumber,
+    githubIssueUrl: err.githubIssueUrl,
+    githubPrNumber: err.githubPrNumber,
+    githubPrUrl: err.githubPrUrl,
     createdAt: err.createdAt,
   }));
 

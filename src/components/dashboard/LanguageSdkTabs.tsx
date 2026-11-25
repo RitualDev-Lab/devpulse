@@ -11,6 +11,7 @@ type LangTabId =
   | "rust"
   | "go"
   | "desktop"
+  | "react_native"
   | "flutter"
   | "cli";
 
@@ -29,6 +30,7 @@ const LANG_TABS: Array<{ id: LangTabId; label: string; file: string }> = [
   { id: "rust", label: "Rust", file: "src/telemetry.rs" },
   { id: "go", label: "Go", file: "telemetry.go" },
   { id: "desktop", label: "Tauri / Electron", file: "main.ts" },
+  { id: "react_native", label: "React Native", file: "App.tsx" },
   { id: "flutter", label: "Flutter", file: "lib/devpulse.dart" },
   { id: "cli", label: "CLI Apps", file: "beacon.sh" },
 ];
@@ -50,8 +52,10 @@ function buildLanguageSnippet(tab: LangTabId, apiKey: string): string {
       return `// Standard library net/http — zero third-party deps\npayload := []byte(\`{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"app","os":"linux"}\`)\nhttp.Post("https://devpulse.ritualdev.in/api/v1/analytics", "application/json", bytes.NewBuffer(payload))`;
     case "desktop":
       return `// Electron Main Process or Tauri Frontend\nawait fetch("https://devpulse.ritualdev.in/api/v1/analytics", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify({\n    project: "${key}",\n    metricName: "active_jobs",\n    metricValue: 42,\n    sourceType: "desktop",\n    os: navigator.platform,\n    appVersion: "2.1.0",\n  }),\n});`;
+    case "react_native":
+      return `// npm i @ritualdev/devpulse\nimport { DevPulseClient } from "@ritualdev/devpulse";\n\nconst pulse = new DevPulseClient({ apiKey: "${key}", release: "2.1.0" }).initReactNative({\n  platform: "ios",\n  deviceModel: "iPhone 15 Pro",\n  anrThresholdMs: 5000,\n});\n\n// Report native OOM / network failures & evaluate feature flags:\npulse.reportMobileEvent({ errorName: "OOMKill", message: "Memory warning", category: "oom", platform: "ios" });`;
     case "flutter":
-      return `// package:http/http.dart\nawait http.post(\n  Uri.parse("https://devpulse.ritualdev.in/api/v1/analytics"),\n  headers: {"Content-Type": "application/json"},\n  body: jsonEncode({\n    "project": "${key}",\n    "metricName": "active_jobs",\n    "metricValue": 42,\n    "sourceType": "app",\n    "os": Platform.operatingSystem,\n  }),\n);`;
+      return `// packages/devpulse_flutter — captures exceptions, OOM, ANR & network errors\nawait DevPulseFlutter.init(\n  apiKey: "${key}",\n  release: "2.1.0",\n  deviceModel: "Pixel 9",\n);\n\nif (await DevPulseFlutter.instance!.flag("new-checkout", userId: "usr_123")) {\n  // Render new checkout\n}`;
     case "cli":
       return `# Track custom numeric metrics & CLI runs from any shell binary\ncurl -s -X POST https://devpulse.ritualdev.in/api/v1/analytics \\\n  -H "Content-Type: application/json" \\\n  -d '{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"cli","os":"Linux"}'`;
   }

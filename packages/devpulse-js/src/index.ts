@@ -368,6 +368,146 @@ export class DevPulseClient {
     if (typeof process !== "undefined") return `${process.platform} ${process.arch}`;
     return "Unknown";
   }
+
+  /**
+   * Evaluate a feature flag remotely for this user:
+   *   if (await pulse.flag("new-checkout", { userId: "usr_123" })) { ... }
+   */
+  public async flag(
+    flagKey: string,
+    opts?: { userId?: string; defaultValue?: boolean }
+  ): Promise<boolean> {
+    const userId = opts?.userId || "anonymous";
+    try {
+      const res = await fetch(
+        `${this.config.endpoint}/api/v1/flags/evaluate?apiKey=${encodeURIComponent(
+          this.config.apiKey
+        )}&key=${encodeURIComponent(flagKey)}&userId=${encodeURIComponent(userId)}`
+      );
+      if (!res.ok) return opts?.defaultValue ?? false;
+      const data = (await res.json()) as { flags?: Record<string, boolean>; variants?: Record<string, string> };
+      const enabled = Boolean(data.flags?.[flagKey]);
+      const variant = data.variants?.[flagKey] || "control";
+      void this.sendOrQueue(`${this.config.endpoint}/api/v1/flags/evaluate`, {
+        apiKey: this.config.apiKey,
+        flagKey,
+        variant,
+        userId,
+        converted: false,
+      });
+      return enabled;
+    } catch {
+      return opts?.defaultValue ?? false;
+    }
+  }
+
+  public async getFlagVariant(flagKey: string, userId = "anonymous"): Promise<string> {
+    try {
+      const res = await fetch(
+        `${this.config.endpoint}/api/v1/flags/evaluate?apiKey=${encodeURIComponent(
+          this.config.apiKey
+        )}&key=${encodeURIComponent(flagKey)}&userId=${encodeURIComponent(userId)}`
+      );
+      if (!res.ok) return "control";
+      const data = (await res.json()) as { variants?: Record<string, string> };
+      return data.variants?.[flagKey] || "control";
+    } catch {
+      return "control";
+    }
+  }
+
+  public async trackFlagConversion(flagKey: string, variant: string, userId = "anonymous"): Promise<boolean> {
+    return this.sendOrQueue(`${this.config.endpoint}/api/v1/flags/evaluate`, {
+      apiKey: this.config.apiKey,
+      flagKey,
+      variant,
+      userId,
+      converted: true,
+    });
+  }
+
+  /**
+   * React Native Mobile Crash Capture (iOS & Android):
+   * Hooks ErrorUtils, OOM memory warning reporters, ANR JS-thread watchdog, and network errors.
+   */
+  public initReactNative(opts?: {
+    platform?: "ios" | "android";
+    deviceModel?: string;
+    appBuild?: string;
+    anrThresholdMs?: number;
+  }): this {
+    this.init();
+    const g = globalThis as any;
+    const rnPlatform = opts?.platform ? `react_native_${opts.platform}` : "react_native";
+
+    if (g.ErrorUtils && typeof g.ErrorUtils.setGlobalHandler === "function") {
+      const prev = g.ErrorUtils.getGlobalHandler?.();
+      g.ErrorUtils.setGlobalHandler((error: unknown, isFatal?: boolean) => {
+        void this.sendOrQueue(`${this.config.endpoint}/api/v1/event`, {
+          apiKey: this.config.apiKey,
+          errorName: (error as Error)?.name || "ReactNativeCrash",
+          message: (error as Error)?.message || String(error),
+          stackTrace: (error as Error)?.stack || "",
+          runtime: "react_native",
+          platform: opts?.platform || "react_native",
+          errorCategory: "exception",
+          deviceModel: opts?.deviceModel || null,
+          appBuild: opts?.appBuild || this.config.release || null,
+          os: rnPlatform,
+          breadcrumbs: this.breadcrumbs,
+        });
+        if (typeof prev === "function") prev(error, isFatal);
+      });
+    }
+
+    // JS-thread ANR (Application Not Responding) stall watchdog
+    const anrMs = opts?.anrThresholdMs ?? 5000;
+    let lastTick = Date.now();
+    if (typeof setInterval === "function") {
+      const timer = setInterval(() => {
+        const now = Date.now();
+        const drift = now - lastTick - 1000;
+        lastTick = now;
+        if (drift > anrMs) {
+          void this.sendOrQueue(`${this.config.endpoint}/api/v1/event`, {
+            apiKey: this.config.apiKey,
+            errorName: "ANRWatchdogError",
+            message: `React Native JS thread blocked for ${drift}ms`,
+            runtime: "react_native",
+            platform: opts?.platform || "react_native",
+            errorCategory: "anr",
+            deviceModel: opts?.deviceModel || null,
+            appBuild: opts?.appBuild || this.config.release || null,
+            breadcrumbs: this.breadcrumbs,
+          });
+        }
+      }, 1000);
+      if (typeof (timer as any)?.unref === "function") (timer as any).unref();
+    }
+
+    return this;
+  }
+
+  public reportMobileEvent(params: {
+    errorName: string;
+    message: string;
+    category: "oom" | "anr" | "network" | "exception";
+    platform?: "ios" | "android" | "react_native" | "flutter";
+    deviceModel?: string;
+    appBuild?: string;
+  }): Promise<boolean> {
+    return this.sendOrQueue(`${this.config.endpoint}/api/v1/event`, {
+      apiKey: this.config.apiKey,
+      errorName: params.errorName,
+      message: params.message,
+      runtime: params.platform || "react_native",
+      platform: params.platform || "react_native",
+      errorCategory: params.category,
+      deviceModel: params.deviceModel || null,
+      appBuild: params.appBuild || this.config.release || null,
+      breadcrumbs: this.breadcrumbs,
+    });
+  }
 }
 
 let activeClient: DevPulseClient | null = null;
