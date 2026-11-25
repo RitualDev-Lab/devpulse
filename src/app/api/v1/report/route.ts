@@ -47,7 +47,6 @@ export async function POST(req: NextRequest) {
       message,
       stackTrace,
       runtime,
-      reporterEmail,
       attachmentKey,
     } = body;
 
@@ -141,7 +140,8 @@ export async function POST(req: NextRequest) {
       payloadSizeBytes: payloadBytes,
       storageProvider,
       fingerprint: issueSummary.fingerprint,
-      reporterEmail: reporterEmail ? String(reporterEmail).slice(0, 255) : null,
+      // Not stored: no read path uses it, and it is personal data from anonymous reporters.
+      reporterEmail: null,
     });
 
     if (
