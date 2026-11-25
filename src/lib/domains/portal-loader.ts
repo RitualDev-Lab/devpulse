@@ -299,7 +299,24 @@ export async function loadPortalData(
       slug: p.slug,
       description: p.description,
     })),
-    activeProject,
+    activeProject: activeProject
+      ? {
+          id: activeProject.id,
+          name: activeProject.name,
+          slug: activeProject.slug,
+          description: activeProject.description,
+          githubRepo: activeProject.githubRepo,
+          npmPackage: activeProject.npmPackage,
+          pypiPackage: activeProject.pypiPackage,
+          rustCrate: activeProject.rustCrate,
+          goModule: activeProject.goModule,
+          dockerImage: activeProject.dockerImage,
+          vscodeExtension: activeProject.vscodeExtension,
+          mcpServerName: activeProject.mcpServerName,
+          theme: activeProject.theme,
+          customCss: activeProject.customCss,
+        }
+      : null,
     dashboardData,
   };
 }

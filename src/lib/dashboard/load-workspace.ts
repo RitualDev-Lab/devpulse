@@ -808,7 +808,7 @@ export async function loadDashboardWorkspace(
   return {
     status: "ready",
     user,
-    activeProject,
+    activeProject: initialData.project,
     initialData,
     projects: projectSummaries,
     customDomain: user?.customDomainVerified ? user.customDomain : null,
