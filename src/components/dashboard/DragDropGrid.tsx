@@ -15,6 +15,7 @@ import { GitHubStatsCard } from "./widgets/GitHubStatsCard";
 import { NpmDownloadsCard } from "./widgets/NpmDownloadsCard";
 import { PyPiDownloadsCard } from "./widgets/PyPiDownloadsCard";
 import { RustCratesCard } from "./widgets/RustCratesCard";
+import { GoModuleCard } from "./widgets/GoModuleCard";
 import { DockerContainerCard } from "./widgets/DockerContainerCard";
 import { VsCodeStatsCard } from "./widgets/VsCodeStatsCard";
 import { McpStatsCard } from "./widgets/McpStatsCard";
@@ -35,6 +36,7 @@ import type { GitHubRepoStats } from "@/lib/integrations/github";
 import type { NpmStats } from "@/lib/integrations/npm";
 import type { PyPiStats } from "@/lib/integrations/pypi";
 import type { RustCrateStats } from "@/lib/integrations/crates";
+import type { GoModuleStats } from "@/lib/integrations/go";
 import type { DockerRepoStats } from "@/lib/integrations/docker";
 import type { VsCodeStats } from "@/lib/integrations/vscode";
 import type { McpServerStats } from "@/lib/integrations/mcp";
@@ -69,6 +71,7 @@ export interface DashboardData {
   npmStats: NpmStats | null;
   pypiStats: PyPiStats | null;
   rustStats: RustCrateStats | null;
+  goStats?: GoModuleStats | null;
   dockerStats?: DockerRepoStats | null;
   vscodeStats: VsCodeStats | null;
   mcpStats: McpServerStats | null;
@@ -116,6 +119,9 @@ export function DragDropGrid({
         : []),
       ...(data.project.rustCrate
         ? [{ id: "rust_crates", title: "Rust Crates", defaultW: 4, defaultH: 1 }]
+        : []),
+      ...(data.project.goModule
+        ? [{ id: "go_module", title: "Go Module", defaultW: 4, defaultH: 1 }]
         : []),
       ...(data.project.dockerImage
         ? [{ id: "docker_container", title: "Docker Hub Container", defaultW: 4, defaultH: 1 }]
@@ -385,6 +391,13 @@ export function DragDropGrid({
           <RustCratesCard
             stats={data.rustStats}
             crateName={data.project.rustCrate || "Rust crate"}
+          />
+        );
+      case "go_module":
+        return (
+          <GoModuleCard
+            stats={data.goStats || null}
+            modulePath={data.project.goModule || "Go module"}
           />
         );
       case "docker_container":

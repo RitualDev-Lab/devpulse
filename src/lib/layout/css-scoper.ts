@@ -186,10 +186,12 @@ export function getPresetThemeCss(themeId: string): string {
 export function scopeCustomCss(rawCss: string, scopeSelector = ".devpulse-workspace"): string {
   if (!rawCss || !rawCss.trim()) return "";
 
-  // 1. Strip any attempt to close the <style> tag or inject markup
+  // 1. Strip any attempt to close the <style> tag, inject markup, or load external @import stylesheets
   const sanitized = rawCss
-    .replace(/<\/style/gi, "")
-    .replace(/<script/gi, "")
+    .replace(/<script\b[\s\S]*?<\/script\s*>/gi, "")
+    .replace(/<\/?(?:style|script)[^>]*>/gi, "")
+    .replace(/@import\b[^;]*;?/gi, "")
+    .replace(/expression\s*\(/gi, "blocked(")
     .replace(/\/\*[\s\S]*?\*\//g, "");
 
   return scopeCssBlock(sanitized, scopeSelector);

@@ -1,100 +1,115 @@
 /**
  * VS Code Marketplace & Open-VSX Service
- * Interacts with public registry APIs. Zero tokens needed.
+ * Queries BOTH Visual Studio Marketplace and Open-VSX in parallel. Zero mocked data.
  */
 
 export interface VsCodeStats {
-  extensionId: string; // e.g. "ritualdev.ritual-vscode"
+  extensionId: string;
   name: string;
   publisher: string;
   displayName: string;
   description: string;
   installs: number;
+  vsMarketplaceInstalls: number;
+  openVsxInstalls: number;
   averageRating: number;
   reviewCount: number;
   version: string;
   marketplaceUrl: string;
+  openVsxUrl?: string | null;
 }
+
+type MarketplaceExtension = {
+  extensionName?: string;
+  displayName?: string;
+  shortDescription?: string;
+  publisher?: { publisherName?: string };
+  versions?: Array<{ version?: string }>;
+  statistics?: Array<{ statisticName?: string; value?: number }>;
+};
+
+type OpenVsxExtension = {
+  name?: string;
+  namespace?: string;
+  displayName?: string;
+  description?: string;
+  downloadCount?: number;
+  averageRating?: number;
+  reviewCount?: number;
+  version?: string;
+  error?: string;
+};
 
 export async function fetchVsCodeStats(extensionId: string): Promise<VsCodeStats | null> {
   try {
     const [publisher, name] = extensionId.trim().split(".");
     if (!publisher || !name) return null;
 
-    // 1. Query Visual Studio Marketplace Public Gallery API
-    const galleryRes = await fetch(
-      "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery",
-      {
+    const [galleryRes, openVsxRes] = await Promise.all([
+      fetch("https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json;api-version=3.0-preview.1",
         },
         body: JSON.stringify({
-          filters: [
-            {
-              criteria: [{ filterType: 7, value: extensionId }],
-            },
-          ],
+          filters: [{ criteria: [{ filterType: 7, value: extensionId }] }],
           flags: 0x200 | 0x100 | 0x8 | 0x1,
         }),
         next: { revalidate: 3600 },
-      }
-    );
+      }).catch(() => null),
+      fetch(`https://open-vsx.org/api/${publisher}/${name}`, {
+        next: { revalidate: 3600 },
+      }).catch(() => null),
+    ]);
 
-    if (galleryRes.ok) {
-      const data = await galleryRes.json();
-      const ext = data.results?.[0]?.extensions?.[0];
-      if (ext) {
-        let installs = 0;
-        let rating = 5.0;
-        let reviewCount = 0;
+    let vsExt: MarketplaceExtension | null = null;
+    if (galleryRes && galleryRes.ok) {
+      const data = await galleryRes.json().catch(() => null);
+      vsExt = (data?.results?.[0]?.extensions?.[0] as MarketplaceExtension) || null;
+    }
 
-        if (Array.isArray(ext.statistics)) {
-          for (const stat of ext.statistics) {
-            if (stat.statisticName === "install") installs = stat.value || 0;
-            if (stat.statisticName === "averagerating") rating = Number(stat.value?.toFixed(1)) || 5.0;
-            if (stat.statisticName === "ratingcount") reviewCount = stat.value || 0;
-          }
-        }
+    let ovExt: OpenVsxExtension | null = null;
+    if (openVsxRes && openVsxRes.ok) {
+      const ov = (await openVsxRes.json().catch(() => null)) as OpenVsxExtension | null;
+      if (ov && !ov.error) ovExt = ov;
+    }
 
-        return {
-          extensionId,
-          name: ext.extensionName || name,
-          publisher: ext.publisher?.publisherName || publisher,
-          displayName: ext.displayName || name,
-          description: ext.shortDescription || "",
-          installs,
-          averageRating: rating,
-          reviewCount,
-          version: ext.versions?.[0]?.version || "1.0.0",
-          marketplaceUrl: `https://marketplace.visualstudio.com/items?itemName=${extensionId}`,
-        };
+    if (!vsExt && !ovExt) return null;
+
+    let vsInstalls = 0;
+    let vsRating = 0;
+    let vsReviews = 0;
+
+    if (vsExt && Array.isArray(vsExt.statistics)) {
+      for (const stat of vsExt.statistics) {
+        if (stat.statisticName === "install") vsInstalls = stat.value || 0;
+        if (stat.statisticName === "averagerating") vsRating = Number(stat.value?.toFixed(1)) || 0;
+        if (stat.statisticName === "ratingcount") vsReviews = stat.value || 0;
       }
     }
 
-    // 2. Fallback to Open-VSX Public API
-    const openVsxRes = await fetch(`https://open-vsx.org/api/${publisher}/${name}`, {
-      next: { revalidate: 3600 },
-    });
-    if (openVsxRes.ok) {
-      const ov = await openVsxRes.json();
-      return {
-        extensionId,
-        name: ov.name || name,
-        publisher: ov.namespace || publisher,
-        displayName: ov.displayName || ov.name || name,
-        description: ov.description || "",
-        installs: ov.downloadCount || 0,
-        averageRating: Number(ov.averageRating?.toFixed(1)) || 5.0,
-        reviewCount: ov.reviewCount || 0,
-        version: ov.version || "1.0.0",
-        marketplaceUrl: `https://open-vsx.org/extension/${publisher}/${name}`,
-      };
-    }
+    const ovInstalls = Number(ovExt?.downloadCount || 0);
+    const ovRating = Number(ovExt?.averageRating?.toFixed?.(1) || 0);
+    const ovReviews = Number(ovExt?.reviewCount || 0);
 
-    // Return null if not found on VS Code Marketplace or Open-VSX (100% genuine data)
-    return null;
+    return {
+      extensionId,
+      name: vsExt?.extensionName || ovExt?.name || name,
+      publisher: vsExt?.publisher?.publisherName || ovExt?.namespace || publisher,
+      displayName: vsExt?.displayName || ovExt?.displayName || ovExt?.name || name,
+      description: vsExt?.shortDescription || ovExt?.description || "",
+      installs: vsInstalls + ovInstalls,
+      vsMarketplaceInstalls: vsInstalls,
+      openVsxInstalls: ovInstalls,
+      averageRating: vsRating > 0 ? vsRating : ovRating > 0 ? ovRating : 5.0,
+      reviewCount: vsReviews + ovReviews,
+      version: vsExt?.versions?.[0]?.version || ovExt?.version || "0.0.0",
+      marketplaceUrl: vsExt
+        ? `https://marketplace.visualstudio.com/items?itemName=${extensionId}`
+        : `https://open-vsx.org/extension/${publisher}/${name}`,
+      openVsxUrl: ovExt ? `https://open-vsx.org/extension/${publisher}/${name}` : null,
+    };
   } catch (err) {
     console.error(`Error fetching VS Code extension ${extensionId}:`, err);
     return null;

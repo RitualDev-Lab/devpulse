@@ -80,7 +80,9 @@ export function VsCodeStatsCard({ stats, extensionId }: VsCodeStatsCardProps) {
         <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/50 border border-zinc-800/60 text-xs text-zinc-400">
           <div className="flex items-center gap-1.5 text-zinc-300">
             <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />
-            <span>Open-VSX & VS Code Marketplace Synced</span>
+            <span>
+              VS Code: {formatNumber(stats.vsMarketplaceInstalls)} &bull; Open VSX: {formatNumber(stats.openVsxInstalls)}
+            </span>
           </div>
           <span className="text-[10px] font-mono text-zinc-500">{stats.reviewCount} reviews</span>
         </div>

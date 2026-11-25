@@ -9,6 +9,7 @@ import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
 import { fetchRustCrateStats } from "@/lib/integrations/crates";
+import { fetchGoModuleStats } from "@/lib/integrations/go";
 import { fetchDockerRepoStats } from "@/lib/integrations/docker";
 import { fetchVsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats } from "@/lib/integrations/mcp";
@@ -107,6 +108,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
     npmStats,
     pypiStats,
     rustStats,
+    goStats,
     dockerStats,
     vscodeStats,
     mcpStats,
@@ -126,6 +128,9 @@ export default async function DashboardPage(props: DashboardPageProps) {
     activeProject.rustCrate
       ? fetchRustCrateStats(activeProject.rustCrate).catch(() => null)
       : Promise.resolve(null),
+    activeProject.goModule
+      ? fetchGoModuleStats(activeProject.goModule).catch(() => null)
+      : Promise.resolve(null),
     activeProject.dockerImage
       ? fetchDockerRepoStats(activeProject.dockerImage).catch(() => null)
       : Promise.resolve(null),
@@ -133,7 +138,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
       ? fetchVsCodeStats(activeProject.vscodeExtension).catch(() => null)
       : Promise.resolve(null),
     activeProject.mcpServerName
-      ? fetchMcpStats(activeProject.mcpServerName).catch(() => null)
+      ? fetchMcpStats(activeProject.mcpServerName, activeProject.githubRepo).catch(() => null)
       : Promise.resolve(null),
     fetchRevenueStats({
       stripeKey: activeProject.stripeApiKey,
@@ -258,6 +263,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
     npmStats,
     pypiStats,
     rustStats,
+    goStats,
     dockerStats,
     vscodeStats,
     mcpStats,
