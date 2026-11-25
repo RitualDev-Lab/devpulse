@@ -297,6 +297,19 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
           </div>
         </div>
 
+        {!project.githubRepo && (
+          <div className="p-4 rounded-2xl bg-indigo-950/35 border border-indigo-500/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="space-y-0.5">
+              <div className="font-bold text-white">
+                Standalone Workspace (No GitHub Repo Connected)
+              </div>
+              <p className="text-zinc-300">
+                Web, Mobile (React Native / Flutter), Desktop (Electron / Tauri), PyPI/npm Packages &amp; OCI telemetry run independently without GitHub. Attach a public or private repo via <strong>Quick Connect</strong> anytime.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Summary KPI Strip */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800">
