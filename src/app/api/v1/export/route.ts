@@ -4,6 +4,7 @@ import { dailyMetrics, errorEvents, projectReleases, projects, uptimeMonitors } 
 import { desc, eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
     }
 
     let proj: any = null;
-    if (projectId === "prj_ritual_core") {
+    if (isPublicDemoProject(projectId)) {
       const [demoProj] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
       proj = demoProj || null;
     } else {

@@ -23,6 +23,8 @@ import { recordAuditEvent } from "@/lib/security/audit";
 import { decryptSecret } from "@/lib/security/crypto";
 import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 import { buildFatalCrashEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
+import { apiError } from "@/lib/security/api-error";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096; // Offload payloads > 4KB (e.g. 100KB+ traces & terminal dumps) to R2
 const MAX_TURSO_PREVIEW_CHARS = 2000;
@@ -138,10 +140,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("GET /api/v1/event error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch crash events", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to fetch crash events", 500);
   }
 }
 
@@ -244,7 +243,8 @@ export async function POST(req: NextRequest) {
     const version = (body.version || body.release) ? String(body.version || body.release).slice(0, 50) : null;
     const os = body.os ? String(body.os).slice(0, 100) : null;
     const environment = String(body.environment || "production").slice(0, 50);
-    const reporterEmail = body.reporterEmail || body.reporter_email ? String(body.reporterEmail || body.reporter_email).slice(0, 255) : null;
+    // Reporter email is end-user PII. Telemetry ingest does not store it; contact details belong to the report form.
+    const reporterEmail: string | null = null;
     const rawAttachment = body.attachmentKey || body.attachmentUrl || body.attachment_url;
     let attachmentUrl: string | null = null;
     if (rawAttachment) {
@@ -451,7 +451,7 @@ export async function POST(req: NextRequest) {
           reporterEmail,
           r2ObjectKey,
           payloadSizeBytes: payloadBytes,
-          dashboardUrl: `https://devpulse.ritualdev.in/dashboard?project=${project.slug}`,
+          dashboardUrl: `${PUBLIC_APP_URL}/dashboard?project=${project.slug}`,
         }
       ).catch((err) => console.error("Webhook alert error:", err));
     }
@@ -468,7 +468,7 @@ export async function POST(req: NextRequest) {
           runtime,
           version,
           environment,
-          dashboardUrl: `https://devpulse.ritualdev.in/dashboard?project=${project.slug}`,
+          dashboardUrl: `${PUBLIC_APP_URL}/dashboard?project=${project.slug}`,
         }),
         provider: project.emailProvider,
         apiKey: emailKey,
@@ -528,10 +528,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (err: any) {
     console.error("Error ingesting telemetry event:", err);
-    return NextResponse.json(
-      { error: "Internal Server Error", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Internal Server Error", 500);
   }
 }
 
@@ -592,9 +589,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: true, eventId, status });
   } catch (err: any) {
     console.error("PATCH /api/v1/event error:", err);
-    return NextResponse.json(
-      { error: "Failed to update event status", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to update event status", 500);
   }
 }

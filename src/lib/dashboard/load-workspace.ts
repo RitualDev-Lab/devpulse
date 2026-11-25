@@ -38,6 +38,7 @@ import { readProjectSnapshots, refreshProjectSnapshots } from "@/lib/dashboard/s
 import { loadAnalyticsSummarySql } from "@/lib/analytics/rollup";
 import type { ProjectSummary } from "@/components/dashboard/ProjectWorkspaceSwitcher";
 import type { DashboardData } from "@/components/dashboard/DragDropGrid";
+import { DEMO_PROJECT_ID, isPublicDemoProject } from "@/lib/security/demo-project";
 
 export interface LoadedWorkspaceReady {
   status: "ready";
@@ -177,12 +178,14 @@ export const loadDashboardShellMeta = cache(async (): Promise<DashboardShellMeta
     };
   }
 
-  const demoRows = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, "prj_ritual_core"))
-    .limit(1)
-    .catch(() => []);
+  const demoRows = isPublicDemoProject(DEMO_PROJECT_ID)
+    ? await db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, DEMO_PROJECT_ID))
+        .limit(1)
+        .catch(() => [])
+    : [];
 
   return {
     user: null,
@@ -253,11 +256,11 @@ export async function loadDashboardWorkspace(
           .limit(1);
         activeProject = matched[0] || null;
       }
-      if (!activeProject) {
+      if (!activeProject && isPublicDemoProject(DEMO_PROJECT_ID)) {
         const demoRows = await db
           .select()
           .from(projects)
-          .where(eq(projects.id, "prj_ritual_core"))
+          .where(eq(projects.id, DEMO_PROJECT_ID))
           .limit(1);
         activeProject = demoRows[0] || null;
       }
@@ -643,7 +646,7 @@ export async function loadDashboardWorkspace(
       const crashFreeRate =
         sessions > 0
           ? Number(Math.max(0, ((sessions - r.crashCount) / sessions) * 100).toFixed(2))
-          : 100;
+          : null;
       return {
         id: r.id,
         version: r.version,

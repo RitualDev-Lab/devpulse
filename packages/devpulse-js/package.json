@@ -21,8 +21,9 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node build.mjs",
-    "test": "node test.mjs"
+    "build": "node build.mjs && tsc -p tsconfig.json",
+    "test": "node build.mjs && node test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "keywords": [
     "devpulse",
@@ -36,5 +37,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/RitualDev-Lab/devpulse"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "typescript": "^5.9.3"
   }
 }

@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { parseOtlpTracePayload } from "@/lib/traces/otlp-parser";
+import { scrubTelemetryText, scrubTelemetryValue } from "@/lib/security/ingest-scrub";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,6 @@ export async function POST(req: NextRequest) {
     const rawKey =
       authHeader?.replace(/^Bearer\s+/i, "") ||
       req.headers.get("x-devpulse-key") ||
-      req.nextUrl.searchParams.get("apiKey") ||
       "";
 
     if (!rawKey.trim()) {
@@ -121,15 +121,15 @@ export async function POST(req: NextRequest) {
         spanId: sp.spanId,
         parentSpanId: sp.parentSpanId,
         serviceName: sp.serviceName,
-        spanName: sp.spanName,
+        spanName: scrubTelemetryText(sp.spanName),
         kind: sp.kind,
         statusCode: sp.statusCode,
-        statusMessage: sp.statusMessage,
+        statusMessage: sp.statusMessage == null ? sp.statusMessage : scrubTelemetryText(String(sp.statusMessage)),
         startTimeMs: sp.startTimeMs,
         endTimeMs: sp.endTimeMs,
         durationMs: sp.durationMs,
-        attributesJson: JSON.stringify(sp.attributes).slice(0, 4000),
-        eventsJson: sp.events.length > 0 ? JSON.stringify(sp.events).slice(0, 4000) : null,
+        attributesJson: JSON.stringify(scrubTelemetryValue(sp.attributes)).slice(0, 4000),
+        eventsJson: sp.events.length > 0 ? JSON.stringify(scrubTelemetryValue(sp.events)).slice(0, 4000) : null,
       }));
 
       if (spanBatch.length > 0) {

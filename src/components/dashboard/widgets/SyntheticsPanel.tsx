@@ -11,6 +11,7 @@ import {
   Loader2,
   Code2,
 } from "lucide-react";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 interface SyntheticTestRow {
   id: string;
@@ -31,7 +32,7 @@ interface RegionMetric {
 }
 
 const DEFAULT_YAML = `name: Production E2E Smoke Test
-baseUrl: https://devpulse.ritualdev.in
+baseUrl: ${PUBLIC_APP_URL}
 steps:
   - goto: /
     expectStatus: 200

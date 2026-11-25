@@ -6,6 +6,8 @@ import { eq } from "drizzle-orm";
 import type { BillingItemKey } from "@/lib/billing/plans";
 import { createDodoCheckoutSession } from "@/lib/billing/dodo";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { apiError } from "@/lib/security/api-error";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     const origin =
       req.headers.get("origin") ||
-      (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://devpulse.ritualdev.in");
+      (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? `${PUBLIC_APP_URL}`);
 
     const returnUrl = `${origin}/dashboard?billing=success&item=${encodeURIComponent(itemKey)}`;
 
@@ -79,9 +81,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("POST /api/v1/billing/checkout error:", err);
-    return NextResponse.json(
-      { error: err?.message || "Failed to initialize Dodo checkout session" },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to initialize Dodo checkout session", 500);
   }
 }

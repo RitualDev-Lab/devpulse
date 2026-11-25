@@ -19,15 +19,13 @@ export async function OPTIONS() {
 }
 
 /**
- * GET /api/v1/flags/evaluate?apiKey=...&userId=...&key=...
+ * GET /api/v1/flags/evaluate?userId=...&key=...  (Authorization: Bearer <key>)
  * High-speed SDK endpoint powering: if (await pulse.flag("new-checkout")) { ... }
  */
 export async function GET(req: NextRequest) {
   try {
-    const apiKey =
-      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
-      req.nextUrl.searchParams.get("apiKey") ||
-      "";
+    // Keys are accepted only in headers. Query strings leak into logs and referrers.
+    const apiKey = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
     const userKey = req.nextUrl.searchParams.get("userId") || "anonymous";
     const singleKey = req.nextUrl.searchParams.get("key");
 

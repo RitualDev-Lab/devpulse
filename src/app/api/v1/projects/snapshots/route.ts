@@ -5,6 +5,8 @@ import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { readProjectSnapshots, refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,7 @@ export async function GET(req: NextRequest) {
     let projectRow: typeof projects.$inferSelect | undefined;
     let userIdForOAuth: string | null = null;
 
-    if (projectId === "prj_ritual_core") {
+    if (isPublicDemoProject(projectId)) {
       const [demoRow] = await db
         .select()
         .from(projects)
@@ -80,9 +82,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("GET /api/v1/projects/snapshots error:", err);
-    return NextResponse.json(
-      { error: "Failed to refresh snapshots", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to refresh snapshots", 500);
   }
 }

@@ -9,6 +9,8 @@ import {
 } from "@/lib/security/rate-limit";
 import { decryptSecret } from "@/lib/security/crypto";
 import { sendTransactionalEmail } from "@/lib/alerts/email";
+import { apiError } from "@/lib/security/api-error";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -59,10 +61,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ subscribers: Number(row?.count || 0) });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: "Failed to process status subscription request", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to process status subscription request", 500);
   }
 }
 
@@ -142,7 +141,7 @@ export async function POST(req: NextRequest) {
     // Best-effort welcome email when project owner configured transactional email
     if (project.emailApiKeyEncrypted || process.env.RESEND_API_KEY) {
       const emailKey = await decryptSecret(project.emailApiKeyEncrypted).catch(() => null);
-      const unsubUrl = `https://devpulse.ritualdev.in/api/v1/status/subscribe?token=${token}`;
+      const unsubUrl = `${PUBLIC_APP_URL}/api/v1/status/subscribe?token=${token}`;
       await sendTransactionalEmail({
         to: email,
         subject: `[${project.name}] Subscribed to Status Updates`,
@@ -160,10 +159,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err: any) {
-    return NextResponse.json(
-      { error: "Failed to subscribe email", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to subscribe email", 500);
   }
 }
 
@@ -179,6 +175,6 @@ export async function DELETE(req: NextRequest) {
       .where(eq(statusSubscribers.unsubscribeToken, token));
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: "Failed to unsubscribe", details: err?.message }, { status: 500 });
+    return apiError(err, "Failed to unsubscribe", 500);
   }
 }

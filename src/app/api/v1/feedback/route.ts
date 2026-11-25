@@ -10,6 +10,7 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -92,10 +93,7 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: "Failed to load feature requests", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to load feature requests", 500);
   }
 }
 
@@ -257,10 +255,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err: any) {
-    return NextResponse.json(
-      { error: "Failed to submit feedback", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to submit feedback", 500);
   }
 }
 
@@ -317,9 +312,6 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: "Failed to update feature request", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to update feature request", 500);
   }
 }

@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { parseProviderDeployWebhook } from "@/lib/deployments/webhook-parser";
+import { scrubTelemetryText, scrubTelemetryValue } from "@/lib/security/ingest-scrub";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +18,11 @@ export async function POST(req: NextRequest) {
     const rawKey =
       req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
       req.headers.get("x-devpulse-key") ||
-      req.nextUrl.searchParams.get("apiKey") ||
       "";
 
     if (!rawKey.trim()) {
       return NextResponse.json(
-        { error: "Missing telemetry API key (?apiKey=... or Authorization: Bearer <key>)" },
+        { error: "Missing telemetry API key (Authorization: Bearer <key> or X-DevPulse-Key)" },
         { status: 401 }
       );
     }
@@ -46,12 +46,12 @@ export async function POST(req: NextRequest) {
       version: parsed.version,
       commitSha: parsed.commitSha,
       branch: parsed.branch,
-      deployer: parsed.deployer,
+      deployer: parsed.deployer == null ? null : scrubTelemetryText(String(parsed.deployer)),
       environment: parsed.environment,
       status: parsed.status,
-      changelogSummary: parsed.changelogSummary,
+      changelogSummary: parsed.changelogSummary == null ? null : scrubTelemetryText(String(parsed.changelogSummary)),
       deploymentUrl: parsed.deploymentUrl,
-      totalSessions: 100,
+      totalSessions: 0,
       crashCount: 0,
     });
 
@@ -74,11 +74,11 @@ export async function POST(req: NextRequest) {
           projectId: project.id,
           version: parsed.version,
           commitSha: parsed.commitSha,
-          commitAuthor: parsed.deployer,
-          commitMessage: parsed.changelogSummary,
+          commitAuthor: parsed.deployer == null ? parsed.deployer : scrubTelemetryText(String(parsed.deployer)),
+          commitMessage: parsed.changelogSummary == null ? parsed.changelogSummary : scrubTelemetryText(String(parsed.changelogSummary)),
           branch: parsed.branch,
           source: parsed.provider,
-          totalSessions: 100,
+          totalSessions: 0,
           crashCount: 0,
         })
         .catch(() => {});

@@ -5,6 +5,7 @@ import { users, projects, userCustomDomains, userStorageConfigs, billingEvents }
 import { eq, desc, sql } from "drizzle-orm";
 import { PLANS, ADDONS, getEffectiveEntitlements } from "@/lib/billing/plans";
 import { fetchDodoCustomerPayments } from "@/lib/billing/dodo";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -124,9 +125,6 @@ export async function GET() {
     });
   } catch (err: any) {
     console.error("GET /api/v1/billing error:", err);
-    return NextResponse.json(
-      { error: "Failed to load billing profile", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to load billing profile", 500);
   }
 }

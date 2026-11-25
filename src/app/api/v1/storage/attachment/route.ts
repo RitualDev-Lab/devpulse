@@ -7,6 +7,8 @@ import { resolveProjectAccess } from "@/lib/security/rbac";
 import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 import { resolveUserStorageContext } from "@/lib/storage/quota";
 import { createPresignedUrl, getR2ObjectText } from "@/lib/storage/r2";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +42,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Tenant scoping & RBAC: allow demo preview OR any authorized org/project member
-    if (project.id !== "prj_ritual_core") {
+    if (!isPublicDemoProject(project.id)) {
       const user = await getCurrentUser();
       if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -114,9 +116,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("GET /api/v1/storage/attachment error:", err);
-    return NextResponse.json(
-      { error: "Failed to retrieve R2 object", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to retrieve R2 object", 500);
   }
 }

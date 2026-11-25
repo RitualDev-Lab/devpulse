@@ -7,6 +7,7 @@ import { resolveProjectAccess } from "@/lib/security/rbac";
 import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    if (projectId !== "prj_ritual_core") {
+    if (!isPublicDemoProject(projectId)) {
       const user = await getCurrentUser();
       if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const access = await resolveProjectAccess(projectId, user);
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
         const crashFreeRate =
           sessions > 0
             ? Number(Math.max(0, ((sessions - r.crashCount) / sessions) * 100).toFixed(2))
-            : 100;
+            : null;
         return {
           ...r,
           crashFreeRate,
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Session heartbeat / release registration
-    const sessionInc = Math.max(0, Math.min(1000, Number(body.sessions || 1)));
+    const sessionInc = Math.max(0, Math.min(1000, Math.floor(Number(body.sessions) || 0)));
     const commitSha = body.commitSha ? String(body.commitSha).slice(0, 64) : null;
 
     const [existing] = await db

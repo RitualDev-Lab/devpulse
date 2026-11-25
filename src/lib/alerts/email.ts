@@ -1,3 +1,4 @@
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 /**
  * DevPulse Transactional Email Dispatcher (Resend & Postmark)
  * Zero-dependency Edge-compatible email sender supporting both platform keys
@@ -73,7 +74,7 @@ export async function sendTransactionalEmail(
   const from =
     options.from ||
     process.env.DEVPULSE_FROM_EMAIL ||
-    "DevPulse Alerts <alerts@devpulse.ritualdev.in>";
+    `DevPulse Alerts <alerts@${new URL(PUBLIC_APP_URL).hostname}>`;
 
   try {
     if (provider === "resend") {
@@ -146,7 +147,7 @@ export function buildFatalCrashEmailHtml(input: {
   environment?: string | null;
   dashboardUrl?: string;
 }): string {
-  const url = input.dashboardUrl || "https://devpulse.ritualdev.in";
+  const url = input.dashboardUrl || `${PUBLIC_APP_URL}`;
   return `
   <div style="font-family:Inter,system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px;border-radius:12px;max-width:600px;margin:0 auto;border:1px solid #27272a;">
     <div style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(239,68,68,0.15);color:#f87171;font-size:12px;font-weight:600;margin-bottom:14px;">
@@ -174,7 +175,7 @@ export function buildDowntimeEmailHtml(input: {
   errorMessage?: string | null;
   dashboardUrl?: string;
 }): string {
-  const dashUrl = input.dashboardUrl || "https://devpulse.ritualdev.in";
+  const dashUrl = input.dashboardUrl || `${PUBLIC_APP_URL}`;
   return `
   <div style="font-family:Inter,system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px;border-radius:12px;max-width:600px;margin:0 auto;border:1px solid #27272a;">
     <div style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(239,68,68,0.15);color:#f87171;font-size:12px;font-weight:600;margin-bottom:14px;">
@@ -200,7 +201,7 @@ export function buildRbacInviteEmailHtml(input: {
   inviteeUsername: string;
   dashboardUrl?: string;
 }): string {
-  const dashUrl = input.dashboardUrl || "https://devpulse.ritualdev.in";
+  const dashUrl = input.dashboardUrl || `${PUBLIC_APP_URL}`;
   return `
   <div style="font-family:Inter,system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px;border-radius:12px;max-width:600px;margin:0 auto;border:1px solid #27272a;">
     <div style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(99,102,241,0.18);color:#a5b4fc;font-size:12px;font-weight:600;margin-bottom:14px;">
@@ -231,7 +232,7 @@ export function buildWeeklyDigestEmailHtml(digest: {
   p95LatencyMs: number;
   dashboardUrl?: string;
 }): string {
-  const dashUrl = digest.dashboardUrl || "https://devpulse.ritualdev.in";
+  const dashUrl = digest.dashboardUrl || `${PUBLIC_APP_URL}`;
   return `
   <div style="font-family:Inter,system-ui,sans-serif;background:#09090b;color:#f4f4f5;padding:32px;border-radius:12px;max-width:620px;margin:0 auto;border:1px solid #27272a;">
     <div style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(16,185,129,0.15);color:#34d399;font-size:12px;font-weight:600;margin-bottom:14px;">

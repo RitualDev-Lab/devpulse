@@ -7,6 +7,7 @@ import { normalizeThemeId } from "@/lib/layout/css-scoper";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -84,9 +85,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("POST /api/v1/projects/styling error:", err);
-    return NextResponse.json(
-      { error: "Failed to save styling preferences", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to save styling preferences", 500);
   }
 }

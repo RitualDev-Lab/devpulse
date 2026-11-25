@@ -3,14 +3,7 @@ import type { BillingItemKey } from "./plans";
 const DODO_LIVE_BASE_URL = "https://live.dodopayments.com";
 const DODO_TEST_BASE_URL = "https://test.dodopayments.com";
 
-// Live Dodo Payments product IDs created for DevPulse SaaS (fallback if env not injected in local tooling)
-const DEFAULT_PRODUCT_IDS: Record<BillingItemKey, string> = {
-  pro: "pdt_0Nsfgf8Ryeyj6XQbwikSQ",
-  team: "pdt_0NsfgfAkiZAe0UAolxkWo",
-  extra_domain: "pdt_0NsfgfCpABtcsEgbRVYSN",
-  extra_storage: "pdt_0NsfgfE4FUa4NQXUPECWa",
-};
-
+// Product IDs come only from DODO_PRODUCT_* environment variables (no committed defaults).
 export function getDodoApiBaseUrl(): string {
   const env = (process.env.DODO_PAYMENTS_ENVIRONMENT || "live").toLowerCase();
   return env === "test" || env === "test_mode" ? DODO_TEST_BASE_URL : DODO_LIVE_BASE_URL;
@@ -20,21 +13,30 @@ export function getDodoApiKey(): string | null {
   return process.env.DODO_PAYMENTS_API_KEY?.trim() || null;
 }
 
-export function getDodoProductId(itemKey: BillingItemKey): string {
+function configuredProductId(itemKey: BillingItemKey): string {
   const envMap: Record<BillingItemKey, string | undefined> = {
     pro: process.env.DODO_PRODUCT_PRO,
     team: process.env.DODO_PRODUCT_TEAM,
     extra_domain: process.env.DODO_PRODUCT_EXTRA_DOMAIN,
     extra_storage: process.env.DODO_PRODUCT_EXTRA_STORAGE,
   };
-  return envMap[itemKey]?.trim() || DEFAULT_PRODUCT_IDS[itemKey];
+  return envMap[itemKey]?.trim() || "";
+}
+
+export function getDodoProductId(itemKey: BillingItemKey): string {
+  const id = configuredProductId(itemKey);
+  if (!id) {
+    throw new Error(`Dodo product is not configured for ${itemKey} (set DODO_PRODUCT_* env)`);
+  }
+  return id;
 }
 
 export function resolveItemKeyFromProductId(productId?: string | null): BillingItemKey | null {
   if (!productId) return null;
   const keys: BillingItemKey[] = ["pro", "team", "extra_domain", "extra_storage"];
   for (const key of keys) {
-    if (getDodoProductId(key) === productId || DEFAULT_PRODUCT_IDS[key] === productId) {
+    const id = configuredProductId(key);
+    if (id && id === productId) {
       return key;
     }
   }
@@ -190,59 +192,6 @@ export async function fetchDodoCustomerPayments(dodoCustomerId: string) {
   } catch {
     return [];
   }
-}
-
-export async function verifyDodoPaymentOrSubscriptionLive(opts: {
-  paymentId?: string | null;
-  subscriptionId?: string | null;
-}): Promise<{ verified: boolean; status?: string; customerId?: string; metadata?: Record<string, string> }> {
-  const apiKey = getDodoApiKey();
-  if (!apiKey) return { verified: false };
-
-  try {
-    if (opts.subscriptionId) {
-      const res = await fetch(
-        `${getDodoApiBaseUrl()}/subscriptions/${encodeURIComponent(opts.subscriptionId)}`,
-        { headers: { Authorization: `Bearer ${apiKey}` } }
-      );
-      if (res.ok) {
-        const sub = (await res.json()) as {
-          status?: string;
-          customer?: { customer_id?: string };
-          metadata?: Record<string, string>;
-        };
-        return {
-          verified: true,
-          status: sub.status,
-          customerId: sub.customer?.customer_id,
-          metadata: sub.metadata,
-        };
-      }
-    }
-    if (opts.paymentId) {
-      const res = await fetch(
-        `${getDodoApiBaseUrl()}/payments/${encodeURIComponent(opts.paymentId)}`,
-        { headers: { Authorization: `Bearer ${apiKey}` } }
-      );
-      if (res.ok) {
-        const pay = (await res.json()) as {
-          status?: string;
-          customer?: { customer_id?: string };
-          metadata?: Record<string, string>;
-        };
-        return {
-          verified: true,
-          status: pay.status,
-          customerId: pay.customer?.customer_id,
-          metadata: pay.metadata,
-        };
-      }
-    }
-  } catch {
-    return { verified: false };
-  }
-
-  return { verified: false };
 }
 
 /**

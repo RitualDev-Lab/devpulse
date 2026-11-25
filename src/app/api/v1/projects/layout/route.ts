@@ -6,6 +6,8 @@ import { getCurrentUser } from "@/lib/auth";
 import type { GridWidgetItem } from "@/lib/layout/grid-engine";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +18,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    if (projectId !== "prj_ritual_core") {
+    if (!isPublicDemoProject(projectId)) {
       const user = await getCurrentUser();
       if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,10 +47,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ widgets });
   } catch (err: any) {
     console.error("GET /api/v1/projects/layout error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch project layout", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to fetch project layout", 500);
   }
 }
 
@@ -119,10 +118,7 @@ async function saveLayout(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("PUT /api/v1/projects/layout error:", err);
-    return NextResponse.json(
-      { error: "Failed to persist dashboard layout", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to persist dashboard layout", 500);
   }
 }
 
@@ -176,9 +172,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("DELETE /api/v1/projects/layout error:", err);
-    return NextResponse.json(
-      { error: "Failed to reset layout", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to reset layout", 500);
   }
 }

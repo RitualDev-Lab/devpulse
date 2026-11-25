@@ -12,6 +12,7 @@ import { createPresignedUrl } from "@/lib/storage/r2";
 import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { checkRateLimit, verifyTurnstileToken, getClientIp } from "@/lib/security/rate-limit";
 import { resolveProjectAccess } from "@/lib/security/rbac";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -123,10 +124,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("POST /api/v1/storage/presign error:", err);
-    return NextResponse.json(
-      { error: "Failed to create presigned upload URL", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to create presigned upload URL", 500);
   }
 }
 

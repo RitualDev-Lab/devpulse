@@ -8,6 +8,7 @@ import {
   getPresetThemeCss,
   scopeCustomCss,
 } from "@/lib/layout/css-scoper";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 interface PublicPortalViewProps {
   portalHost: string;
@@ -121,7 +122,7 @@ export function PublicPortalView({
               <div className="flex items-center gap-2">
                 <a
                   href={
-                    portalHost === "devpulse.ritualdev.in" || portalHost.startsWith("localhost")
+                    portalHost === new URL(PUBLIC_APP_URL).hostname || portalHost.startsWith("localhost")
                       ? `/portal/${encodeURIComponent(user.subdomain)}/status?project=${encodeURIComponent(activeProject.slug)}`
                       : `/status?project=${encodeURIComponent(activeProject.slug)}`
                   }
@@ -131,7 +132,7 @@ export function PublicPortalView({
                 </a>
                 <a
                   href={
-                    portalHost === "devpulse.ritualdev.in" || portalHost.startsWith("localhost")
+                    portalHost === new URL(PUBLIC_APP_URL).hostname || portalHost.startsWith("localhost")
                       ? `/portal/${encodeURIComponent(user.subdomain)}/changelog?project=${encodeURIComponent(activeProject.slug)}`
                       : `/changelog?project=${encodeURIComponent(activeProject.slug)}`
                   }
@@ -140,7 +141,7 @@ export function PublicPortalView({
                   Changelog
                 </a>
                 <a
-                  href={`https://devpulse.ritualdev.in/report/${activeProject.slug}?tab=feedback`}
+                  href={`${PUBLIC_APP_URL}/report/${activeProject.slug}?tab=feedback`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-cyan-300 transition"
@@ -148,7 +149,7 @@ export function PublicPortalView({
                   Feature Voting
                 </a>
                 <a
-                  href={`https://devpulse.ritualdev.in/report/${activeProject.slug}`}
+                  href={`${PUBLIC_APP_URL}/report/${activeProject.slug}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-200 transition"
@@ -224,7 +225,7 @@ export function PublicPortalView({
 
           {!user.isWhiteLabeled ? (
             <a
-              href="https://devpulse.ritualdev.in/#pricing"
+              href={`${PUBLIC_APP_URL}/#pricing`}
               target="_blank"
               rel="noreferrer"
               className="text-zinc-400 hover:text-white transition"

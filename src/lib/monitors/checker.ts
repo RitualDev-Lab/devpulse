@@ -5,6 +5,7 @@ import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts
 import { decryptSecret } from "@/lib/security/crypto";
 import { buildDowntimeEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
 import { validatePublicUrl } from "@/lib/security/ssrf";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export function isValidPublicMonitorUrl(rawUrl: string): { valid: boolean; reason?: string; normalized?: string } {
   return validatePublicUrl(rawUrl, { allowHttp: true });
@@ -56,7 +57,7 @@ export async function runMonitorCheck(monitorId: string, edgeRegion = "cf-edge")
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "User-Agent": "DevPulse-EdgeMonitor/1.0 (+https://devpulse.ritualdev.in)",
+        "User-Agent": `DevPulse-EdgeMonitor/1.0 (+${PUBLIC_APP_URL})`,
         "Cache-Control": "no-cache",
       },
     });
@@ -148,7 +149,7 @@ async function persistCheckResult(
           message: `${monitor.url}\n${errorMessage || `HTTP ${statusCode}`}`,
           runtime: "uptime-edge",
           environment: "production",
-          dashboardUrl: `https://devpulse.ritualdev.in`,
+          dashboardUrl: `${PUBLIC_APP_URL}`,
         }
       ).catch(() => {});
 
@@ -193,7 +194,7 @@ async function persistCheckResult(
             sendTransactionalEmail({
               to: sub.email,
               subject: `[Status Update] ${project.name}: ${monitor.name} Disruption Detected`,
-              html: `${baseHtml}<p style="font-size:12px;color:#71717a;margin-top:16px;"><a href="https://devpulse.ritualdev.in/api/v1/status/subscribe?token=${encodeURIComponent(sub.unsubscribeToken)}">Unsubscribe from ${project.name} status notifications</a></p>`,
+              html: `${baseHtml}<p style="font-size:12px;color:#71717a;margin-top:16px;"><a href="${PUBLIC_APP_URL}/api/v1/status/subscribe?token=${encodeURIComponent(sub.unsubscribeToken)}">Unsubscribe from ${project.name} status notifications</a></p>`,
               provider: project.emailProvider,
               apiKey: emailKey,
             })

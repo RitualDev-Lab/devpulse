@@ -2,8 +2,9 @@
  * DevPulse Client SDK Generators
  * Generates zero-dependency copy-pasteable snippets for Python and Node.js
  */
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
-export function getPythonSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
+export function getPythonSnippet(apiKey: string, hostUrl = `${PUBLIC_APP_URL}`): string {
   return `# Install official zero-dependency SDK:
 # pip install devpulse-sdk
 
@@ -20,7 +21,7 @@ devpulse_sdk.add_breadcrumb(category="custom", message="Worker booted")
 `;
 }
 
-export function getNodeSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
+export function getNodeSnippet(apiKey: string, hostUrl = `${PUBLIC_APP_URL}`): string {
   return `// Install official SDK: npm install @ritualdev/devpulse
 import { init, addBreadcrumb, trackEvent } from "@ritualdev/devpulse";
 
@@ -36,7 +37,7 @@ trackEvent("app_launch");
 `;
 }
 
-export function getRustSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
+export function getRustSnippet(apiKey: string, hostUrl = `${PUBLIC_APP_URL}`): string {
   return `// Official Rust crate: packages/devpulse-rs (Cargo.toml: devpulse-rs = "0.2.0")
 use devpulse_rs::{DevPulseClient, DevPulseConfig};
 
@@ -55,7 +56,7 @@ pub fn init_devpulse() -> DevPulseClient {
 `;
 }
 
-export function getCliSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
+export function getCliSnippet(apiKey: string, hostUrl = `${PUBLIC_APP_URL}`): string {
   return `# Send a runtime crash or heavy terminal dump from any CLI / CI script
 curl -X POST "${hostUrl}/api/v1/event" \\
   -H "Content-Type: application/json" \\
@@ -70,7 +71,7 @@ curl -X POST "${hostUrl}/api/v1/event" \\
 `;
 }
 
-export function getWebAppSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
+export function getWebAppSnippet(apiKey: string, hostUrl = `${PUBLIC_APP_URL}`): string {
   return `// npm install @ritualdev/devpulse
 // Captures HTTP/DOM breadcrumbs, offline retries, release sessions & source maps
 import { init } from "@ritualdev/devpulse";

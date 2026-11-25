@@ -60,7 +60,7 @@ export function proxy(request: NextRequest) {
 
   let hostKey: string | null = null;
 
-  // 1. Free Subdomain Routing (*.devpulse.ritualdev.in)
+  // 1. Free Subdomain Routing (*.<portal domain>)
   if (host.endsWith(`.${PRIMARY_PORTAL_DOMAIN}`)) {
     const sub = host.slice(0, -(PRIMARY_PORTAL_DOMAIN.length + 1));
     if (sub && sub !== "www" && sub !== "cname" && sub !== "api") {

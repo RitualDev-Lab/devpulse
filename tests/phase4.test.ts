@@ -10,6 +10,11 @@ import {
 import { resolveItemKeyFromProductId } from "../src/lib/billing/dodo";
 import { seedDemoData } from "../src/db/seed";
 
+// Test-only Dodo product fixtures. Production IDs are never committed; they come from DODO_PRODUCT_* env.
+process.env.DODO_PRODUCT_PRO = "pdt_test_pro";
+process.env.DODO_PRODUCT_TEAM = "pdt_test_team";
+process.env.DODO_PRODUCT_EXTRA_DOMAIN = "pdt_test_extra_domain";
+
 test("escapeGoModulePath escapes uppercase ASCII letters per Go proxy protocol", () => {
   assert.equal(escapeGoModulePath("github.com/Azure/azure-sdk"), "github.com/!azure/azure-sdk");
   assert.equal(escapeGoModulePath("golang.org/x/net"), "golang.org/x/net");
@@ -39,7 +44,7 @@ test("grid-engine collision detection and preset detection work as expected", ()
 });
 
 test("cloudflare-saas subdomain validation & tier checks", () => {
-  assert.deepEqual(normalizeAndValidateSubdomain("RitualCore.devpulse.ritualdev.in").valid, true);
+  assert.deepEqual(normalizeAndValidateSubdomain("RitualCore.example.com").valid, true);
   assert.equal(normalizeAndValidateSubdomain("www").valid, false);
   assert.equal(normalizeAndValidateSubdomain("ab").valid, false);
   assert.equal(isPaidDomainTier("free"), false);
@@ -48,9 +53,9 @@ test("cloudflare-saas subdomain validation & tier checks", () => {
 });
 
 test("dodo resolveItemKeyFromProductId resolves known DevPulse SKUs", () => {
-  assert.equal(resolveItemKeyFromProductId("pdt_0Nsfgf8Ryeyj6XQbwikSQ"), "pro");
-  assert.equal(resolveItemKeyFromProductId("pdt_0NsfgfAkiZAe0UAolxkWo"), "team");
-  assert.equal(resolveItemKeyFromProductId("pdt_0NsfgfCpABtcsEgbRVYSN"), "extra_domain");
+  assert.equal(resolveItemKeyFromProductId("pdt_test_pro"), "pro");
+  assert.equal(resolveItemKeyFromProductId("pdt_test_team"), "team");
+  assert.equal(resolveItemKeyFromProductId("pdt_test_extra_domain"), "extra_domain");
   assert.equal(resolveItemKeyFromProductId("pdt_unknown"), null);
 });
 

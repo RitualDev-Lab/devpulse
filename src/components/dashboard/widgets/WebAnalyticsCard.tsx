@@ -20,6 +20,7 @@ import {
   XAxis,
 } from "recharts";
 import { formatNumber } from "@/lib/utils/format";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export interface AnalyticsSummary {
   totalPageviews: number;
@@ -44,8 +45,8 @@ export function WebAnalyticsCard({ summary, projectSlug }: WebAnalyticsCardProps
   const [pinging, setPinging] = useState(false);
   const [localAdded, setLocalAdded] = useState(0);
 
-  const webScriptSnippet = `<script defer src="https://devpulse.ritualdev.in/tracker.js" data-project="${projectSlug}" data-crashes="true"></script>`;
-  const appEventSnippet = `fetch("https://devpulse.ritualdev.in/api/v1/analytics",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:"${projectSlug}",sourceType:"app",eventName:"app_launch",os:"Windows",appVersion:"1.0.0"})});`;
+  const webScriptSnippet = `<script defer src="${PUBLIC_APP_URL}/tracker.js" data-project="${projectSlug}" data-crashes="true"></script>`;
+  const appEventSnippet = `fetch("${PUBLIC_APP_URL}/api/v1/analytics",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:"${projectSlug}",sourceType:"app",eventName:"app_launch",os:"Windows",appVersion:"1.0.0"})});`;
 
   const copySnippet = (txt: string) => {
     navigator.clipboard.writeText(txt);

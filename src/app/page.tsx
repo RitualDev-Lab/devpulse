@@ -1,3 +1,4 @@
+import { PORTAL_DOMAIN } from "@/lib/config/app-url";
 import React from "react";
 import Link from "next/link";
 import {
@@ -13,6 +14,7 @@ import {
   Check,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const metadata = {
   title: "DevPulse - Unified Developer Headquarters & Telemetry Engine",
@@ -139,7 +141,7 @@ export default function HomePage() {
                 <div className="w-3 h-3 rounded-full bg-red-500/80" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
                 <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
-                <span className="ml-2 font-mono text-xs text-zinc-400">devpulse.ritualdev.in/dashboard</span>
+                <span className="ml-2 font-mono text-xs text-zinc-400">{PORTAL_DOMAIN}/dashboard</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
@@ -382,7 +384,7 @@ export default function HomePage() {
               <ul className="space-y-2.5 text-xs text-zinc-300">
                 {[
                   "5 GitHub Repositories / Workspaces",
-                  "1 Free *.devpulse.ritualdev.in subdomain",
+                  `1 Free *.${PORTAL_DOMAIN} subdomain`,
                   "100 MB Cloudflare R2 storage (7d lifecycle)",
                   "7-day analytics & telemetry history",
                   "Generic webhook alerts & preset themes",
@@ -540,8 +542,8 @@ export default function HomePage() {
             <a href="https://github.com/ritualdev-lab" target="_blank" rel="noreferrer" className="hover:text-white transition">
               RitualDev-Lab
             </a>
-            <a href="https://devpulse.ritualdev.in" className="hover:text-white transition">
-              devpulse.ritualdev.in
+            <a href={`${PUBLIC_APP_URL}`} className="hover:text-white transition">
+              {PORTAL_DOMAIN}
             </a>
           </div>
         </div>

@@ -7,6 +7,7 @@ import { resolveProjectAccess } from "@/lib/security/rbac";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -338,13 +339,10 @@ export async function POST(req: NextRequest) {
 
     const data = await ghRes.json().catch(() => ({}));
     if (!ghRes.ok) {
-      return NextResponse.json(
-        {
-          error:
-            data.message ||
-            `GitHub returned ${ghRes.status}. Ensure your PAT/OAuth token has repo write permission or open directly on GitHub.`,
-        },
-        { status: ghRes.status }
+      return apiError(
+        data,
+        `GitHub returned ${ghRes.status}. Ensure your PAT/OAuth token has repo write permission or open directly on GitHub.`,
+        ghRes.status
       );
     }
 

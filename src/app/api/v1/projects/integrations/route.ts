@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
+import { apiError } from "@/lib/security/api-error";
 
 export async function POST(req: NextRequest) {
   try {
@@ -115,9 +116,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("Error updating project integrations:", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to update project integrations" },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to update project integrations", 500);
   }
 }

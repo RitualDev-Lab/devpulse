@@ -1,3 +1,4 @@
+import { PORTAL_DOMAIN } from "@/lib/config/app-url";
 export type PlanTier = "free" | "pro" | "team" | "enterprise" | "byos";
 export type BillingItemKey = "pro" | "team" | "extra_domain" | "extra_storage";
 
@@ -45,7 +46,7 @@ export const PLANS: Record<"free" | "pro" | "team", PlanDefinition> = {
     alertChannels: ["generic"],
     features: [
       "Up to 5 GitHub repositories / project workspaces",
-      "1 Free *.devpulse.ritualdev.in subdomain",
+      `1 Free *.${PORTAL_DOMAIN} subdomain`,
       "100 MB Cloudflare R2 storage (7-day retention)",
       "7-day analytics & metrics history",
       "Preset dashboard themes & 2D grid",

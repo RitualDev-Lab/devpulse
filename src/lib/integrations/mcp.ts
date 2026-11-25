@@ -1,3 +1,4 @@
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 /**
  * Model Context Protocol (MCP) Server Intelligence Service
  * Queries public MCP registries (MCPShelf, Smithery, Glama) and optionally inspects
@@ -33,7 +34,7 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 4500): Promise<Json
     const res = await fetch(url, {
       headers: {
         Accept: "application/json",
-        "User-Agent": "DevPulse-HQ/1.0 (https://devpulse.ritualdev.in)",
+        "User-Agent": `DevPulse-HQ/1.0 (${PUBLIC_APP_URL})`,
       },
       signal: controller.signal,
       next: { revalidate: 3600 },
@@ -53,7 +54,7 @@ async function fetchTextWithTimeout(url: string, timeoutMs = 4500): Promise<stri
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "DevPulse-HQ/1.0 (https://devpulse.ritualdev.in)",
+        "User-Agent": `DevPulse-HQ/1.0 (${PUBLIC_APP_URL})`,
       },
       signal: controller.signal,
       next: { revalidate: 3600 },

@@ -5,6 +5,7 @@
 
 import { decryptSecret } from "@/lib/security/crypto";
 import { validatePublicUrl } from "@/lib/security/ssrf";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export interface AlertPayload {
   eventId?: string;
@@ -148,7 +149,7 @@ export async function dispatchTargetedChannels(
 export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
   const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
   if (!urlCheck.valid || !urlCheck.normalized) return false;
-  const url = data.dashboardUrl || `https://devpulse.ritualdev.in`;
+  const url = data.dashboardUrl || `${PUBLIC_APP_URL}`;
 
   const body = {
     username: "DevPulse Alerts",
@@ -194,7 +195,7 @@ export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
 export async function sendSlackAlert(webhookUrl: string, data: AlertPayload) {
   const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
   if (!urlCheck.valid || !urlCheck.normalized) return false;
-  const url = data.dashboardUrl || `https://devpulse.ritualdev.in`;
+  const url = data.dashboardUrl || `${PUBLIC_APP_URL}`;
 
   const body = {
     text: `🚨 [DevPulse] New crash reported in ${data.projectName}: ${data.errorName}`,
@@ -258,7 +259,7 @@ export async function sendTelegramAlert(
   chatId: string,
   data: AlertPayload
 ) {
-  const url = data.dashboardUrl || `https://devpulse.ritualdev.in`;
+  const url = data.dashboardUrl || `${PUBLIC_APP_URL}`;
   const text = `🚨 *DevPulse Crash Alert*\n\n*Project:* ${data.projectName}\n*Error:* \`${data.errorName}\`\n*Runtime:* ${data.runtime} (${data.version || "N/A"})\n*OS:* ${data.os || "Unknown"}\n\n*Message:*\n_${data.message.slice(0, 300)}_\n\n[Open Dashboard](${url})`;
 
   try {
@@ -289,7 +290,7 @@ export async function sendGenericWebhookAlert(webhookUrl: string, data: AlertPay
     console.warn("Blocked unsafe generic webhook URL:", urlCheck.reason);
     return false;
   }
-  const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
+  const url = data.dashboardUrl || `${PUBLIC_APP_URL}/dashboard?project=${data.projectSlug}`;
 
   const body = {
     event: "crash.created",
@@ -337,7 +338,7 @@ export async function sendGenericWebhookAlert(webhookUrl: string, data: AlertPay
  * Send PagerDuty Events API v2 Trigger Incident
  */
 export async function sendPagerDutyAlert(routingKey: string, data: AlertPayload) {
-  const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
+  const url = data.dashboardUrl || `${PUBLIC_APP_URL}/dashboard?project=${data.projectSlug}`;
 
   const body = {
     routing_key: routingKey,
@@ -379,7 +380,7 @@ export async function sendPagerDutyAlert(routingKey: string, data: AlertPayload)
  * Send OpsGenie Alert API v2 Incident (EU/US compatible via OPSGENIE_API_BASE)
  */
 export async function sendOpsGenieAlert(apiKey: string, data: AlertPayload) {
-  const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
+  const url = data.dashboardUrl || `${PUBLIC_APP_URL}/dashboard?project=${data.projectSlug}`;
   const baseUrl = process.env.OPSGENIE_API_BASE || "https://api.opsgenie.com";
 
   const body = {
@@ -421,7 +422,7 @@ export async function sendOpsGenieAlert(apiKey: string, data: AlertPayload) {
 export async function sendTeamsAlert(webhookUrl: string, data: AlertPayload) {
   const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
   if (!urlCheck.valid || !urlCheck.normalized) return false;
-  const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
+  const url = data.dashboardUrl || `${PUBLIC_APP_URL}/dashboard?project=${data.projectSlug}`;
 
   const body = {
     "@type": "MessageCard",

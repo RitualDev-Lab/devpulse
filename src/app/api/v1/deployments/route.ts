@@ -7,6 +7,7 @@ import { resolveProjectAccess } from "@/lib/security/rbac";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    if (projectId !== "prj_ritual_core") {
+    if (!isPublicDemoProject(projectId)) {
       const user = await getCurrentUser();
       if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const access = await resolveProjectAccess(projectId, user);
@@ -55,10 +56,12 @@ export async function GET(req: NextRequest) {
           (d.commitSha && e.commitSha && e.commitSha.startsWith(d.commitSha.slice(0, 7)))
       ).length;
       const crashCount = Math.max(d.crashCount, matchedCrashes);
-      const totalSessions = Math.max(d.totalSessions, crashCount, 1);
-      const crashFreeRate = Number(
-        (Math.max(0, (totalSessions - crashCount) / totalSessions) * 100).toFixed(2)
-      );
+      const totalSessions = Math.max(d.totalSessions, crashCount);
+      // No session data means no crash-free rate; never invent one.
+      const crashFreeRate =
+        totalSessions > 0
+          ? Number((Math.max(0, (totalSessions - crashCount) / totalSessions) * 100).toFixed(2))
+          : null;
       return {
         ...d,
         crashCount,
@@ -113,7 +116,7 @@ export async function POST(req: NextRequest) {
         environment: String(body.environment || "production").slice(0, 32),
         status: "success",
         changelogSummary,
-        totalSessions: Math.max(10, Number(body.totalSessions || 100)),
+        totalSessions: Math.max(0, Math.floor(Number(body.totalSessions) || 0)),
         crashCount: 0,
       });
 
@@ -128,7 +131,7 @@ export async function POST(req: NextRequest) {
           commitMessage: changelogSummary,
           branch,
           source: provider,
-          totalSessions: Math.max(10, Number(body.totalSessions || 100)),
+          totalSessions: Math.max(0, Math.floor(Number(body.totalSessions) || 0)),
           crashCount: 0,
         })
         .catch(() => {});

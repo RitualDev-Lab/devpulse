@@ -22,7 +22,7 @@ export async function GET() {
   } catch (err: any) {
     console.error("GET /api/v1/github/repos error:", err);
     return NextResponse.json(
-      { repos: [], orgs: [], error: err?.message || "Failed to list repositories" },
+      { repos: [], orgs: [], error: "Failed to list repositories" },
       { status: 500 }
     );
   }

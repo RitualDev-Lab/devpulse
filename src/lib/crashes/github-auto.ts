@@ -4,6 +4,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 function ruleWantsGitHubAutoIssue(channelsJson: string | null): boolean {
   if (!channelsJson) return false;
@@ -126,7 +127,7 @@ export async function maybeAutoEscalateGitHubIssue(params: {
     params.stackPreview
       ? `\n### Stack Trace Preview\n\`\`\`\n${params.stackPreview.slice(0, 2000)}\n\`\`\``
       : null,
-    `\n[Inspect Full Trace & AI Root Cause in DevPulse](https://devpulse.ritualdev.in/dashboard/crashes?project=${encodeURIComponent(project.slug)})`,
+    `\n[Inspect Full Trace & AI Root Cause in DevPulse](${PUBLIC_APP_URL}/dashboard/crashes?project=${encodeURIComponent(project.slug)})`,
   ]
     .filter(Boolean)
     .join("\n");

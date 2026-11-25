@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { GitCommit, Rocket, Check, Copy, ShieldCheck, AlertTriangle } from "lucide-react";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export interface ReleaseHealthItem {
   id: string;
@@ -13,7 +14,7 @@ export interface ReleaseHealthItem {
   source: string;
   totalSessions: number;
   crashCount: number;
-  crashFreeRate: number;
+  crashFreeRate: number | null;
   releasedAt: string;
 }
 
@@ -24,7 +25,7 @@ interface ReleaseHealthCardProps {
 
 export function ReleaseHealthCard({ releases, githubRepo }: ReleaseHealthCardProps) {
   const [copiedWebhook, setCopiedWebhook] = useState(false);
-  const webhookUrl = "https://devpulse.ritualdev.in/api/v1/webhooks/github";
+  const webhookUrl = `${PUBLIC_APP_URL}/api/v1/webhooks/github`;
 
   const copyWebhook = () => {
     navigator.clipboard.writeText(webhookUrl);
@@ -80,7 +81,7 @@ export function ReleaseHealthCard({ releases, githubRepo }: ReleaseHealthCardPro
         ) : (
           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
             {releases.map((rel) => {
-              const healthy = rel.crashFreeRate >= 98;
+              const healthy = rel.crashFreeRate !== null && rel.crashFreeRate >= 98;
               return (
                 <div
                   key={rel.id}
@@ -117,7 +118,7 @@ export function ReleaseHealthCard({ releases, githubRepo }: ReleaseHealthCardPro
                       ) : (
                         <AlertTriangle className="w-3.5 h-3.5" />
                       )}
-                      <span>{rel.crashFreeRate}%</span>
+                      <span>{rel.crashFreeRate === null ? "No session data" : `${rel.crashFreeRate}%`}</span>
                     </div>
                     <div className="text-[10px] text-zinc-500">
                       {rel.crashCount} crashes / {Math.max(rel.totalSessions, rel.crashCount)} sess

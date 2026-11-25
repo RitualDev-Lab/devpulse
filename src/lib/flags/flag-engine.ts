@@ -4,6 +4,7 @@ import { and, eq, gte } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { decryptSecret } from "@/lib/security/crypto";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export interface FlagVariant {
   name: string;
@@ -188,7 +189,7 @@ export async function checkAndAutoRollbackFlags(projectId: string) {
             message: reason,
             runtime: "feature-flag-guard",
             environment: "production",
-            dashboardUrl: `https://devpulse.ritualdev.in/dashboard/flags?project=${proj.slug}`,
+            dashboardUrl: `${PUBLIC_APP_URL}/dashboard/flags?project=${proj.slug}`,
           }
         ).catch(() => {});
       }

@@ -141,8 +141,9 @@ cp .env.example .env.local
 
 Fill in your configuration:
 ```env
-# Database: Turso (or file:local.db for offline testing)
-TURSO_DATABASE_URL=file:local.db
+# Database: Turso (libSQL). For local development run `turso dev --db-file local.db`
+# and use the http URL it prints. file: URLs are not supported at runtime.
+TURSO_DATABASE_URL=http://127.0.0.1:8080
 TURSO_AUTH_TOKEN=
 
 # Supabase Auth

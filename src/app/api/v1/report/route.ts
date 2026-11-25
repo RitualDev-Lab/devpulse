@@ -8,6 +8,9 @@ import { putR2Object } from "@/lib/storage/r2";
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 import { recordCrashIssueOccurrence } from "@/lib/crashes/issues";
+import { apiError } from "@/lib/security/api-error";
+import { scrubTelemetryText } from "@/lib/security/ingest-scrub";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096;
 const MAX_TURSO_PREVIEW_CHARS = 2000;
@@ -76,7 +79,7 @@ export async function POST(req: NextRequest) {
 
     const eventId = `err_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const safeErrorName = String(errorName || "UserReportedBug").slice(0, 255);
-    const safeMessage = String(message).slice(0, 2000);
+    const safeMessage = scrubTelemetryText(String(message)).slice(0, 2000);
     const rawStack = stackTrace ? String(stackTrace) : "";
     const payloadBytes = rawStack ? new TextEncoder().encode(rawStack).byteLength : 0;
 
@@ -164,10 +167,9 @@ export async function POST(req: NextRequest) {
           message: safeMessage,
           runtime: String(runtime || "cli"),
           environment: "production",
-          reporterEmail: reporterEmail ? String(reporterEmail) : null,
           r2ObjectKey,
           payloadSizeBytes: payloadBytes,
-          dashboardUrl: `https://devpulse.ritualdev.in/dashboard?project=${project.slug}`,
+          dashboardUrl: `${PUBLIC_APP_URL}/dashboard?project=${project.slug}`,
         }
       ).catch(() => {});
     }
@@ -175,9 +177,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, eventId }, { status: 201 });
   } catch (err: any) {
     console.error("POST /api/v1/report error:", err);
-    return NextResponse.json(
-      { error: "Failed to submit bug report", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to submit bug report", 500);
   }
 }

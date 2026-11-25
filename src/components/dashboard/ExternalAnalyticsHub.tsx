@@ -15,6 +15,7 @@ import {
   HeartPulse,
 } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 interface ExternalConnector {
   id: string;
@@ -192,20 +193,20 @@ export function ExternalAnalyticsHub({
   const snippet =
     snippetTab === "web"
       ? `<!-- 1-Line Ad-Blocker Resilient Tag (OCI Nginx, EC2, Netlify, Static HTML) -->
-<script defer src="https://devpulse.ritualdev.in/pulse/s.js"
+<script defer src="${PUBLIC_APP_URL}/pulse/s.js"
   data-project="${writeToken}"
-  data-endpoint="https://devpulse.ritualdev.in/pulse/e"></script>
+  data-endpoint="${PUBLIC_APP_URL}/pulse/e"></script>
 
 <!-- Or install @ritualdev/devpulse for auto Web Vitals (LCP, CLS, TTFB) + Errors: -->
 <!-- npm i @ritualdev/devpulse && init({ apiKey: "${sdkKey}" }) -->`
       : `# Cron / systemd heartbeat on OCI Compute (Oracle Linux), AWS EC2, Docker, or VPS
 CPU_LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo "0.42")
-curl -s -X POST "https://devpulse.ritualdev.in/api/v1/analytics" \\
+curl -s -X POST "${PUBLIC_APP_URL}/api/v1/analytics" \\
   -H "Content-Type: application/json" \\
   -d "{\\"project\\":\\"${writeToken}\\",\\"metricName\\":\\"oci_cpu_load\\",\\"metricValue\\":\${CPU_LOAD},\\"sourceType\\":\\"app\\",\\"os\\":\\"Oracle Linux OCI\\"}"
 
 # Forward fatal server/systemd stderr dumps to DevPulse (>4KB auto-offloads to R2):
-curl -s -X POST "https://devpulse.ritualdev.in/api/v1/event" \\
+curl -s -X POST "${PUBLIC_APP_URL}/api/v1/event" \\
   -H "Content-Type: application/json" \\
   -d '{"apiKey":"${sdkKey}","errorName":"ServerException","message":"Worker restarted on OCI node-1","runtime":"linux-server"}'`;
 

@@ -8,6 +8,7 @@ import {
   getCloudflareCustomHostnameStatus,
   verifyDomainCname,
 } from "@/lib/domains/cloudflare-saas";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -68,9 +69,6 @@ export async function POST() {
     });
   } catch (err: any) {
     console.error("POST /api/v1/domains/verify error:", err);
-    return NextResponse.json(
-      { error: "Failed to verify domain DNS/SSL", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to verify domain DNS/SSL", 500);
   }
 }

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Code2, Copy, Check, Play, Loader2, Activity } from "lucide-react";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 type LangTabId =
   | "nextjs"
@@ -51,17 +52,17 @@ function buildLanguageSnippet(tab: LangTabId, apiKey?: string | null): string {
     case "rust":
       return `// packages/devpulse-rs (Cargo.toml: devpulse-rs = "0.2.0")\nuse devpulse_rs::{DevPulseClient, DevPulseConfig};\n\nlet pulse = DevPulseClient::new(DevPulseConfig {\n  api_key: "${key}".into(),\n  release: Some("v1.0.0".into()),\n  scrub_pii: true,\n  ..Default::default()\n});\npulse.clone().install_panic_hook();\npulse.track_metric("active_jobs", 42.0);`;
     case "go":
-      return `// Standard library net/http — zero third-party deps\npayload := []byte(\`{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"app","os":"linux"}\`)\nhttp.Post("https://devpulse.ritualdev.in/api/v1/analytics", "application/json", bytes.NewBuffer(payload))`;
+      return `// Standard library net/http — zero third-party deps\npayload := []byte(\`{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"app","os":"linux"}\`)\nhttp.Post("${PUBLIC_APP_URL}/api/v1/analytics", "application/json", bytes.NewBuffer(payload))`;
     case "desktop":
-      return `// Electron Main Process or Tauri Frontend\nawait fetch("https://devpulse.ritualdev.in/api/v1/analytics", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify({\n    project: "${key}",\n    metricName: "active_jobs",\n    metricValue: 42,\n    sourceType: "desktop",\n    os: navigator.platform,\n    appVersion: "2.1.0",\n  }),\n});`;
+      return `// Electron Main Process or Tauri Frontend\nawait fetch("${PUBLIC_APP_URL}/api/v1/analytics", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify({\n    project: "${key}",\n    metricName: "active_jobs",\n    metricValue: 42,\n    sourceType: "desktop",\n    os: navigator.platform,\n    appVersion: "2.1.0",\n  }),\n});`;
     case "react_native":
       return `// npm i @ritualdev/devpulse\nimport { DevPulseClient } from "@ritualdev/devpulse";\n\nconst pulse = new DevPulseClient({ apiKey: "${key}", release: "2.1.0" }).initReactNative({\n  platform: "ios",\n  deviceModel: "iPhone 15 Pro",\n  anrThresholdMs: 5000,\n});\n\n// Report native OOM / network failures & evaluate feature flags:\npulse.reportMobileEvent({ errorName: "OOMKill", message: "Memory warning", category: "oom", platform: "ios" });`;
     case "flutter":
       return `// packages/devpulse_flutter — captures exceptions, OOM, ANR & network errors\nawait DevPulseFlutter.init(\n  apiKey: "${key}",\n  release: "2.1.0",\n  deviceModel: "Pixel 9",\n);\n\nif (await DevPulseFlutter.instance!.flag("new-checkout", userId: "usr_123")) {\n  // Render new checkout\n}`;
     case "oci":
-      return `# OCI Compute / AWS EC2 / VPS Host & App Telemetry\n# Cron or systemd timer pushing server health + errors without needing a GitHub repo\ncurl -s -X POST https://devpulse.ritualdev.in/api/v1/analytics \\\n  -H "Content-Type: application/json" \\\n  -d '{"project":"${key}","metricName":"oci_active_requests","metricValue":128,"sourceType":"app","os":"Oracle Linux OCI"}'\n\ncurl -s -X POST https://devpulse.ritualdev.in/api/v1/event \\\n  -H "Content-Type: application/json" \\\n  -d '{"apiKey":"${key}","errorName":"ServiceHealthWarn","message":"High memory usage on OCI worker","runtime":"oci-linux"}'`;
+      return `# OCI Compute / AWS EC2 / VPS Host & App Telemetry\n# Cron or systemd timer pushing server health + errors without needing a GitHub repo\ncurl -s -X POST ${PUBLIC_APP_URL}/api/v1/analytics \\\n  -H "Content-Type: application/json" \\\n  -d '{"project":"${key}","metricName":"oci_active_requests","metricValue":128,"sourceType":"app","os":"Oracle Linux OCI"}'\n\ncurl -s -X POST ${PUBLIC_APP_URL}/api/v1/event \\\n  -H "Content-Type: application/json" \\\n  -d '{"apiKey":"${key}","errorName":"ServiceHealthWarn","message":"High memory usage on OCI worker","runtime":"oci-linux"}'`;
     case "cli":
-      return `# Track custom numeric metrics & CLI runs from any shell binary\ncurl -s -X POST https://devpulse.ritualdev.in/api/v1/analytics \\\n  -H "Content-Type: application/json" \\\n  -d '{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"cli","os":"Linux"}'`;
+      return `# Track custom numeric metrics & CLI runs from any shell binary\ncurl -s -X POST ${PUBLIC_APP_URL}/api/v1/analytics \\\n  -H "Content-Type: application/json" \\\n  -d '{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"cli","os":"Linux"}'`;
   }
 }
 

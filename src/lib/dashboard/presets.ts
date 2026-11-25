@@ -1,3 +1,4 @@
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 /**
  * Role-Aware Stack Presets for DevPulse Workspaces
  * Auto-selects optimal dashboard widgets, onboarding defaults, and copy-paste SDK snippets.
@@ -62,7 +63,7 @@ export const STACK_PRESETS: Record<StackPresetId, StackPresetDefinition> = {
     ],
     snippetTitle: "Electron / Rust DWARF + Source Maps CI",
     buildSnippet: (apiKey, slug) =>
-      `# 1. Track desktop heartbeat:\ncurl -X POST https://devpulse.ritualdev.in/api/v1/analytics -H "Content-Type: application/json" -d '{"apiKey":"${apiKey}","sourceType":"desktop","eventName":"app_launch","os":"Windows 11"}'\n\n# 2. Upload Rust .dwarf.json / JS .map:\nnpx @ritualdev/pulse upload-sourcemaps --key ${apiKey} --release v1.0.0 --dir ./dist # (${slug})`,
+      `# 1. Track desktop heartbeat:\ncurl -X POST ${PUBLIC_APP_URL}/api/v1/analytics -H "Content-Type: application/json" -d '{"apiKey":"${apiKey}","sourceType":"desktop","eventName":"app_launch","os":"Windows 11"}'\n\n# 2. Upload Rust .dwarf.json / JS .map:\nnpx @ritualdev/pulse upload-sourcemaps --key ${apiKey} --release v1.0.0 --dir ./dist # (${slug})`,
   },
   mcp: {
     id: "mcp",

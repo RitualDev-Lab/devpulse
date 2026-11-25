@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { computeMonthlySlaReport, renderSlaReportHtml } from "@/lib/monitors/sla";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     }
 
     let proj: typeof projects.$inferSelect | null = null;
-    if (projectId === "prj_ritual_core") {
+    if (isPublicDemoProject(projectId)) {
       const [demoProj] = await db
         .select()
         .from(projects)

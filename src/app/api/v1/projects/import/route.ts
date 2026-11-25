@@ -12,6 +12,7 @@ import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 import { encryptSecret } from "@/lib/security/crypto";
+import { apiError } from "@/lib/security/api-error";
 
 export async function POST(request: Request) {
   try {
@@ -220,9 +221,6 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error("Error importing repository:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to import and scan repository." },
-      { status: 500 }
-    );
+    return apiError(error, "Failed to import and scan repository.", 500);
   }
 }

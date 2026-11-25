@@ -1,3 +1,4 @@
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 /**
  * Rust Crates.io Service
  * Interacts with public crates.io API (https://crates.io/api/v1/crates/{crate})
@@ -27,7 +28,7 @@ export async function fetchRustCrateStats(crateName: string): Promise<RustCrateS
   try {
     const cleanName = encodeURIComponent(crateName.trim().toLowerCase());
     const headers = {
-      "User-Agent": "DevPulse-HQ/1.0 (https://devpulse.ritualdev.in; contact: dev@ritualdev.in)",
+      "User-Agent": `DevPulse-HQ/1.0 (${PUBLIC_APP_URL})`,
       Accept: "application/json",
     };
 

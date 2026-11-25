@@ -24,6 +24,7 @@ export interface DevPulseConfig {
 }
 
 const SENSITIVE_KEY_RE = /^(password|passwd|secret|token|authorization|auth|cookie|set-cookie|api_key|apikey|access_token|refresh_token|ssn|credit_card|card_number)$/i;
+const MAX_PAYLOAD_BYTES = 49_152; // 48 KiB ingest limit per request
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const BEARER_RE = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi;
 const SECRET_TOKEN_RE = /\b(dp_live|dp_pub|sk_live|sk_test|ghp|gho)_[A-Za-z0-9_-]{8,}\b/g;
@@ -288,6 +289,8 @@ export class DevPulseClient {
   }
 
   private async sendOrQueue(url: string, payload: Record<string, unknown>): Promise<boolean> {
+    // Refuse oversize payloads up front. They would be cut mid-JSON, and retrying them never succeeds.
+    if (this.serializePayload(payload) === null) return false;
     const ok = await this.postJson(url, payload);
     if (ok) {
       if (this.queue.length > 0) void this.flush();
@@ -305,12 +308,22 @@ export class DevPulseClient {
     return false;
   }
 
+  /** Returns the JSON body, or null when it exceeds the 48 KiB limit. */
+  private serializePayload(payload: Record<string, unknown>): string | null {
+    const body = JSON.stringify(payload);
+    return new TextEncoder().encode(body).length <= MAX_PAYLOAD_BYTES ? body : null;
+  }
+
   private async postJson(url: string, payload: Record<string, unknown>): Promise<boolean> {
     try {
-      const body = JSON.stringify(payload).slice(0, 49_152); // Hard 48 KiB cap
+      const body = this.serializePayload(payload);
+      if (body === null) return false;
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
         body,
         keepalive: true,
         ...(typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
@@ -499,9 +512,8 @@ export class DevPulseClient {
     const userId = opts?.userId || "anonymous";
     try {
       const res = await fetch(
-        `${this.config.endpoint}/api/v1/flags/evaluate?apiKey=${encodeURIComponent(
-          this.config.apiKey
-        )}&key=${encodeURIComponent(flagKey)}&userId=${encodeURIComponent(userId)}`
+        `${this.config.endpoint}/api/v1/flags/evaluate?key=${encodeURIComponent(flagKey)}&userId=${encodeURIComponent(userId)}`,
+        { headers: { Authorization: `Bearer ${this.config.apiKey}` } }
       );
       if (!res.ok) return opts?.defaultValue ?? false;
       const data = (await res.json()) as { flags?: Record<string, boolean>; variants?: Record<string, string> };
@@ -523,9 +535,8 @@ export class DevPulseClient {
   public async getFlagVariant(flagKey: string, userId = "anonymous"): Promise<string> {
     try {
       const res = await fetch(
-        `${this.config.endpoint}/api/v1/flags/evaluate?apiKey=${encodeURIComponent(
-          this.config.apiKey
-        )}&key=${encodeURIComponent(flagKey)}&userId=${encodeURIComponent(userId)}`
+        `${this.config.endpoint}/api/v1/flags/evaluate?key=${encodeURIComponent(flagKey)}&userId=${encodeURIComponent(userId)}`,
+        { headers: { Authorization: `Bearer ${this.config.apiKey}` } }
       );
       if (!res.ok) return "control";
       const data = (await res.json()) as { variants?: Record<string, string> };
@@ -537,7 +548,6 @@ export class DevPulseClient {
 
   public async trackFlagConversion(flagKey: string, variant: string, userId = "anonymous"): Promise<boolean> {
     return this.sendOrQueue(`${this.config.endpoint}/api/v1/flags/evaluate`, {
-      apiKey: this.config.apiKey,
       flagKey,
       variant,
       userId,

@@ -52,6 +52,7 @@ export async function initDb() {
 
   // Migrate existing tables to add new webhook and revenue columns if missing
   const optionalColumns = [
+    "ALTER TABLE saml_sessions ADD COLUMN request_id TEXT;",
     "ALTER TABLE projects ADD COLUMN discord_webhook_url TEXT;",
     "ALTER TABLE projects ADD COLUMN slack_webhook_url TEXT;",
     "ALTER TABLE projects ADD COLUMN telegram_bot_token TEXT;",
@@ -442,6 +443,7 @@ export async function initDb() {
       id TEXT PRIMARY KEY,
       organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
       redirect_to TEXT DEFAULT '/dashboard' NOT NULL,
+      request_id TEXT,
       expires_at TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );

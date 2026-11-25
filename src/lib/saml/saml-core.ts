@@ -1,17 +1,23 @@
 /**
- * SAML 2.0 Core — Pure Web Crypto API (Cloudflare Workers & Node compatible)
+ * SAML 2.0 Core
  *
  * Implements:
  *   - ASN.1 DER X.509 Certificate -> SubjectPublicKeyInfo (SPKI) extraction
  *   - SP-initiated AuthnRequest (HTTP-Redirect Binding: DEFLATE-raw + Base64)
- *   - IdP HTTP-POST SAMLResponse validation:
- *       * Required XML-DSig signature verification (RSA-SHA256 / SHA-1 / SHA-512)
- *       * SAML StatusCode Success check
- *       * Issuer verification against configured IdP Entity ID
- *       * Conditions NotBefore / NotOnOrAfter time window check (±120s skew)
+ *   - IdP HTTP-POST SAMLResponse validation via @node-saml/node-saml:
+ *       * XML-DSig signature and reference verification (XSW-safe)
+ *       * Issuer, Audience, time window (±120s), and InResponseTo binding
  *       * Allowed email domain enforcement & RBAC role mapping
  *   - SP Metadata XML generation for Okta, Azure AD (Entra ID), and Google Workspace
  */
+
+import { DOMParser } from "@xmldom/xmldom";
+import {
+  SAML,
+  ValidateInResponseTo,
+  type CacheProvider,
+  type Profile,
+} from "@node-saml/node-saml";
 
 export type SamlProvider = "okta" | "azure_ad" | "google" | "custom";
 
@@ -112,10 +118,6 @@ function base64ToUint8(b64: string): Uint8Array {
   return out;
 }
 
-function decodeBase64Utf8(b64: string): string {
-  return new TextDecoder().decode(base64ToUint8(b64));
-}
-
 function xmlEscape(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -123,15 +125,6 @@ function xmlEscape(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-function xmlUnescape(s: string): string {
-  return s
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&");
 }
 
 // ─── ASN.1 DER X.509 Certificate -> SPKI Extractor ───────────────────────────
@@ -327,7 +320,7 @@ export async function buildSamlAuthnRequest(
   config: Pick<SamlConfigRecord, "idpSsoUrl" | "spEntityId">,
   relayState: string,
   acsUrl: string
-): Promise<string> {
+): Promise<{ redirectUrl: string; requestId: string }> {
   const issueInstant = new Date().toISOString();
   const id = `_dp${crypto.randomUUID().replace(/-/g, "")}`;
 
@@ -353,7 +346,7 @@ export async function buildSamlAuthnRequest(
     RelayState: relayState,
   });
 
-  return `${config.idpSsoUrl}${separator}${params.toString()}`;
+  return { redirectUrl: `${config.idpSsoUrl}${separator}${params.toString()}`, requestId: id };
 }
 
 /**
@@ -379,227 +372,116 @@ export function buildSpMetadataXml(spEntityId: string, acsUrl: string): string {
 }
 
 // ─── SAML Response Parsing & Verification ────────────────────────────────────
+// XML-DSig verification (signature, reference digests, signed-element binding, XSW
+// protection), Issuer, Audience, and time-window checks are delegated to
+// @node-saml/node-saml. Only the claim mapping below is local.
+
+function toCertificatePem(certPemOrBase64: string): string {
+  if (certPemOrBase64.includes("BEGIN ")) return certPemOrBase64.trim();
+  const b64 = certPemOrBase64.replace(/\s+/g, "");
+  if (!b64) throw new Error("SAML: Empty IdP certificate");
+  const lines = b64.match(/.{1,64}/g)?.join("\n") ?? b64;
+  return `-----BEGIN CERTIFICATE-----\n${lines}\n-----END CERTIFICATE-----`;
+}
+
+function normalizeEntityId(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function firstString(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    const found = value.find((v) => typeof v === "string");
+    return typeof found === "string" ? found : "";
+  }
+  return "";
+}
+
+/** Lifetime of an AuthnRequest / RelayState session. */
+export const SAML_REQUEST_TTL_MS = 10 * 60 * 1000;
+
+export interface ExpectedAuthnRequest {
+  id: string;
+  issuedAt: number;
+}
 
 /**
- * Extracts <Issuer> from a base64 SAMLResponse before full verification
- * (used for IdP-initiated SSO lookup when RelayState has no orgId).
+ * Answers node-saml only for the one AuthnRequest we issued. The library expects the
+ * cache value to be the issue time of that request. Single use is enforced by the
+ * caller, which deletes the RelayState session row before validation.
  */
-export function extractIssuerFromSamlResponse(samlResponseBase64: string): string | null {
-  try {
-    const xml = decodeBase64Utf8(samlResponseBase64);
-    const m = xml.match(/<(?:[^:>]+:)?Issuer[^>]*>([^<]+)<\/(?:[^:>]+:)?Issuer>/);
-    return m ? xmlUnescape(m[1].trim()) : null;
-  } catch {
-    return null;
-  }
-}
-
-function detectSignatureHash(signedInfoXml: string): "SHA-256" | "SHA-1" | "SHA-512" {
-  const algMatch = signedInfoXml.match(
-    /<(?:[^:>]+:)?SignatureMethod[^>]+Algorithm=["']([^"']+)["']/
-  );
-  const alg = (algMatch?.[1] || "").toLowerCase();
-  if (alg.includes("sha512")) return "SHA-512";
-  if (alg.includes("sha1")) return "SHA-1";
-  return "SHA-256";
-}
-
-function detectXmlDsigNamespace(xml: string, signedInfoXml: string): string | null {
-  // Check if <SignedInfo> already declares its xmlns or prefix xmlns
-  const openTagMatch = signedInfoXml.match(/^<((?:([^:>]+):)?SignedInfo)([^>]*)>/);
-  if (!openTagMatch) return null;
-  const prefix = openTagMatch[2] || "";
-  const attrs = openTagMatch[3] || "";
-
-  const nsAttr = prefix ? `xmlns:${prefix}` : "xmlns";
-  if (attrs.includes(`${nsAttr}=`)) return null;
-
-  // Inherit xmlns or xmlns:prefix from enclosing <Signature> or root element
-  const nsRegex = new RegExp(`${nsAttr}=["']([^"']+)["']`);
-  const found = xml.match(nsRegex);
-  const nsUri = found?.[1] || "http://www.w3.org/2000/09/xmldsig#";
-  return `${nsAttr}="${nsUri}"`;
-}
-
-function injectNamespaceIntoSignedInfo(signedInfoXml: string, nsDecl: string): string {
-  return signedInfoXml.replace(
-    /^(<(?:[^:>]+:)?SignedInfo)(\s|>)/,
-    `$1 ${nsDecl}$2`
-  );
+function singleUseRequestCache(expected: ExpectedAuthnRequest): CacheProvider {
+  const lookup = (key: string) =>
+    key === expected.id ? new Date(expected.issuedAt).toISOString() : null;
+  return {
+    async saveAsync() {
+      return null;
+    },
+    async getAsync(key) {
+      return lookup(key);
+    },
+    async removeAsync() {
+      return null;
+    },
+    async consumeAsync(key) {
+      return lookup(key);
+    },
+  };
 }
 
 /**
- * Verifies the XML-DSig signature on <SignedInfo> against the IdP X.509 certificate.
- * Rejects unsigned responses or invalid signatures with an explicit error.
- */
-async function verifySamlSignature(xml: string, certBase64: string): Promise<void> {
-  const sigMatch = xml.match(
-    /<(?:[^:>]+:)?SignatureValue[^>]*>([\s\S]*?)<\/(?:[^:>]+:)?SignatureValue>/
-  );
-  if (!sigMatch) {
-    throw new Error("SAML: Missing XML SignatureValue in response");
-  }
-
-  const signedInfoMatch = xml.match(
-    /(<(?:[^:>]+:)?SignedInfo\b[^>]*>[\s\S]*?<\/(?:[^:>]+:)?SignedInfo>)/
-  );
-  if (!signedInfoMatch) {
-    throw new Error("SAML: Missing SignedInfo element in XML signature");
-  }
-
-  const spkiBytes = extractSpkiFromX509Cert(certBase64);
-  const sigBytes = base64ToUint8(sigMatch[1]);
-  const primaryHash = detectSignatureHash(signedInfoMatch[1]);
-
-  const rawSignedInfo = signedInfoMatch[1];
-  const normalizedNewlines = rawSignedInfo.replace(/\r\n?/g, "\n");
-  const inheritedNs = detectXmlDsigNamespace(xml, normalizedNewlines);
-
-  const candidates = [rawSignedInfo, normalizedNewlines];
-  if (inheritedNs) {
-    candidates.push(injectNamespaceIntoSignedInfo(normalizedNewlines, inheritedNs));
-  }
-  const uniqueCandidates = Array.from(new Set(candidates));
-
-  const hashesToTry: Array<"SHA-256" | "SHA-1" | "SHA-512"> =
-    primaryHash === "SHA-256"
-      ? ["SHA-256", "SHA-1"]
-      : [primaryHash, "SHA-256"];
-
-  for (const hash of hashesToTry) {
-    const pubKey = await crypto.subtle.importKey(
-      "spki",
-      new Uint8Array(spkiBytes),
-      { name: "RSASSA-PKCS1-v1_5", hash },
-      false,
-      ["verify"]
-    );
-
-    for (const candidate of uniqueCandidates) {
-      const signedData = new TextEncoder().encode(candidate);
-      const valid = await crypto.subtle.verify(
-        "RSASSA-PKCS1-v1_5",
-        pubKey,
-        new Uint8Array(sigBytes),
-        signedData
-      );
-      if (valid) {
-        return;
-      }
-    }
-  }
-
-  throw new Error("SAML: XML signature verification failed against IdP certificate");
-}
-
-function validateSamlStatusAndConditions(xml: string, expectedIssuer: string): string {
-  // 1. Verify <StatusCode> if present is Success
-  const statusMatch = xml.match(
-    /<(?:[^:>]+:)?StatusCode[^>]+Value=["']([^"']+)["']/
-  );
-  if (statusMatch && !statusMatch[1].endsWith(":Success")) {
-    throw new Error(`SAML: IdP returned non-success status (${statusMatch[1]})`);
-  }
-
-  // 2. Verify <Issuer> matches configured IdP Entity ID
-  const issuerMatch = xml.match(/<(?:[^:>]+:)?Issuer[^>]*>([^<]+)<\/(?:[^:>]+:)?Issuer>/);
-  const issuer = issuerMatch ? xmlUnescape(issuerMatch[1].trim()) : "";
-  if (expectedIssuer.trim()) {
-    const normExpected = expectedIssuer.trim().replace(/\/+$/, "");
-    const normActual = issuer.replace(/\/+$/, "");
-    if (!normActual || normActual !== normExpected) {
-      throw new Error(`SAML: Issuer mismatch (expected '${normExpected}', got '${normActual}')`);
-    }
-  }
-
-  // 3. Verify <Conditions NotBefore="..." NotOnOrAfter="..."> within ±120s clock skew
-  const condMatch = xml.match(/<(?:[^:>]+:)?Conditions\b([^>]*)>/);
-  if (condMatch) {
-    const attrs = condMatch[1];
-    const nowMs = Date.now();
-    const skewMs = 120_000;
-
-    const nbMatch = attrs.match(/NotBefore=["']([^"']+)["']/);
-    if (nbMatch) {
-      const nbMs = Date.parse(nbMatch[1]);
-      if (Number.isFinite(nbMs) && nowMs + skewMs < nbMs) {
-        throw new Error("SAML: Assertion is not yet valid (NotBefore)");
-      }
-    }
-
-    const noaMatch = attrs.match(/NotOnOrAfter=["']([^"']+)["']/);
-    if (noaMatch) {
-      const noaMs = Date.parse(noaMatch[1]);
-      if (Number.isFinite(noaMs) && nowMs - skewMs >= noaMs) {
-        throw new Error("SAML: Assertion has expired (NotOnOrAfter)");
-      }
-    }
-  }
-
-  return issuer;
-}
-
-function extractNameId(xml: string): string {
-  const m = xml.match(/<(?:[^:>]+:)?NameID[^>]*>([^<]+)<\/(?:[^:>]+:)?NameID>/);
-  return m ? xmlUnescape(m[1].trim()) : "";
-}
-
-function extractAssertionId(xml: string): string | null {
-  const m = xml.match(/<(?:[^:>]+:)?Assertion\b[^>]+ID=["']([^"']+)["']/);
-  return m ? m[1] : null;
-}
-
-function extractXmlAttribute(xml: string, attrName: string): string {
-  if (!attrName) return "";
-  const escaped = attrName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const m = xml.match(
-    new RegExp(
-      `<(?:[^:>]+:)?Attribute\\b[^>]+Name=["']${escaped}["'][^>]*>[\\s\\S]*?<(?:[^:>]+:)?AttributeValue[^>]*>([^<]+)<`
-    )
-  );
-  return m ? xmlUnescape(m[1].trim()) : "";
-}
-
-function mapRole(
-  claim: string,
-  defaultRole: "owner" | "maintainer" | "viewer"
-): "owner" | "maintainer" | "viewer" {
-  const c = claim.trim().toLowerCase();
-  if (!c) return defaultRole;
-  if (c.includes("admin") || c.includes("owner")) return "owner";
-  if (c.includes("maintain") || c.includes("developer") || c.includes("write") || c.includes("editor")) {
-    return "maintainer";
-  }
-  if (c.includes("viewer") || c.includes("read")) return "viewer";
-  return defaultRole;
-}
-
-/**
- * Parses, cryptographically verifies, and validates an IdP HTTP-POST SAMLResponse.
+ * Parses, cryptographically verifies, and validates an IdP HTTP-POST SAMLResponse
+ * for an SP-initiated flow. `expectedRequestId` is the AuthnRequest ID stored with
+ * the RelayState session; IdP-initiated (unsolicited) responses are rejected.
  */
 export async function parseSamlResponse(
   samlResponseBase64: string,
-  config: SamlConfigRecord
+  config: SamlConfigRecord,
+  options: { acsUrl: string; expectedRequest: ExpectedAuthnRequest | null }
 ): Promise<SamlUserInfo> {
   if (!samlResponseBase64 || !samlResponseBase64.trim()) {
     throw new Error("SAML: Missing SAMLResponse payload");
   }
+  if (!options.expectedRequest) {
+    throw new Error("SAML: Unsolicited response; no pending AuthnRequest");
+  }
 
-  const xml = decodeBase64Utf8(samlResponseBase64);
+  const saml = new SAML({
+    idpCert: toCertificatePem(config.idpCertificate),
+    issuer: config.spEntityId,
+    callbackUrl: options.acsUrl,
+    audience: config.spEntityId,
+    idpIssuer: config.idpEntityId,
+    wantAssertionsSigned: true,
+    wantAuthnResponseSigned: false,
+    acceptedClockSkewMs: 120_000,
+    validateInResponseTo: ValidateInResponseTo.always,
+    requestIdExpirationPeriodMs: SAML_REQUEST_TTL_MS,
+    cacheProvider: singleUseRequestCache(options.expectedRequest),
+  });
 
-  // 1. Cryptographic signature verification (never bypassed)
-  await verifySamlSignature(xml, config.idpCertificate);
+  let profile: Profile | null;
+  try {
+    const result = await saml.validatePostResponseAsync({ SAMLResponse: samlResponseBase64 });
+    profile = result.profile;
+  } catch (err) {
+    // Library detail stays server-side; callers map this to a generic error code.
+    throw new Error(`SAML: verification failed (${(err as Error).message})`);
+  }
+  if (!profile) {
+    throw new Error("SAML: response did not contain an authenticated assertion");
+  }
 
-  // 2. StatusCode, Issuer, and Conditions time window checks
-  const issuer = validateSamlStatusAndConditions(xml, config.idpEntityId);
+  if (normalizeEntityId(profile.issuer) !== normalizeEntityId(config.idpEntityId)) {
+    throw new Error("SAML: assertion issuer does not match the configured IdP");
+  }
 
-  // 3. Extract user attributes across Okta / Azure AD / Google Workspace claim conventions
-  const nameId = extractNameId(xml);
+  const nameId = profile.nameID || "";
   const email = (
-    extractXmlAttribute(xml, config.attributeEmail) ||
-    extractXmlAttribute(xml, "email") ||
-    extractXmlAttribute(xml, "mail") ||
-    extractXmlAttribute(xml, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress") ||
+    firstString(profile[config.attributeEmail]) ||
+    firstString(profile.email) ||
+    firstString(profile.mail) ||
+    firstString(profile["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]) ||
     (nameId.includes("@") ? nameId : "")
   )
     .trim()
@@ -610,20 +492,19 @@ export async function parseSamlResponse(
   }
 
   const name =
-    extractXmlAttribute(xml, config.attributeName) ||
-    extractXmlAttribute(xml, "name") ||
-    extractXmlAttribute(xml, "displayName") ||
-    extractXmlAttribute(xml, "http://schemas.microsoft.com/identity/claims/displayname") ||
-    extractXmlAttribute(xml, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name") ||
+    firstString(profile[config.attributeName]) ||
+    firstString(profile.name) ||
+    firstString(profile.displayName) ||
+    firstString(profile["http://schemas.microsoft.com/identity/claims/displayname"]) ||
+    firstString(profile["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"]) ||
     email.split("@")[0];
 
   const roleClaim =
-    extractXmlAttribute(xml, config.attributeRole) ||
-    extractXmlAttribute(xml, "role") ||
-    extractXmlAttribute(xml, "http://schemas.microsoft.com/ws/2008/06/identity/claims/role") ||
+    firstString(profile[config.attributeRole]) ||
+    firstString(profile.role) ||
+    firstString(profile["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"]) ||
     "";
 
-  // 4. Enforce allowed domains if configured
   if (config.allowedDomains && config.allowedDomains.trim()) {
     const domains = config.allowedDomains
       .split(",")
@@ -640,7 +521,21 @@ export async function parseSamlResponse(
     name,
     role: mapRole(roleClaim, config.defaultRole),
     nameId: nameId || email,
-    issuer,
-    assertionId: extractAssertionId(xml),
+    issuer: profile.issuer,
+    assertionId: typeof profile.ID === "string" ? profile.ID : null,
   };
+}
+
+function mapRole(
+  claim: string,
+  defaultRole: "owner" | "maintainer" | "viewer"
+): "owner" | "maintainer" | "viewer" {
+  const c = claim.trim().toLowerCase();
+  if (!c) return defaultRole;
+  if (c.includes("admin") || c.includes("owner")) return "owner";
+  if (c.includes("maintain") || c.includes("developer") || c.includes("write") || c.includes("editor")) {
+    return "maintainer";
+  }
+  if (c.includes("viewer") || c.includes("read")) return "viewer";
+  return defaultRole;
 }

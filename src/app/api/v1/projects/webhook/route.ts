@@ -10,6 +10,8 @@ import { recordAuditEvent } from "@/lib/security/audit";
 import { decryptSecret, encryptSecret } from "@/lib/security/crypto";
 import { validatePublicUrl } from "@/lib/security/ssrf";
 import { sendTransactionalEmail } from "@/lib/alerts/email";
+import { apiError } from "@/lib/security/api-error";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export async function POST(req: NextRequest) {
   try {
@@ -223,7 +225,7 @@ export async function POST(req: NextRequest) {
           version: "v1.0.0",
           os: "Cloudflare Edge",
           environment: "production",
-          dashboardUrl: "https://devpulse.ritualdev.in/dashboard",
+          dashboardUrl: `${PUBLIC_APP_URL}/dashboard`,
         }
       );
 
@@ -242,6 +244,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, message: "Webhook settings saved successfully." });
   } catch (err: any) {
     console.error("Error saving webhooks:", err);
-    return NextResponse.json({ error: err.message || "Failed to save webhook settings" }, { status: 500 });
+    return apiError(err, "Failed to save webhook settings", 500);
   }
 }

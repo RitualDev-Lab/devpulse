@@ -4,6 +4,7 @@ import { structuredLogs } from "@/db/schema";
 import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { parseLokiOrStructuredLogs } from "@/lib/logs/loki-parser";
+import { scrubTelemetryText, scrubTelemetryValue } from "@/lib/security/ingest-scrub";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,6 @@ export async function POST(req: NextRequest) {
     const rawKey =
       req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
       req.headers.get("x-devpulse-key") ||
-      req.nextUrl.searchParams.get("apiKey") ||
       "";
 
     if (!rawKey.trim()) {
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         projectId: project.id,
         level: e.level,
         serviceName: e.serviceName,
-        message: e.message,
+        message: scrubTelemetryText(String(e.message)),
         labelsJson: JSON.stringify(e.labels).slice(0, 2000),
         traceId: e.traceId,
         timestampMs: e.timestampMs,

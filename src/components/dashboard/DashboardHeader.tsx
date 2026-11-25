@@ -1,5 +1,6 @@
 "use client";
 
+import { PORTAL_DOMAIN } from "@/lib/config/app-url";
 import React, { useState } from "react";
 import {
   Activity,
@@ -100,7 +101,7 @@ export function DashboardHeader({
               type="button"
               onClick={onOpenDomains}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"
-              title="Configure *.devpulse.ritualdev.in Subdomain, Custom Domain & White-Labeling"
+              title={`Configure *.${PORTAL_DOMAIN} Subdomain, Custom Domain & White-Labeling`}
             >
               <Globe className="w-3.5 h-3.5 text-cyan-400" />
               <span className="font-mono text-[11px] hidden lg:inline">

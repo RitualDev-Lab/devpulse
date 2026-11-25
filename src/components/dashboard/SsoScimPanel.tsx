@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Building2,
 } from "lucide-react";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 interface OrgSummary {
   id: string;
@@ -92,11 +93,11 @@ export function SsoScimPanel({ isDemo = false }: { isDemo?: boolean }) {
 
   // SP Metadata & Endpoints
   const [sp, setSp] = useState<SpEndpoints>({
-    acsUrl: "https://devpulse.ritualdev.in/api/auth/saml",
-    spEntityId: "https://devpulse.ritualdev.in/api/auth/saml",
-    metadataUrl: "https://devpulse.ritualdev.in/api/auth/saml/metadata",
-    loginUrl: "https://devpulse.ritualdev.in/api/auth/saml",
-    scimBaseUrl: "https://devpulse.ritualdev.in/api/scim/v2",
+    acsUrl: `${PUBLIC_APP_URL}/api/auth/saml`,
+    spEntityId: `${PUBLIC_APP_URL}/api/auth/saml`,
+    metadataUrl: `${PUBLIC_APP_URL}/api/auth/saml/metadata`,
+    loginUrl: `${PUBLIC_APP_URL}/api/auth/saml`,
+    scimBaseUrl: `${PUBLIC_APP_URL}/api/scim/v2`,
   });
 
   // SAML Form Fields

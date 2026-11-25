@@ -1,5 +1,6 @@
 "use client";
 
+import { PORTAL_DOMAIN } from "@/lib/config/app-url";
 import React, { useState } from "react";
 import {
   Settings,
@@ -26,6 +27,7 @@ import { StorageSettingsModal } from "../StorageSettingsModal";
 import { CustomCssModal } from "../CustomCssModal";
 import { IntegrationsModal } from "../IntegrationsModal";
 import { SsoScimModal } from "../SsoScimModal";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, accessRole, isDemo } = workspace;
@@ -36,9 +38,9 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
   >(null);
   const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null);
 
-  const iframeSnippet = `<iframe src="https://devpulse.ritualdev.in/embed/${project.slug}" width="100%" height="220" frameborder="0" style="border-radius:16px;"></iframe>`;
-  const healthBadgeMd = `![DevPulse Health](https://devpulse.ritualdev.in/api/badge/health/${project.slug}.svg)`;
-  const downloadsBadgeMd = `![DevPulse Downloads](https://devpulse.ritualdev.in/api/badge/downloads/${project.slug}.svg)`;
+  const iframeSnippet = `<iframe src="${PUBLIC_APP_URL}/embed/${project.slug}" width="100%" height="220" frameborder="0" style="border-radius:16px;"></iframe>`;
+  const healthBadgeMd = `![DevPulse Health](${PUBLIC_APP_URL}/api/badge/health/${project.slug}.svg)`;
+  const downloadsBadgeMd = `![DevPulse Downloads](${PUBLIC_APP_URL}/api/badge/downloads/${project.slug}.svg)`;
 
   const copyText = (key: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -71,7 +73,7 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
     {
       id: "domains" as const,
       title: "Public Portal & Domain",
-      desc: "Free *.devpulse.ritualdev.in handle, custom SSL domain & white-label",
+      desc: `Free *.${PORTAL_DOMAIN} handle, custom SSL domain & white-label`,
       icon: Globe,
       accent: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
     },

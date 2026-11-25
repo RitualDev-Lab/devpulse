@@ -57,11 +57,13 @@ async function runTool(name, args = {}) {
   if (name === "list_crashes") {
     if (!API_KEY) return { error: "DEVPULSE_API_KEY env var is required for list_crashes." };
     const qs = new URLSearchParams({
-      apiKey: API_KEY,
       status: String(args.status || "unresolved"),
       limit: String(Math.min(50, Number(args.limit || 15))),
     });
-    const res = await fetch(`${HOST}/api/v1/event?${qs}`);
+    // The key goes in the Authorization header, never in the URL (URLs end up in logs).
+    const res = await fetch(`${HOST}/api/v1/event?${qs}`, {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
     return await res.json();
   }
   if (name === "list_traces") {

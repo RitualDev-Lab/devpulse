@@ -113,8 +113,10 @@ class DevPulseFlutter with WidgetsBindingObserver {
 
   Future<bool> flag(String key, {String userId = 'anonymous'}) async {
     try {
+      // The key is sent in the Authorization header, never in the URL.
       final res = await http.get(
-        Uri.parse('$endpoint/api/v1/flags/evaluate?apiKey=$apiKey&key=$key&userId=$userId'),
+        Uri.parse('$endpoint/api/v1/flags/evaluate?key=$key&userId=$userId'),
+        headers: {'Authorization': 'Bearer $apiKey'},
       );
       if (res.statusCode != 200) return false;
       final body = jsonDecode(res.body) as Map<String, dynamic>;

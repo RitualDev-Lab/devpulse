@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { projects, pageviews, dailyMetrics, metricsHourly } from "@/db/schema";
 import { eq, or, sql } from "drizzle-orm";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+import { scrubTelemetryText, scrubTelemetryValue } from "@/lib/security/ingest-scrub";
 
 export const dynamic = "force-dynamic";
 
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
       db.insert(pageviews).values({
         id: hitId,
         projectId: project.id,
-        path: finalPath,
+        path: scrubTelemetryText(finalPath),
         referrer,
         country,
         device,

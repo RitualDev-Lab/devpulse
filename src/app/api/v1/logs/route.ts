@@ -6,6 +6,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { parseLokiOrStructuredLogs } from "@/lib/logs/loki-parser";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
+import { scrubTelemetryText, scrubTelemetryValue } from "@/lib/security/ingest-scrub";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    if (projectId !== "prj_ritual_core") {
+    if (!isPublicDemoProject(projectId)) {
       const user = await getCurrentUser();
       if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const access = await resolveProjectAccess(projectId, user);
@@ -160,7 +162,7 @@ export async function POST(req: NextRequest) {
         projectId: project.id,
         level: e.level,
         serviceName: e.serviceName,
-        message: e.message,
+        message: scrubTelemetryText(String(e.message)),
         labelsJson: JSON.stringify(e.labels).slice(0, 2000),
         traceId: e.traceId,
         timestampMs: e.timestampMs,

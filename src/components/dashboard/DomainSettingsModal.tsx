@@ -1,5 +1,6 @@
 "use client";
 
+import { PORTAL_DOMAIN, CNAME_TARGET } from "@/lib/config/app-url";
 import React, { useState, useEffect } from "react";
 import {
   Globe,
@@ -40,7 +41,7 @@ export function DomainSettingsModal({
   const [customDomainVerified, setCustomDomainVerified] = useState(false);
   const [sslStatus, setSslStatus] = useState("pending");
   const [isPaidTier, setIsPaidTier] = useState(["pro", "team", "enterprise", "byos"].includes((storageTier || "free").toLowerCase()));
-  const [cnameTarget, setCnameTarget] = useState("cname.devpulse.ritualdev.in");
+  const [cnameTarget, setCnameTarget] = useState(CNAME_TARGET);
 
   const [brandTitle, setBrandTitle] = useState("");
   const [brandDescription, setBrandDescription] = useState("");
@@ -66,7 +67,7 @@ export function DomainSettingsModal({
         setCustomDomainVerified(Boolean(data.customDomainVerified));
         setSslStatus(data.customDomainSslStatus || "pending");
         setIsPaidTier(Boolean(data.isPaidTier));
-        setCnameTarget(data.cnameTarget || "cname.devpulse.ritualdev.in");
+        setCnameTarget(data.cnameTarget || CNAME_TARGET);
         setBrandTitle(data.branding?.brandTitle || "");
         setBrandDescription(data.branding?.brandDescription || "");
         setBrandFaviconUrl(data.branding?.brandFaviconUrl || "");
@@ -83,7 +84,7 @@ export function DomainSettingsModal({
     if (isDemo) {
       setStatusMsg({
         type: "err",
-        text: "Sign in with GitHub to claim your *.devpulse.ritualdev.in subdomain or bind a custom domain.",
+        text: `Sign in with GitHub to claim your *.${PORTAL_DOMAIN} subdomain or bind a custom domain.`,
       });
       return;
     }
@@ -218,7 +219,7 @@ export function DomainSettingsModal({
               </div>
             )}
 
-            {/* 1. Free *.devpulse.ritualdev.in Subdomain */}
+            {/* 1. Free *.<portal domain> Subdomain */}
             <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-white text-xs">
@@ -239,7 +240,7 @@ export function DomainSettingsModal({
                     className="flex-1 px-3 py-2 bg-transparent font-mono text-xs text-white focus:outline-none"
                   />
                   <span className="px-3 py-2 bg-zinc-950 text-zinc-400 font-mono text-[11px] border-l border-zinc-800">
-                    .devpulse.ritualdev.in
+                    .{PORTAL_DOMAIN}
                   </span>
                 </div>
                 <a

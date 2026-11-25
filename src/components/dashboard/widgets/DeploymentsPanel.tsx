@@ -28,7 +28,7 @@ interface DeploymentRow {
   rollbackUrl: string | null;
   totalSessions: number;
   crashCount: number;
-  crashFreeRate: number;
+  crashFreeRate: number | null;
   deployedAt: string;
 }
 
@@ -69,7 +69,9 @@ export function DeploymentsPanel({
     loadDeployments();
   }, [loadDeployments]);
 
-  const webhookUrl = `https://devpulse.ritualdev.in/api/v1/webhooks/deploy?apiKey=${telemetryApiKey || "YOUR_API_KEY"}`;
+  const webhookEndpoint = `${typeof window !== "undefined" ? window.location.origin : ""}/api/v1/webhooks/deploy`;
+  // The key travels in a header, not the URL, so the copied snippet sends it that way.
+  const webhookCurl = `curl -X POST "${webhookEndpoint}" -H "Authorization: Bearer ${telemetryApiKey || "YOUR_API_KEY"}"`;
 
   const handleRecordDeploy = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,7 +145,7 @@ export function DeploymentsPanel({
           <button
             type="button"
             onClick={() => {
-              navigator.clipboard.writeText(webhookUrl);
+              navigator.clipboard.writeText(webhookCurl);
               setCopiedUrl(true);
               setTimeout(() => setCopiedUrl(false), 1500);
             }}
@@ -229,10 +231,11 @@ export function DeploymentsPanel({
         ) : (
           items.map((dep, idx) => {
             const prev = items[idx + 1];
-            const delta = prev
-              ? Number((dep.crashFreeRate - prev.crashFreeRate).toFixed(2))
-              : null;
-            const healthy = dep.crashFreeRate >= 98;
+            const delta =
+              prev && dep.crashFreeRate !== null && prev.crashFreeRate !== null
+                ? Number((dep.crashFreeRate - prev.crashFreeRate).toFixed(2))
+                : null;
+            const healthy = dep.crashFreeRate !== null && dep.crashFreeRate >= 98;
 
             return (
               <div
@@ -282,7 +285,7 @@ export function DeploymentsPanel({
                       ) : (
                         <AlertTriangle className="w-3.5 h-3.5" />
                       )}
-                      <span>{dep.crashFreeRate}% crash-free</span>
+                      <span>{dep.crashFreeRate === null ? "No session data" : `${dep.crashFreeRate}% crash-free`}</span>
                     </div>
                     {delta !== null && (
                       <div

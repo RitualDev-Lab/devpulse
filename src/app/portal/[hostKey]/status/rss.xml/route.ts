@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadPortalStatusHistory } from "@/lib/domains/status-loader";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export async function GET(
   const { portal, history, incidents } = loaded;
   const project = portal.activeProject;
   const brandName = portal.user.brandTitle || project?.name || portal.user.githubUsername;
-  const baseStatusUrl = `https://devpulse.ritualdev.in/portal/${encodeURIComponent(hostKey)}/status${
+  const baseStatusUrl = `${PUBLIC_APP_URL}/portal/${encodeURIComponent(hostKey)}/status${
     project ? `?project=${encodeURIComponent(project.slug)}` : ""
   }`;
 
@@ -73,7 +74,7 @@ export async function GET(
     <link>${escapeXml(baseStatusUrl)}</link>
     <description>${escapeXml(`90-day uptime monitors and public incident RCA timeline for ${brandName}. Overall uptime: ${history.overall90dPercent}%.`)}</description>
     <lastBuildDate>${escapeXml(new Date().toUTCString())}</lastBuildDate>
-    <atom:link href="${escapeXml(`https://devpulse.ritualdev.in/portal/${encodeURIComponent(hostKey)}/status/rss.xml`)}" rel="self" type="application/rss+xml" />
+    <atom:link href="${escapeXml(`${PUBLIC_APP_URL}/portal/${encodeURIComponent(hostKey)}/status/rss.xml`)}" rel="self" type="application/rss+xml" />
 ${[...incidentItems, ...monitorItems].join("\n")}
   </channel>
 </rss>`;

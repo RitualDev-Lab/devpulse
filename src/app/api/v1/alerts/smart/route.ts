@@ -16,6 +16,7 @@ import {
   evaluateProjectAlertRules,
   processPendingEscalations,
 } from "@/lib/alerts/smart-engine";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    if (projectId !== "prj_ritual_core") {
+    if (!isPublicDemoProject(projectId)) {
       const user = await getCurrentUser();
       if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const access = await resolveProjectAccess(projectId, user);

@@ -28,7 +28,7 @@ async function run() {
     data: { password: "super-secret-value", safeField: "ok" },
   });
   const deliveredOffline = await client.captureException(
-    new Error("Offline crash for bob@ritualdev.in")
+    new Error("Offline crash for bob@example.com")
   );
   assert.strictEqual(deliveredOffline, false);
   assert.ok(client.getPendingQueueSize() >= 1);
@@ -46,7 +46,7 @@ async function run() {
   assert.strictEqual(crashCall.body.version, "v1.2.0");
   assert.strictEqual(crashCall.body.commitSha, "abcdef1");
   assert.ok(Array.isArray(crashCall.body.breadcrumbs));
-  assert.ok(!crashCall.body.message.includes("bob@ritualdev.in"));
+  assert.ok(!crashCall.body.message.includes("bob@example.com"));
   assert.ok(crashCall.body.breadcrumbs[0].message.includes("[REDACTED_EMAIL]"));
   assert.ok(crashCall.body.breadcrumbs[0].message.includes("[REDACTED_TOKEN]"));
   assert.strictEqual(crashCall.body.breadcrumbs[0].data.password, "[REDACTED]");
@@ -57,6 +57,26 @@ async function run() {
   assert.ok(vitalCall);
   assert.strictEqual(vitalCall.body.metricValue, 1420);
   assert.strictEqual(vitalCall.body.properties.rating, "good");
+
+  // Oversize payloads are refused and never sent or queued as a truncated (invalid) JSON body.
+  const queuedBefore = client.getPendingQueueSize();
+  const oversizeSent = await client.trackWebVital("LCP", 1, "/" + "x".repeat(60000));
+  assert.strictEqual(oversizeSent, false);
+  assert.strictEqual(client.getPendingQueueSize(), queuedBefore);
+  assert.ok(calls.every((c) => typeof c.body === "object"));
+
+  // Flag evaluation sends the key in the Authorization header, never in the URL.
+  let flagUrl = "";
+  let flagAuth = "";
+  globalThis.fetch = async (url, init) => {
+    flagUrl = String(url);
+    flagAuth = init?.headers?.Authorization || "";
+    return new Response(JSON.stringify({ flags: { beta: true }, variants: {} }), { status: 200 });
+  };
+  assert.strictEqual(await client.flag("beta", { userId: "u1" }), true);
+  assert.ok(!flagUrl.includes("apiKey"));
+  assert.ok(!flagUrl.includes("dp_live_test_123"));
+  assert.strictEqual(flagAuth, "Bearer dp_live_test_123");
 
   globalThis.fetch = origFetch;
   console.log("@ritualdev/devpulse SDK tests PASSED");

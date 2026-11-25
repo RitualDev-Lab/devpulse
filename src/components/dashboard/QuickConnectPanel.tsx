@@ -17,6 +17,7 @@ import {
 import { GitHubPatModal } from "./GitHubPatModal";
 import { parseMultipleConnectorInputs } from "@/lib/integrations/url-parser";
 import { STACK_PRESETS, type StackPresetId } from "@/lib/dashboard/presets";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 interface QuickConnectPanelProps {
   projectId: string;
@@ -190,7 +191,7 @@ export function QuickConnectPanel({
           rows={3}
           value={linksText}
           onChange={(e) => setLinksText(e.target.value)}
-          placeholder={`https://github.com/RitualDev-Lab/devpulse\nhttps://www.npmjs.com/package/@ritualdev/devpulse\nhttps://pypi.org/project/devpulse-sdk/\nhttps://devpulse.ritualdev.in/api/v1/monitors?projectId=prj_ritual_core`}
+          placeholder={`https://github.com/RitualDev-Lab/devpulse\nhttps://www.npmjs.com/package/@ritualdev/devpulse\nhttps://pypi.org/project/devpulse-sdk/\n${PUBLIC_APP_URL}/api/v1/monitors?projectId=prj_ritual_core`}
           className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 focus:border-indigo-500 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none"
         />
 

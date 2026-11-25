@@ -11,8 +11,8 @@ import { eq, and, or, sql } from "drizzle-orm";
 import {
   buildSamlAuthnRequest,
   buildSpMetadataXml,
-  extractIssuerFromSamlResponse,
   parseSamlResponse,
+  SAML_REQUEST_TTL_MS,
 } from "@/lib/saml/saml-core";
 import {
   SSO_SESSION_COOKIE,
@@ -166,22 +166,23 @@ export async function GET(req: NextRequest) {
 
     const relayState = `rs_${crypto.randomUUID().replace(/-/g, "")}`;
     const redirectTo = sanitizeRedirectPath(req.nextUrl.searchParams.get("redirect"));
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + SAML_REQUEST_TTL_MS).toISOString();
+
+    const { redirectUrl, requestId } = await buildSamlAuthnRequest(
+      { idpSsoUrl: cfg.idpSsoUrl, spEntityId: cfg.spEntityId },
+      relayState,
+      acsUrl
+    );
 
     await db.insert(samlSessions).values({
       id: relayState,
       organizationId: cfg.organizationId,
       redirectTo,
       expiresAt,
+      requestId,
     });
 
-    const idpRedirectUrl = await buildSamlAuthnRequest(
-      { idpSsoUrl: cfg.idpSsoUrl, spEntityId: cfg.spEntityId },
-      relayState,
-      acsUrl
-    );
-
-    return NextResponse.redirect(idpRedirectUrl, 302);
+    return NextResponse.redirect(redirectUrl, 302);
   } catch (err) {
     console.error("GET /api/auth/saml error:", err);
     return NextResponse.redirect(`${origin}/dashboard?error=sso-init-failed`);
@@ -215,53 +216,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing SAMLResponse" }, { status: 400 });
     }
 
-    let organizationId = "";
-    let redirectTo = "/dashboard";
-
-    // 1. SP-initiated flow: verify & consume RelayState session nonce (anti-replay)
-    if (relayState && relayState.startsWith("rs_")) {
-      const [sessionRow] = await db
-        .select()
-        .from(samlSessions)
-        .where(eq(samlSessions.id, relayState))
-        .limit(1);
-
-      if (!sessionRow) {
-        return NextResponse.redirect(`${origin}/?error=saml-invalid-relay-state`);
-      }
-
-      // Consume immediately so relayState cannot be replayed
-      await db.delete(samlSessions).where(eq(samlSessions.id, relayState));
-
-      if (Date.parse(sessionRow.expiresAt) < Date.now()) {
-        return NextResponse.redirect(`${origin}/?error=saml-session-expired`);
-      }
-
-      organizationId = sessionRow.organizationId;
-      redirectTo = sanitizeRedirectPath(sessionRow.redirectTo);
-    } else {
-      // 2. IdP-initiated flow: resolve organization via <Issuer>
-      const issuer = extractIssuerFromSamlResponse(samlResponse);
-      if (!issuer) {
-        return NextResponse.redirect(`${origin}/?error=saml-missing-issuer`);
-      }
-      const normalizedIssuer = issuer.replace(/\/+$/, "");
-      const allActive = await db
-        .select()
-        .from(samlConfig)
-        .where(eq(samlConfig.isActive, true));
-
-      const matched = allActive.find(
-        (c) => c.idpEntityId.trim().replace(/\/+$/, "") === normalizedIssuer
-      );
-      if (!matched) {
-        return NextResponse.redirect(`${origin}/?error=saml-unknown-idp`);
-      }
-      organizationId = matched.organizationId;
-      if (relayState.startsWith("/") && !relayState.startsWith("//")) {
-        redirectTo = relayState;
-      }
+    // SP-initiated only: the RelayState must name a pending session created by GET.
+    // Unsolicited (IdP-initiated) responses have no AuthnRequest to bind to, so they are rejected.
+    if (!relayState || !relayState.startsWith("rs_")) {
+      return NextResponse.redirect(`${origin}/?error=saml-unsolicited`);
     }
+
+    const [sessionRow] = await db
+      .select()
+      .from(samlSessions)
+      .where(eq(samlSessions.id, relayState))
+      .limit(1);
+
+    if (!sessionRow) {
+      return NextResponse.redirect(`${origin}/?error=saml-invalid-relay-state`);
+    }
+
+    // Consume immediately so relayState cannot be replayed
+    await db.delete(samlSessions).where(eq(samlSessions.id, relayState));
+
+    if (Date.parse(sessionRow.expiresAt) < Date.now()) {
+      return NextResponse.redirect(`${origin}/?error=saml-session-expired`);
+    }
+
+    const organizationId = sessionRow.organizationId;
+    const redirectTo = sanitizeRedirectPath(sessionRow.redirectTo);
+    const expectedRequest = sessionRow.requestId
+      ? { id: sessionRow.requestId, issuedAt: Date.parse(sessionRow.expiresAt) - SAML_REQUEST_TTL_MS }
+      : null;
 
     const [cfg] = await db
       .select()
@@ -274,17 +256,21 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Cryptographically verify XML signature, Issuer, Conditions, Domain, Role
-    const samlUser = await parseSamlResponse(samlResponse, {
-      idpEntityId: cfg.idpEntityId,
-      idpSsoUrl: cfg.idpSsoUrl,
-      idpCertificate: cfg.idpCertificate,
-      spEntityId: cfg.spEntityId,
-      attributeEmail: cfg.attributeEmail,
-      attributeName: cfg.attributeName,
-      attributeRole: cfg.attributeRole,
-      defaultRole: cfg.defaultRole,
-      allowedDomains: cfg.allowedDomains,
-    });
+    const samlUser = await parseSamlResponse(
+      samlResponse,
+      {
+        idpEntityId: cfg.idpEntityId,
+        idpSsoUrl: cfg.idpSsoUrl,
+        idpCertificate: cfg.idpCertificate,
+        spEntityId: cfg.spEntityId,
+        attributeEmail: cfg.attributeEmail,
+        attributeName: cfg.attributeName,
+        attributeRole: cfg.attributeRole,
+        defaultRole: cfg.defaultRole,
+        allowedDomains: cfg.allowedDomains,
+      },
+      { acsUrl: `${origin}/api/auth/saml`, expectedRequest }
+    );
 
     // 4. Find or JIT-provision Turso user record
     const normalizedEmail = samlUser.email.toLowerCase();
@@ -405,8 +391,7 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (err) {
     console.error("POST /api/auth/saml error:", err);
-    const msg = encodeURIComponent((err as Error).message || "SAML verification failed");
-    return NextResponse.redirect(`${origin}/?error=saml-failed&detail=${msg}`, 302);
+    return NextResponse.redirect(`${origin}/?error=saml-failed`, 302);
   }
 }
 

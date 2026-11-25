@@ -13,6 +13,7 @@ import {
 } from "@/lib/domains/cloudflare-saas";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -67,10 +68,7 @@ export async function GET() {
     });
   } catch (err: any) {
     console.error("GET /api/v1/domains error:", err);
-    return NextResponse.json(
-      { error: "Failed to load domain configuration", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to load domain configuration", 500);
   }
 }
 
@@ -110,7 +108,7 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. Validate & assign free *.devpulse.ritualdev.in subdomain
+    // 1. Validate & assign free *.<PRIMARY_PORTAL_DOMAIN> subdomain
     if (typeof rawSubdomain === "string" && rawSubdomain.trim()) {
       const check = normalizeAndValidateSubdomain(rawSubdomain);
       if (!check.valid) {
@@ -125,7 +123,7 @@ export async function POST(req: NextRequest) {
 
       if (taken) {
         return NextResponse.json(
-          { error: `Subdomain "${check.subdomain}.devpulse.ritualdev.in" is already claimed.` },
+          { error: `Subdomain "${check.subdomain}.${PRIMARY_PORTAL_DOMAIN}" is already claimed.` },
           { status: 409 }
         );
       }
@@ -312,10 +310,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("POST /api/v1/domains error:", err);
-    return NextResponse.json(
-      { error: "Failed to save domain settings", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to save domain settings", 500);
   }
 }
 
@@ -384,9 +379,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("DELETE /api/v1/domains error:", err);
-    return NextResponse.json(
-      { error: "Failed to disconnect custom domain", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to disconnect custom domain", 500);
   }
 }

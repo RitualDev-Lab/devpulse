@@ -229,8 +229,8 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                       <td className="px-4 py-2.5 font-mono text-zinc-200">{rel.totalSessions.toLocaleString()}</td>
                       <td className="px-4 py-2.5 font-mono text-amber-300">{rel.crashCount}</td>
                       <td className="px-4 py-2.5 font-mono">
-                        <span className={rel.crashFreeRate >= 99 ? "text-emerald-300" : "text-amber-300"}>
-                          {rel.crashFreeRate}%
+                        <span className={rel.crashFreeRate !== null && rel.crashFreeRate >= 99 ? "text-emerald-300" : "text-amber-300"}>
+                          {rel.crashFreeRate === null ? "No session data" : `${rel.crashFreeRate}%`}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-zinc-400">

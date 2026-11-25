@@ -1,3 +1,4 @@
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 /**
  * Python Ecosystem (PyPI) Service
  * Interacts with public PyPI APIs (pypistats.org and pypi.org)
@@ -32,7 +33,7 @@ export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | n
   try {
     const cleanPkg = encodeURIComponent(packageName.toLowerCase().trim());
     const headers = {
-      "User-Agent": "DevPulse-HQ/1.0 (https://devpulse.ritualdev.in)",
+      "User-Agent": `DevPulse-HQ/1.0 (${PUBLIC_APP_URL})`,
       Accept: "application/json",
     };
 

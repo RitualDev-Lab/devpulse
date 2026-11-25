@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { encryptSecret } from "@/lib/security/crypto";
+import { apiError } from "@/lib/security/api-error";
 
 export async function POST(req: NextRequest) {
   try {
@@ -95,9 +96,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("Error saving revenue settings:", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to save revenue settings" },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to save revenue settings", 500);
   }
 }

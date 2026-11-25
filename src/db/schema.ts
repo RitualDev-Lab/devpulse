@@ -12,7 +12,7 @@ export const users = sqliteTable("users", {
   email: text("email"),
   avatarUrl: text("avatar_url"),
   storageTier: text("storage_tier", { enum: ["free", "pro", "team", "enterprise", "byos"] }).default("free").notNull(),
-  subdomain: text("subdomain").unique(), // Free *.devpulse.ritualdev.in subdomain handle
+  subdomain: text("subdomain").unique(), // Free *.<portal domain> subdomain handle
   customDomain: text("custom_domain").unique(), // Paid custom domain (e.g. stats.mytool.dev)
   customDomainVerified: integer("custom_domain_verified", { mode: "boolean" }).default(false).notNull(),
   customHostnameId: text("custom_hostname_id"), // Cloudflare for SaaS Custom Hostname ID
@@ -479,6 +479,8 @@ export const samlSessions = sqliteTable("saml_sessions", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   redirectTo: text("redirect_to").default("/dashboard").notNull(),
+  // AuthnRequest ID; the IdP response must echo it in InResponseTo
+  requestId: text("request_id"),
   expiresAt: text("expires_at").notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });

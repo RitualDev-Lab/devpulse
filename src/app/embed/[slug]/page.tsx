@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { dailyMetrics, projects, uptimeMonitors } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { Activity, Star, Download, Gauge } from "lucide-react";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -112,7 +113,7 @@ export default async function EmbedMetricsCardPage(props: {
         <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/70">
           <span>Live Developer Telemetry</span>
           <a
-            href="https://devpulse.ritualdev.in"
+            href={`${PUBLIC_APP_URL}`}
             target="_blank"
             rel="noreferrer"
             className="text-indigo-400 hover:underline font-medium"

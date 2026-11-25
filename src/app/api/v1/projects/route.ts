@@ -13,6 +13,7 @@ import { encryptSecret } from "@/lib/security/crypto";
 import { normalizeStackPreset, STACK_PRESETS } from "@/lib/dashboard/presets";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { isValidPublicMonitorUrl } from "@/lib/monitors/checker";
+import { apiError } from "@/lib/security/api-error";
 
 export async function GET() {
   try {
@@ -44,7 +45,7 @@ export async function GET() {
       })),
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return apiError(error, "Internal Server Error", 500);
   }
 }
 
@@ -251,6 +252,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, project: created[0] });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return apiError(error, "Internal Server Error", 500);
   }
 }

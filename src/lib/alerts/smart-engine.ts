@@ -13,6 +13,7 @@ import { decryptSecret } from "@/lib/security/crypto";
 import { dispatchTargetedChannels, resolveDecryptedWebhookConfig, type WebhookConfig } from "./webhook";
 import { sendTransactionalEmail } from "./email";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export interface AnomalyDetectionResult {
   currentValue: number;
@@ -141,7 +142,7 @@ async function notifyStepChannels(params: {
 }) {
   const { proj, channels, targetLabel, incidentTitle, details, step, incidentId } = params;
   const cfg = await resolveProjectWebhookConfig(proj);
-  const dashboardUrl = `https://devpulse.ritualdev.in/dashboard/crashes?project=${proj.slug}`;
+  const dashboardUrl = `${PUBLIC_APP_URL}/dashboard/crashes?project=${proj.slug}`;
 
   await dispatchTargetedChannels(cfg, channels, {
     eventId: incidentId,

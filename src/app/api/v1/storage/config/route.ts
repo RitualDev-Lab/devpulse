@@ -9,6 +9,7 @@ import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { encryptSecret, decryptSecret } from "@/lib/security/crypto";
 import { validatePublicUrl } from "@/lib/security/ssrf";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -59,10 +60,7 @@ export async function GET() {
     });
   } catch (err: any) {
     console.error("GET /api/v1/storage/config error:", err);
-    return NextResponse.json(
-      { error: "Failed to load storage config", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to load storage config", 500);
   }
 }
 
@@ -211,9 +209,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("POST /api/v1/storage/config error:", err);
-    return NextResponse.json(
-      { error: "Failed to save storage config", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to save storage config", 500);
   }
 }

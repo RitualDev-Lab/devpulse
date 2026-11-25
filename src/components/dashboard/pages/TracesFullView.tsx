@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 interface TraceRow {
   id: string;
@@ -210,7 +211,7 @@ export function TracesFullView({ workspace }: { workspace: LoadedWorkspaceReady 
     }
   };
 
-  const otlpEndpoint = `https://devpulse.ritualdev.in/api/v1/ingest/otlp/traces`;
+  const otlpEndpoint = `${PUBLIC_APP_URL}/api/v1/ingest/otlp/traces`;
   const otlpSnippet = `export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="${otlpEndpoint}"
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${project.telemetryApiKey || "YOUR_API_KEY"}"`;
 

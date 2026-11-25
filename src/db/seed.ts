@@ -1,5 +1,3 @@
-import { db } from "./index";
-import { initDb } from "./setup";
 import { users, projects } from "./schema";
 
 export async function seedDemoData() {
@@ -9,6 +7,9 @@ export async function seedDemoData() {
     );
   }
 
+  // Load the database only after the guard, so the guard holds even without a configured DB.
+  const { db } = await import("./index");
+  const { initDb } = await import("./setup");
   await initDb();
 
   const demoUserId = "usr_ritualdev_demo";
@@ -19,10 +20,10 @@ export async function seedDemoData() {
     id: demoUserId,
     githubUsername: "ritualdev-lab",
     name: "RitualDev Lab",
-    email: "team@ritualdev.in",
+    email: "demo@example.com",
     avatarUrl: "https://avatars.githubusercontent.com/u/105820465?v=4",
     storageTier: "free",
-    customDomain: "stats.ritualdev.in",
+    customDomain: "stats.example.com",
     customDomainVerified: true,
   }).onConflictDoNothing();
 

@@ -3,13 +3,10 @@ import { db } from "@/db";
 import { users, userStorageConfigs, billingEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getEffectiveEntitlements, type BillingItemKey } from "@/lib/billing/plans";
-import {
-  verifyDodoWebhookSignature,
-  verifyDodoPaymentOrSubscriptionLive,
-  resolveItemKeyFromProductId,
-} from "@/lib/billing/dodo";
+import { verifyDodoWebhookSignature, resolveItemKeyFromProductId } from "@/lib/billing/dodo";
 import { createCloudflareCustomHostname } from "@/lib/domains/cloudflare-saas";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -32,27 +29,12 @@ export async function POST(req: NextRequest) {
     const paymentId: string | null = data.payment_id || null;
     const subscriptionId: string | null = data.subscription_id || null;
 
-    // 1. Cryptographic signature verification (Standard Webhooks HMAC-SHA256)
-    let isAuthentic = await verifyDodoWebhookSignature(rawBody, {
+    // Standard Webhooks HMAC-SHA256. The body is only trusted when this passes.
+    const isAuthentic = await verifyDodoWebhookSignature(rawBody, {
       webhookId,
       webhookTimestamp,
       webhookSignature,
     });
-
-    // 2. Fallback live Dodo API verification ONLY if signature header missing/unmatched in local tests
-    let verifiedLiveMeta: Record<string, string> | undefined;
-    let verifiedLiveCustomer: string | undefined;
-    if (!isAuthentic && (paymentId || subscriptionId)) {
-      const liveCheck = await verifyDodoPaymentOrSubscriptionLive({
-        paymentId,
-        subscriptionId,
-      });
-      if (liveCheck.verified) {
-        isAuthentic = true;
-        verifiedLiveMeta = liveCheck.metadata;
-        verifiedLiveCustomer = liveCheck.customerId;
-      }
-    }
 
     if (!isAuthentic) {
       return NextResponse.json(
@@ -77,13 +59,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, deduplicated: true });
     }
 
-    const metadata: Record<string, string> = {
-      ...(data.metadata || {}),
-      ...(verifiedLiveMeta || {}),
-    };
+    const metadata: Record<string, string> = { ...(data.metadata || {}) };
 
-    const dodoCustomerId: string | null =
-      data.customer?.customer_id || verifiedLiveCustomer || null;
+    const dodoCustomerId: string | null = data.customer?.customer_id || null;
 
     // Locate user via metadata.userId, customer_id, or email
     let targetUserId: string | null = metadata.userId || null;
@@ -257,9 +235,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("POST /api/v1/billing/webhook error:", err);
-    return NextResponse.json(
-      { error: "Webhook processing failed", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Webhook processing failed", 500);
   }
 }

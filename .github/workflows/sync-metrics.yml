@@ -26,6 +26,6 @@ jobs:
 
       - name: Run DevPulse Metrics Sync
         env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL || 'libsql://devpulse-ritual-dev-git.aws-us-east-2.turso.io' }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: npx tsx scripts/sync.ts

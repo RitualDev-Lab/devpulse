@@ -7,6 +7,8 @@ import { resolveProjectAccess } from "@/lib/security/rbac";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { apiError } from "@/lib/security/api-error";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +108,7 @@ export async function POST(req: NextRequest) {
         errRow.stackTrace
           ? `\n### Stack Trace\n\`\`\`\n${errRow.stackTrace.slice(0, 2000)}\n\`\`\``
           : null,
-        `\n[Inspect in DevPulse](https://devpulse.ritualdev.in/dashboard/crashes?project=${access.project.slug})`,
+        `\n[Inspect in DevPulse](${PUBLIC_APP_URL}/dashboard/crashes?project=${access.project.slug})`,
       ]
         .filter(Boolean)
         .join("\n");
@@ -122,10 +124,7 @@ export async function POST(req: NextRequest) {
       });
       const ghData = await ghRes.json();
       if (!ghRes.ok) {
-        return NextResponse.json(
-          { error: ghData?.message || "Failed to create GitHub issue" },
-          { status: ghRes.status }
-        );
+        return apiError(ghData, "Failed to create GitHub issue", ghRes.status);
       }
 
       await db
@@ -167,10 +166,7 @@ export async function POST(req: NextRequest) {
       });
       const prData = await prRes.json();
       if (!prRes.ok) {
-        return NextResponse.json(
-          { error: prData?.message || `PR #${prNumber} not found in ${repoSlug}` },
-          { status: prRes.status }
-        );
+        return apiError(prData, `PR #${prNumber} not found in ${repoSlug}`, prRes.status);
       }
 
       await db
@@ -252,10 +248,7 @@ export async function POST(req: NextRequest) {
       );
       const cData = await cRes.json();
       if (!cRes.ok) {
-        return NextResponse.json(
-          { error: cData?.message || "Failed to post GitHub comment" },
-          { status: cRes.status }
-        );
+        return apiError(cData, "Failed to post GitHub comment", cRes.status);
       }
 
       return NextResponse.json({

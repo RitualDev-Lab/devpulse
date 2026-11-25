@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { FeedbackBoardClient } from "@/components/portal/FeedbackBoardClient";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,7 @@ export default async function EmbedFeedbackWidgetPage({
         >
           Open Full Roadmap &amp; Bug Portal
         </Link>
-        <Link href="https://devpulse.ritualdev.in" target="_blank" className="hover:text-zinc-300">
+        <Link href={`${PUBLIC_APP_URL}`} target="_blank" className="hover:text-zinc-300">
           Powered by DevPulse
         </Link>
       </div>

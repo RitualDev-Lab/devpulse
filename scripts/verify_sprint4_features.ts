@@ -15,11 +15,11 @@ async function main() {
   assert.equal(proEntitlements.maxProjects, 25);
 
   const scrubbed = scrubTelemetryText(
-    "Bearer my_secret_token_99 AKIA1234567890ABCDEF dev@ritualdev.in ?token=abc123"
+    "Bearer my_secret_token_99 AKIA1234567890ABCDEF dev@example.com ?token=abc123"
   );
   assert.ok(!scrubbed.includes("my_secret_token_99"));
   assert.ok(!scrubbed.includes("AKIA1234567890ABCDEF"));
-  assert.ok(!scrubbed.includes("dev@ritualdev.in"));
+  assert.ok(!scrubbed.includes("dev@example.com"));
   assert.ok(!scrubbed.includes("abc123"));
 
   const validEmpty = await verifyAuditChain([]);
@@ -56,7 +56,7 @@ async function main() {
   await db.insert(statusSubscribers).values({
     id: subId,
     projectId,
-    email: "verify-status@ritualdev.in",
+    email: "verify-status@example.com",
     isActive: true,
     unsubscribeToken: unsubToken,
   });
@@ -66,7 +66,7 @@ async function main() {
     .from(statusSubscribers)
     .where(eq(statusSubscribers.id, subId))
     .limit(1);
-  assert.equal(subRow.email, "verify-status@ritualdev.in");
+  assert.equal(subRow.email, "verify-status@example.com");
   assert.equal(subRow.isActive, true);
 
   await db

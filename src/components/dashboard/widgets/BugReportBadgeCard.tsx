@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { MessageSquarePlus, Copy, Check, ExternalLink } from "lucide-react";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 interface BugReportBadgeCardProps {
   projectSlug: string;
@@ -11,7 +12,7 @@ interface BugReportBadgeCardProps {
 export function BugReportBadgeCard({ projectSlug, projectName }: BugReportBadgeCardProps) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedBadge, setCopiedBadge] = useState(false);
-  const [origin, setOrigin] = useState("https://devpulse.ritualdev.in");
+  const [origin, setOrigin] = useState(`${PUBLIC_APP_URL}`);
 
   useEffect(() => {
     if (typeof window !== "undefined") {

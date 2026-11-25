@@ -77,12 +77,12 @@ export async function checkRateLimit(opts: {
       retryAfterSeconds: Math.max(1, expiresAt - nowSec),
     };
   } catch (err) {
-    // Fail open if rate limit storage transiently errors so legitimate telemetry isn't dropped
-    console.warn("Rate limiter warning:", err);
+    // Fail closed: if the counter store is unavailable we cannot prove the caller is under the limit.
+    console.error("Rate limiter storage error:", err);
     return {
-      allowed: true,
+      allowed: false,
       limit: opts.limit,
-      remaining: opts.limit,
+      remaining: 0,
       resetAtEpoch,
       retryAfterSeconds: opts.windowSeconds,
     };
@@ -106,8 +106,9 @@ export async function verifyTurnstileToken(
 ): Promise<{ ok: boolean; error?: string }> {
   const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
   if (!secret) {
-    // If Turnstile isn't configured in a dev environment, fail clearly only if token missing when secret exists
-    return { ok: true };
+    // Fail closed: a protected endpoint must not run unverified because a secret is missing.
+    console.error("TURNSTILE_SECRET_KEY is not set; refusing unverified request.");
+    return { ok: false, error: "Human verification is not configured on this server." };
   }
 
   if (!token || typeof token !== "string" || !token.trim()) {
@@ -145,10 +146,8 @@ export async function verifyTurnstileToken(
     }
 
     return { ok: true };
-  } catch (err: any) {
-    return {
-      ok: false,
-      error: `Turnstile verification service error: ${err?.message || "network error"}`,
-    };
+  } catch (err) {
+    console.error("Turnstile siteverify request failed:", err);
+    return { ok: false, error: "Turnstile verification service is unavailable. Please try again." };
   }
 }

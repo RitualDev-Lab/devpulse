@@ -10,6 +10,8 @@
     "build": "next build --webpack",
     "build:cf": "node scripts/prebuild.js && opennextjs-cloudflare build && node scripts/prepare-pages.js",
     "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
     "lint": "eslint"
   },
   "dependencies": {
@@ -17,8 +19,11 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@libsql/client": "^0.18.0",
+    "@node-saml/node-saml": "^5.2.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.2",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@xmldom/xmldom": "^0.8.15",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.4",
     "lucide-react": "^1.79.0",
@@ -27,8 +32,7 @@
     "react-dom": "19.3.0",
     "recharts": "^3.11.1",
     "tailwind-merge": "^3.7.1",
-    "tailwindcss": "4.3.3",
-    "@tailwindcss/postcss": "^4.3.3"
+    "tailwindcss": "4.3.3"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.18",
@@ -43,6 +47,7 @@
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5",
-    "wrangler": "^4.167.0"
+    "wrangler": "^4.167.0",
+    "xml-crypto": "^6.4.0"
   }
 }

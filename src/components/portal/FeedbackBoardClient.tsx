@@ -10,6 +10,7 @@ import {
   Loader2,
   Code2,
 } from "lucide-react";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export interface FeatureRequestItem {
   id: string;
@@ -330,7 +331,7 @@ export function FeedbackBoardClient({
             Embeddable widget:
           </span>
           <code className="font-mono text-[10px] text-emerald-300 bg-zinc-900 px-2 py-1 rounded-lg border border-zinc-800">
-            {`<iframe src="https://devpulse.ritualdev.in/embed/feedback/${projectSlug}" width="100%" height="560"></iframe>`}
+            {`<iframe src="${PUBLIC_APP_URL}/embed/feedback/${projectSlug}" width="100%" height="560"></iframe>`}
           </code>
         </div>
       )}

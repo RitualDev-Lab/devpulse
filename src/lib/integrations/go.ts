@@ -1,3 +1,4 @@
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 /**
  * Go Modules Registry Service
  * Queries https://proxy.golang.org version list and @latest metadata. Zero tokens needed.
@@ -24,7 +25,7 @@ export async function fetchGoModuleStats(modulePath: string): Promise<GoModuleSt
 
     const escaped = escapeGoModulePath(cleanPath);
     const headers = {
-      "User-Agent": "DevPulse-HQ/1.0 (https://devpulse.ritualdev.in)",
+      "User-Agent": `DevPulse-HQ/1.0 (${PUBLIC_APP_URL})`,
     };
 
     const [latestRes, listRes] = await Promise.all([

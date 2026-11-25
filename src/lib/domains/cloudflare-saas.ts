@@ -1,14 +1,16 @@
 /**
  * Cloudflare for SaaS Custom Hostnames & DNS Verification Client
  * Manages:
- * - *.devpulse.ritualdev.in free subdomain validation
+ * - *.<PRIMARY_PORTAL_DOMAIN> free subdomain validation
  * - Cloudflare Custom Hostnames API (/zones/{zone_id}/custom_hostnames) for automated DV SSL
- * - Live DNS-over-HTTPS CNAME verification against cname.devpulse.ritualdev.in
+ * - Live DNS-over-HTTPS CNAME verification against CUSTOM_DOMAIN_CNAME_TARGET
  */
 
-export const PRIMARY_PORTAL_DOMAIN = "devpulse.ritualdev.in";
-export const CUSTOM_DOMAIN_CNAME_TARGET = "cname.devpulse.ritualdev.in";
-const DEFAULT_ZONE_ID = "0229d02254a02cce9a93f18d960086a7"; // ritualdev.in
+/** Portal host that free subdomains live under (NEXT_PUBLIC_PORTAL_DOMAIN). */
+import { CNAME_TARGET, PORTAL_DOMAIN } from "@/lib/config/app-url";
+export const PRIMARY_PORTAL_DOMAIN = PORTAL_DOMAIN;
+/** Target that customer CNAME records must point to (NEXT_PUBLIC_CNAME_TARGET). */
+export const CUSTOM_DOMAIN_CNAME_TARGET = CNAME_TARGET;
 
 const RESERVED_SUBDOMAINS = new Set([
   "www",
@@ -41,7 +43,7 @@ export function normalizeAndValidateSubdomain(raw: string): {
   const cleaned = raw
     .trim()
     .toLowerCase()
-    .replace(/\.devpulse\.ritualdev\.in$/i, "")
+    .replace(new RegExp(`\\.${PRIMARY_PORTAL_DOMAIN.split(".").join("\\.")}$`, "i"), "")
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/^-+|-+$/g, "");
 
@@ -89,7 +91,7 @@ export function normalizeAndValidateCustomDomain(raw: string): {
     return {
       valid: false,
       domain: cleaned,
-      error: "Use the Free Subdomain field for *.devpulse.ritualdev.in hosts.",
+      error: `Use the Free Subdomain field for *.${PRIMARY_PORTAL_DOMAIN} hosts.`,
     };
   }
 
@@ -98,7 +100,7 @@ export function normalizeAndValidateCustomDomain(raw: string): {
 
 function getCloudflareZoneAuth(): { zoneId: string; token: string | null } {
   return {
-    zoneId: process.env.CLOUDFLARE_ZONE_ID || DEFAULT_ZONE_ID,
+    zoneId: process.env.CLOUDFLARE_ZONE_ID || "",
     token: process.env.CLOUDFLARE_ZONE_TOKEN || process.env.CLOUDFLARE_API_TOKEN || null,
   };
 }
@@ -242,7 +244,7 @@ export async function deleteCloudflareCustomHostname(customHostnameId: string): 
 
 /**
  * Queries Cloudflare DNS-over-HTTPS (1.1.1.1) to check if the user's CNAME record
- * points to cname.devpulse.ritualdev.in or devpulse.ritualdev.in.
+ * points to CUSTOM_DOMAIN_CNAME_TARGET or PRIMARY_PORTAL_DOMAIN.
  */
 export async function verifyDomainCname(domain: string): Promise<{
   verified: boolean;

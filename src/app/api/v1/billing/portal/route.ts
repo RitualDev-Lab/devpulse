@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createDodoCustomerPortalSession } from "@/lib/billing/dodo";
+import { apiError } from "@/lib/security/api-error";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Fallback: Stripe Billing Portal if configured for legacy/enterprise Stripe customer
     if (userRow?.stripeCustomerId && process.env.STRIPE_SECRET_KEY) {
-      const origin = req.headers.get("origin") || "https://devpulse.ritualdev.in";
+      const origin = req.headers.get("origin") || `${PUBLIC_APP_URL}`;
       const formBody = new URLSearchParams({
         customer: userRow.stripeCustomerId,
         return_url: `${origin}/dashboard`,
@@ -64,9 +66,6 @@ export async function POST(req: NextRequest) {
     );
   } catch (err: any) {
     console.error("POST /api/v1/billing/portal error:", err);
-    return NextResponse.json(
-      { error: err?.message || "Failed to open billing portal" },
-      { status: 500 }
-    );
+    return apiError(err, "Failed to open billing portal", 500);
   }
 }

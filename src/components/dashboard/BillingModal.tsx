@@ -1,5 +1,6 @@
 "use client";
 
+import { PORTAL_DOMAIN } from "@/lib/config/app-url";
 import React, { useState, useEffect } from "react";
 import {
   CreditCard,
@@ -171,7 +172,7 @@ export function BillingModal({
       badge: "OSS Starter",
       features: [
         "5 GitHub Repositories / Workspaces",
-        "1 Free *.devpulse.ritualdev.in subdomain",
+        `1 Free *.${PORTAL_DOMAIN} subdomain`,
         "100 MB Cloudflare R2 storage",
         "7-day analytics & telemetry history",
         "Preset dashboard themes",

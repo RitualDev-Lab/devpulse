@@ -10,6 +10,7 @@ import { runDueSyntheticTests } from "@/lib/synthetics/yaml-runner";
 import { refreshAllProjectSnapshots } from "@/lib/dashboard/snapshots";
 import { pruneExpiredRateLimits } from "@/lib/security/rate-limit";
 import { pruneExpiredPendingUploads } from "@/lib/storage/quota";
+import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,6 @@ export async function POST(req: NextRequest) {
 async function handleSync(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
-    const secretParam = req.nextUrl.searchParams.get("secret");
     const cronSecret = process.env.CRON_SECRET?.trim();
 
     // Fail closed if CRON_SECRET is not configured
@@ -35,7 +35,7 @@ async function handleSync(req: NextRequest) {
       );
     }
 
-    const token = authHeader?.replace(/^Bearer\s+/i, "").trim() || secretParam?.trim();
+    const token = authHeader?.replace(/^Bearer\s+/i, "").trim();
     if (!token || token !== cronSecret) {
       return NextResponse.json({ error: "Unauthorized cron trigger" }, { status: 401 });
     }
@@ -55,10 +55,10 @@ async function handleSync(req: NextRequest) {
     ] = await Promise.all([
       syncAllProjects({ offset, limit }),
       refreshAllProjectSnapshots(limit).catch(() => ({ refreshed: 0, projectIds: [] })),
-      runDueUptimeChecks().catch((e) => ({
-        checked: 0,
-        error: e instanceof Error ? e.message : "Uptime check failed",
-      })),
+      runDueUptimeChecks().catch((e) => {
+        console.error("Uptime check failed:", e);
+        return { checked: 0, error: "Uptime check failed" };
+      }),
       processPendingEscalations().catch(() => ({ escalated: 0 })),
       runDueSyntheticTests().catch(() => ({ totalActive: 0, executed: 0 })),
       pruneExpiredRateLimits(),
@@ -107,9 +107,6 @@ async function handleSync(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("Cron sync error:", err);
-    return NextResponse.json(
-      { error: "Internal Server Error during metrics sync", details: err?.message },
-      { status: 500 }
-    );
+    return apiError(err, "Internal Server Error during metrics sync", 500);
   }
 }

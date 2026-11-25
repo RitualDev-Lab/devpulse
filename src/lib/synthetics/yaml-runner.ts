@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { computeP95Latency, isValidPublicMonitorUrl } from "@/lib/monitors/checker";
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { decryptSecret } from "@/lib/security/crypto";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const EDGE_REGIONS = [
   { id: "iad", label: "US-East (Virginia)" },
@@ -41,7 +42,7 @@ export interface SyntheticStepResult {
 }
 
 export const SAMPLE_SYNTHETIC_YAML = `name: Production Smoke & API E2E
-baseUrl: https://devpulse.ritualdev.in
+baseUrl: ${PUBLIC_APP_URL}
 steps:
   - goto: /
     expectStatus: 200
@@ -348,7 +349,7 @@ export async function executeSyntheticTestAcrossRegions(testId: string) {
           message: firstFail?.errorMessage || "Synthetic assertion failed",
           runtime: "synthetic-edge-runner",
           environment: "production",
-          dashboardUrl: `https://devpulse.ritualdev.in/dashboard/uptime?project=${proj.slug}`,
+          dashboardUrl: `${PUBLIC_APP_URL}/dashboard/uptime?project=${proj.slug}`,
         }
       ).catch(() => {});
     }

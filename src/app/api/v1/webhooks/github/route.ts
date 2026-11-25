@@ -3,30 +3,9 @@ import { db } from "@/db";
 import { errorEvents, projects, projectReleases } from "@/db/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { verifyGitHubSignature } from "@/lib/security/github-webhook";
 
 export const dynamic = "force-dynamic";
-
-async function verifyGitHubSignature(rawBody: string, sigHeader: string | null): Promise<boolean> {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET?.trim();
-  if (!secret) return true; // Optional secret: when unset, strictly scopes only to matched projects
-  if (!sigHeader || !sigHeader.startsWith("sha256=")) return false;
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
-  const expected =
-    "sha256=" +
-    Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-  return expected === sigHeader;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,7 +13,13 @@ export async function POST(req: NextRequest) {
     const ghEvent = req.headers.get("x-github-event") || "ping";
     const ghSig = req.headers.get("x-hub-signature-256");
 
-    if (!(await verifyGitHubSignature(rawBody, ghSig))) {
+    // The secret is required. Without it, payloads cannot be authenticated, so refuse them.
+    const secret = process.env.GITHUB_WEBHOOK_SECRET?.trim();
+    if (!secret) {
+      return NextResponse.json({ error: "GitHub webhook is not configured" }, { status: 503 });
+    }
+
+    if (!(await verifyGitHubSignature(rawBody, ghSig, secret))) {
       return NextResponse.json({ error: "Invalid GitHub webhook signature" }, { status: 401 });
     }
 
