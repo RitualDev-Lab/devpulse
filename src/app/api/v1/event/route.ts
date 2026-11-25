@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { errorEvents } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { errorEvents, projectReleases } from "@/db/schema";
+import { eq, and, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
 import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
@@ -88,13 +88,48 @@ export async function POST(req: NextRequest) {
     const rawStack = body.stackTrace || body.stack_trace || body.stack ? String(body.stackTrace || body.stack_trace || body.stack) : "";
     const rawLogs = body.terminalLogs || body.terminal_logs || body.logs ? String(body.terminalLogs || body.terminal_logs || body.logs) : "";
     const runtime = String(body.runtime || "node").slice(0, 50);
-    const version = body.version ? String(body.version).slice(0, 50) : null;
+    const version = (body.version || body.release) ? String(body.version || body.release).slice(0, 50) : null;
     const os = body.os ? String(body.os).slice(0, 100) : null;
     const environment = String(body.environment || "production").slice(0, 50);
     const reporterEmail = body.reporterEmail || body.reporter_email ? String(body.reporterEmail || body.reporter_email).slice(0, 255) : null;
     const attachmentUrl = body.attachmentKey || body.attachmentUrl || body.attachment_url
       ? String(body.attachmentKey || body.attachmentUrl || body.attachment_url).slice(0, 512)
       : null;
+
+    const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? body.breadcrumbs.slice(-50) : null;
+    const breadcrumbsJson = rawBreadcrumbs ? JSON.stringify(rawBreadcrumbs).slice(0, 12000) : null;
+    let commitSha: string | null = body.commitSha || body.commit_sha ? String(body.commitSha || body.commit_sha).slice(0, 64) : null;
+
+    // Release Health & Commit Attribution correlation
+    if (version) {
+      const [rel] = await db
+        .select()
+        .from(projectReleases)
+        .where(and(eq(projectReleases.projectId, project.id), eq(projectReleases.version, version)))
+        .limit(1);
+
+      if (rel) {
+        if (!commitSha && rel.commitSha) commitSha = rel.commitSha;
+        await db
+          .update(projectReleases)
+          .set({ crashCount: sql`${projectReleases.crashCount} + 1` })
+          .where(eq(projectReleases.id, rel.id))
+          .catch(() => {});
+      } else {
+        await db
+          .insert(projectReleases)
+          .values({
+            id: `rel_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+            projectId: project.id,
+            version,
+            commitSha,
+            source: "sdk",
+            totalSessions: 1,
+            crashCount: 1,
+          })
+          .catch(() => {});
+      }
+    }
 
     // Combine heavy diagnostic payload (stackTrace + terminal output logs)
     const combinedPayload = rawLogs
@@ -148,6 +183,8 @@ export async function POST(req: NextRequest) {
       payloadSizeBytes: payloadBytes,
       storageProvider,
       reporterEmail,
+      breadcrumbsJson,
+      commitSha,
     });
 
     // Fire instant crash alerts to Discord / Slack / Telegram / Generic Webhook

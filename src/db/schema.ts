@@ -136,6 +136,8 @@ export const errorEvents = sqliteTable("error_events", {
   payloadSizeBytes: integer("payload_size_bytes").default(0).notNull(),
   storageProvider: text("storage_provider").default("turso").notNull(), // 'turso' | 'devpulse_r2' | 'byos_r2' | 'byos_s3'
   reporterEmail: text("reporter_email"), // Optional, if user submitted via public bug form
+  breadcrumbsJson: text("breadcrumbs_json"), // JSON array of HTTP/console/UI events leading to crash
+  commitSha: text("commit_sha"), // Suspected release/commit SHA attribution
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
@@ -280,5 +282,36 @@ export const rateLimitCounters = sqliteTable("rate_limit_counters", {
   bucketKey: text("bucket_key").primaryKey(),
   count: integer("count").default(0).notNull(),
   expiresAt: integer("expires_at").notNull(),
+});
+
+/**
+ * Release Health & GitHub Commit Attribution Table
+ */
+export const projectReleases = sqliteTable("project_releases", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  version: text("version").notNull(),
+  commitSha: text("commit_sha"),
+  commitAuthor: text("commit_author"),
+  commitMessage: text("commit_message"),
+  branch: text("branch"),
+  source: text("source").default("sdk").notNull(), // 'sdk' | 'github_push' | 'github_release'
+  totalSessions: integer("total_sessions").default(0).notNull(),
+  crashCount: integer("crash_count").default(0).notNull(),
+  releasedAt: text("released_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Uploaded Source Maps (.map) stored in Cloudflare R2 for crash symbolication
+ */
+export const sourceMaps = sqliteTable("source_maps", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  version: text("version").notNull(),
+  filePath: text("file_path").notNull(),
+  r2ObjectKey: text("r2_object_key").notNull(),
+  sizeBytes: integer("size_bytes").default(0).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

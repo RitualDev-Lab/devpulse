@@ -46,3 +46,10 @@ local.db*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# sdk packaging artifacts
+packages/devpulse-py/build/
+packages/devpulse-py/dist/
+packages/devpulse-py/*.egg-info/
+packages/devpulse-js/dist/
+*.tgz

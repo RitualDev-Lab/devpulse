@@ -24,6 +24,7 @@ import { WebAnalyticsCard, type AnalyticsSummary } from "./widgets/WebAnalyticsC
 import { ErrorStreamCard, type ErrorEventItem } from "./widgets/ErrorStreamCard";
 import { TelemetrySetupCard } from "./widgets/TelemetrySetupCard";
 import { BugReportBadgeCard } from "./widgets/BugReportBadgeCard";
+import { ReleaseHealthCard, type ReleaseHealthItem } from "./widgets/ReleaseHealthCard";
 import { Plus, Eye, Cloud, Sparkles } from "lucide-react";
 import {
   buildDefaultLayout,
@@ -78,6 +79,7 @@ export interface DashboardData {
   analyticsSummary?: AnalyticsSummary | null;
   revenueStats?: RevenueStats | null;
   errors: ErrorEventItem[];
+  releases?: ReleaseHealthItem[];
   initialLayout?: GridWidgetItem[];
 }
 
@@ -139,6 +141,7 @@ export function DragDropGrid({
       ...(!isPublicPortal
         ? [
             { id: "error_stream", title: "Runtime Crashes & Bugs", defaultW: 8, defaultH: 1 },
+            { id: "release_health", title: "Release Health & Commits", defaultW: 4, defaultH: 1 },
             { id: "telemetry_setup", title: "Package Crash SDK", defaultW: 4, defaultH: 1 },
           ]
         : []),
@@ -445,6 +448,13 @@ export function DragDropGrid({
         );
       case "telemetry_setup":
         return <TelemetrySetupCard apiKey={data.project.telemetryApiKey} />;
+      case "release_health":
+        return (
+          <ReleaseHealthCard
+            releases={data.releases || []}
+            githubRepo={data.project.githubRepo}
+          />
+        );
       case "bug_report_badge":
         return (
           <BugReportBadgeCard

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { encryptSecret } from "@/lib/security/crypto";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,12 +46,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update project revenue keys in Turso database
+    const encryptedStripe = stripeApiKey ? await encryptSecret(String(stripeApiKey)) : null;
+    const encryptedDodo = dodoPaymentsApiKey ? await encryptSecret(String(dodoPaymentsApiKey)) : null;
+
+    // Update project revenue keys encrypted at rest in Turso database
     await db
       .update(projects)
       .set({
-        stripeApiKey: stripeApiKey ? stripeApiKey.trim() : null,
-        dodoPaymentsApiKey: dodoPaymentsApiKey ? dodoPaymentsApiKey.trim() : null,
+        stripeApiKey: encryptedStripe,
+        dodoPaymentsApiKey: encryptedDodo,
         dodoPaymentsEnvironment: dodoPaymentsEnvironment || "live",
         githubSponsorsUsername: githubSponsorsUsername ? githubSponsorsUsername.trim() : null,
       })

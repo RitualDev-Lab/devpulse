@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devpulse-sdk"
+version = "1.0.0"
+description = "Official zero-dependency DevPulse Python SDK with breadcrumbs, offline retries, release health, and source-map uploads."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "RitualDev Lab", email = "team@ritualdev.in" }]
+keywords = ["devpulse", "sentry", "telemetry", "crash-reporting", "observability"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
+]
+
+[project.scripts]
+devpulse-upload = "devpulse_sdk.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["devpulse_sdk*"]

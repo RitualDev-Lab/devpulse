@@ -1,0 +1,40 @@
+{
+  "name": "@ritualdev/devpulse",
+  "version": "1.0.0",
+  "description": "Official DevPulse telemetry SDK: runtime crash capture, automatic breadcrumbs, offline retries, release health, and source map uploads.",
+  "license": "MIT",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "bin": {
+    "devpulse-sdk": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test.mjs"
+  },
+  "keywords": [
+    "devpulse",
+    "sentry",
+    "telemetry",
+    "crash-reporting",
+    "sourcemaps",
+    "breadcrumbs",
+    "observability"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RitualDev-Lab/devpulse"
+  }
+}

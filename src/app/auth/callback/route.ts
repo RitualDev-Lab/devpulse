@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { encryptSecret } from "@/lib/security/crypto";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -26,10 +27,11 @@ export async function GET(request: Request) {
         const synced = await getCurrentUser();
         const providerToken = data?.session?.provider_token;
         if (synced && providerToken) {
+          const encryptedToken = await encryptSecret(providerToken);
           await db
             .update(users)
             .set({
-              githubAccessToken: providerToken,
+              githubAccessToken: encryptedToken,
               updatedAt: new Date().toISOString(),
             })
             .where(eq(users.id, synced.id));

@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { users, userStorageConfigs } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getHostedR2Credentials, type R2Credentials } from "./r2";
+import { decryptSecret } from "@/lib/security/crypto";
 
 export type StorageTier = "free" | "pro" | "team" | "enterprise" | "byos";
 
@@ -120,12 +121,16 @@ export async function resolveUserStorageContext(userId: string): Promise<Resolve
 
   let credentials: R2Credentials | null = null;
   if (isByos && config) {
-    credentials = {
-      endpoint: config.endpoint!,
-      bucketName: config.bucketName!,
-      accessKeyId: config.accessKeyEncrypted!,
-      secretAccessKey: config.secretKeyEncrypted!,
-    };
+    const decryptedAccess = await decryptSecret(config.accessKeyEncrypted);
+    const decryptedSecret = await decryptSecret(config.secretKeyEncrypted);
+    if (decryptedAccess && decryptedSecret) {
+      credentials = {
+        endpoint: config.endpoint!,
+        bucketName: config.bucketName!,
+        accessKeyId: decryptedAccess,
+        secretAccessKey: decryptedSecret,
+      };
+    }
   } else {
     credentials = getHostedR2Credentials();
   }

@@ -35,6 +35,8 @@ export interface ErrorEventItem {
   payloadSizeBytes?: number;
   storageProvider?: string | null;
   reporterEmail?: string | null;
+  breadcrumbsJson?: string | null;
+  commitSha?: string | null;
   createdAt: string;
 }
 
@@ -227,6 +229,12 @@ export function ErrorStreamCard({
         "    at async Object.fetch (src/worker.ts:38:5)",
       ].join("\n");
 
+      const sampleCrumbs = [
+        { timestamp: new Date(Date.now() - 3200).toISOString(), category: "ui.click", level: "info", message: "Clicked <button> Verify Telemetry" },
+        { timestamp: new Date(Date.now() - 1400).toISOString(), category: "http", level: "warning", message: "GET /api/v1/session -> 401" },
+        { timestamp: new Date().toISOString(), category: "console", level: "error", message: "AuthVerifier threw SessionVerificationError" },
+      ];
+
       const res = await fetch("/api/v1/event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -236,9 +244,11 @@ export function ErrorStreamCard({
           message: "Simulated Sentry diagnostic event from DevPulse Command Center",
           stackTrace: sampleStack,
           runtime: "node 22.x",
-          version: "1.0.0",
+          version: "v1.0.0",
+          commitSha: "f5b5fc4",
           os: typeof navigator !== "undefined" ? navigator.platform : "Edge",
           environment: "production",
+          breadcrumbs: sampleCrumbs,
         }),
       });
       if (res.ok) {
@@ -249,7 +259,9 @@ export function ErrorStreamCard({
           message: "Simulated Sentry diagnostic event from DevPulse Command Center",
           stackTrace: sampleStack,
           runtime: "node 22.x",
-          version: "1.0.0",
+          version: "v1.0.0",
+          commitSha: "f5b5fc4",
+          breadcrumbsJson: JSON.stringify(sampleCrumbs),
           os: typeof navigator !== "undefined" ? navigator.platform : "Edge",
           environment: "production",
           status: "unresolved",
@@ -564,10 +576,49 @@ export function ErrorStreamCard({
                 <span className="text-zinc-200 font-mono">{inspectedEvent.version || "N/A"}</span>
               </div>
               <div>
-                <span className="text-zinc-500 block text-[10px]">Environment</span>
-                <span className="text-emerald-300 font-mono">{inspectedEvent.environment || "production"}</span>
+                <span className="text-zinc-500 block text-[10px]">Release / Commit</span>
+                <span className="text-emerald-300 font-mono">
+                  {inspectedEvent.version || "N/A"}
+                  {inspectedEvent.commitSha ? ` (${inspectedEvent.commitSha.slice(0, 7)})` : ""}
+                </span>
               </div>
             </div>
+
+            {inspectedEvent.breadcrumbsJson && (() => {
+              try {
+                const crumbs = JSON.parse(inspectedEvent.breadcrumbsJson) as Array<{
+                  timestamp?: string;
+                  category?: string;
+                  level?: string;
+                  message?: string;
+                }>;
+                if (!Array.isArray(crumbs) || crumbs.length === 0) return null;
+                return (
+                  <div className="mb-3 p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                      Breadcrumbs Timeline ({crumbs.length})
+                    </span>
+                    <div className="space-y-1 max-h-28 overflow-y-auto">
+                      {crumbs.map((c, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-[11px] font-mono">
+                          <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-cyan-300 shrink-0">
+                            {c.category || "log"}
+                          </span>
+                          <span className="text-zinc-300 truncate flex-1">{c.message}</span>
+                          {c.timestamp && (
+                            <span className="text-zinc-500 shrink-0">
+                              {formatTime(c.timestamp)}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              } catch {
+                return null;
+              }
+            })()}
 
             <div className="mb-3">
               <p className="text-xs sm:text-sm text-red-300 font-mono bg-red-950/30 p-3 rounded-xl border border-red-900/40">

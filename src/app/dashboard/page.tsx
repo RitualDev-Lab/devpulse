@@ -1,11 +1,12 @@
 import { db } from "@/db";
-import { projects, errorEvents, users, pageviews, dashboardWidgets } from "@/db/schema";
+import { projects, errorEvents, users, pageviews, dashboardWidgets, projectReleases } from "@/db/schema";
 import { eq, desc, and, gte } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { withEdgeCache } from "@/lib/integrations/cached";
 import { getPlanDefinition } from "@/lib/billing/plans";
 import { listAccessibleProjects } from "@/lib/security/rbac";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
+import { decryptSecret } from "@/lib/security/crypto";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
@@ -98,6 +99,8 @@ export default async function DashboardPage(props: DashboardPageProps) {
   ).toISOString();
 
   const userGhToken = user ? await getUserGitHubAccessToken(user.id).catch(() => null) : null;
+  const decryptedStripeKey = await decryptSecret(activeProject.stripeApiKey).catch(() => null);
+  const decryptedDodoKey = await decryptSecret(activeProject.dodoPaymentsApiKey).catch(() => null);
 
   // 6. Fetch live registry metrics & genuine revenue data for the active project
   const [
@@ -112,6 +115,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
     revenueStats,
     rawErrors,
     rawWidgets,
+    rawReleases,
   ] = await Promise.all([
     activeProject.githubRepo
       ? withEdgeCache(`gh:${activeProject.githubRepo}`, 300, 2600, () =>
@@ -155,8 +159,8 @@ export default async function DashboardPage(props: DashboardPageProps) {
       : Promise.resolve(null),
     withEdgeCache(`rev:${activeProject.id}`, 120, 2600, () =>
       fetchRevenueStats({
-        stripeKey: activeProject.stripeApiKey,
-        dodoKey: activeProject.dodoPaymentsApiKey,
+        stripeKey: decryptedStripeKey,
+        dodoKey: decryptedDodoKey,
         dodoEnv: activeProject.dodoPaymentsEnvironment,
         githubSponsorsUsername: activeProject.githubSponsorsUsername,
       })
@@ -177,6 +181,13 @@ export default async function DashboardPage(props: DashboardPageProps) {
       .select()
       .from(dashboardWidgets)
       .where(eq(dashboardWidgets.projectId, activeProject.id))
+      .catch(() => []),
+    db
+      .select()
+      .from(projectReleases)
+      .where(eq(projectReleases.projectId, activeProject.id))
+      .orderBy(desc(projectReleases.releasedAt))
+      .limit(10)
       .catch(() => []),
   ]);
 
@@ -205,6 +216,8 @@ export default async function DashboardPage(props: DashboardPageProps) {
     payloadSizeBytes: err.payloadSizeBytes,
     storageProvider: err.storageProvider,
     reporterEmail: err.reporterEmail,
+    breadcrumbsJson: err.breadcrumbsJson,
+    commitSha: err.commitSha,
     createdAt: err.createdAt,
   }));
 
@@ -293,8 +306,8 @@ export default async function DashboardPage(props: DashboardPageProps) {
       telegramChatId: activeProject.telegramChatId,
       genericWebhookUrl: activeProject.genericWebhookUrl,
       pagerdutyRoutingKey: activeProject.pagerdutyRoutingKey,
-      stripeApiKey: activeProject.stripeApiKey,
-      dodoPaymentsApiKey: activeProject.dodoPaymentsApiKey,
+      stripeApiKey: activeProject.stripeApiKey ? "••••••••" : null,
+      dodoPaymentsApiKey: activeProject.dodoPaymentsApiKey ? "••••••••" : null,
       theme: activeProject.theme,
       customCss: activeProject.customCss,
     },
@@ -309,6 +322,26 @@ export default async function DashboardPage(props: DashboardPageProps) {
     revenueStats,
     analyticsSummary,
     errors,
+    releases: (rawReleases || []).map((r) => {
+      const sessions = Math.max(r.totalSessions, r.crashCount);
+      const crashFreeRate =
+        sessions > 0
+          ? Number(Math.max(0, ((sessions - r.crashCount) / sessions) * 100).toFixed(2))
+          : 100;
+      return {
+        id: r.id,
+        version: r.version,
+        commitSha: r.commitSha,
+        commitAuthor: r.commitAuthor,
+        commitMessage: r.commitMessage,
+        branch: r.branch,
+        source: r.source,
+        totalSessions: r.totalSessions,
+        crashCount: r.crashCount,
+        crashFreeRate,
+        releasedAt: r.releasedAt,
+      };
+    }),
     initialLayout,
   };
 

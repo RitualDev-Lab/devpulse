@@ -7,6 +7,7 @@ import { resolveUserStorageContext, getTierMeta, type StorageTier } from "@/lib/
 import { headR2Bucket } from "@/lib/storage/r2";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { encryptSecret, decryptSecret } from "@/lib/security/crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -121,17 +122,17 @@ export async function POST(req: NextRequest) {
 
     const nextEndpoint = endpoint !== undefined ? String(endpoint).trim() : existing?.endpoint || null;
     const nextBucket = bucketName !== undefined ? String(bucketName).trim() : existing?.bucketName || null;
-    const nextAccessKey =
+    const plainAccessKey =
       accessKeyId && !String(accessKeyId).startsWith("••")
         ? String(accessKeyId).trim()
-        : existing?.accessKeyEncrypted || null;
-    const nextSecretKey =
+        : await decryptSecret(existing?.accessKeyEncrypted);
+    const plainSecretKey =
       secretAccessKey && !String(secretAccessKey).startsWith("••")
         ? String(secretAccessKey).trim()
-        : existing?.secretKeyEncrypted || null;
+        : await decryptSecret(existing?.secretKeyEncrypted);
 
     if (testConnection) {
-      if (!nextEndpoint || !nextBucket || !nextAccessKey || !nextSecretKey) {
+      if (!nextEndpoint || !nextBucket || !plainAccessKey || !plainSecretKey) {
         return NextResponse.json(
           { error: "Endpoint, Bucket Name, Access Key, and Secret Key are required to test BYOS." },
           { status: 400 }
@@ -141,8 +142,8 @@ export async function POST(req: NextRequest) {
       const ok = await headR2Bucket({
         endpoint: nextEndpoint,
         bucketName: nextBucket,
-        accessKeyId: nextAccessKey,
-        secretAccessKey: nextSecretKey,
+        accessKeyId: plainAccessKey,
+        secretAccessKey: plainSecretKey,
       });
 
       if (!ok) {
@@ -153,6 +154,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const encryptedAccessKey = await encryptSecret(plainAccessKey);
+    const encryptedSecretKey = await encryptSecret(plainSecretKey);
+
     await resolveUserStorageContext(user.id);
     await db
       .update(userStorageConfigs)
@@ -160,8 +164,8 @@ export async function POST(req: NextRequest) {
         provider: nextProvider,
         endpoint: nextEndpoint,
         bucketName: nextBucket,
-        accessKeyEncrypted: nextAccessKey,
-        secretKeyEncrypted: nextSecretKey,
+        accessKeyEncrypted: encryptedAccessKey,
+        secretKeyEncrypted: encryptedSecretKey,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(userStorageConfigs.userId, user.id));

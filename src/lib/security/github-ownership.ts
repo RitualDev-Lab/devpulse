@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { users, projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import type { AuthenticatedUser } from "@/lib/auth";
+import { encryptSecret, decryptSecret } from "@/lib/security/crypto";
 
 export interface GitHubRepoChoice {
   id: number;
@@ -29,10 +30,15 @@ export async function getUserGitHubAccessToken(userId: string): Promise<string |
     const { data } = await supabase.auth.getSession();
     const liveToken = data?.session?.provider_token;
     if (liveToken) {
-      // Best-effort refresh persisted token in Turso
-      db.update(users)
-        .set({ githubAccessToken: liveToken, updatedAt: new Date().toISOString() })
-        .where(eq(users.id, userId))
+      // Best-effort refresh encrypted persisted token in Turso
+      encryptSecret(liveToken)
+        .then((enc) => {
+          if (!enc) return;
+          return db
+            .update(users)
+            .set({ githubAccessToken: enc, updatedAt: new Date().toISOString() })
+            .where(eq(users.id, userId));
+        })
         .catch(() => {});
       return liveToken;
     }
@@ -46,7 +52,7 @@ export async function getUserGitHubAccessToken(userId: string): Promise<string |
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    return row?.githubAccessToken || null;
+    return await decryptSecret(row?.githubAccessToken);
   } catch {
     return null;
   }

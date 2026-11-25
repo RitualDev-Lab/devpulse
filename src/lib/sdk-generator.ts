@@ -4,94 +4,35 @@
  */
 
 export function getPythonSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
-  return `import sys
-import traceback
-import platform
-import json
-import urllib.request
+  return `# Install official zero-dependency SDK:
+# pip install devpulse-sdk
 
-class DevPulseTracker:
-    def __init__(self, api_key="${apiKey}", endpoint="${hostUrl}/api/v1/event"):
-        self.api_key = api_key
-        self.endpoint = endpoint
-        self._install_hook()
+import devpulse_sdk
 
-    def _install_hook(self):
-        original_hook = sys.excepthook
-        def custom_hook(exc_type, exc_value, exc_traceback):
-            self.capture_exception(exc_type, exc_value, exc_traceback)
-            return original_hook(exc_type, exc_value, exc_traceback)
-        sys.excepthook = custom_hook
+devpulse_sdk.init(
+    api_key="${apiKey}",
+    endpoint="${hostUrl}",
+    release="v1.0.0",
+    attach_logging=True,  # Captures breadcrumbs + offline retries
+)
 
-    def capture_exception(self, exc_type, exc_value, exc_traceback, version="1.0.0"):
-        try:
-            tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            payload = {
-                "apiKey": self.api_key,
-                "errorName": str(exc_type.__name__),
-                "message": str(exc_value),
-                "stackTrace": "".join(tb_lines),
-                "runtime": f"python {platform.python_version()}",
-                "os": f"{platform.system()} {platform.release()}",
-                "version": version
-            }
-            req = urllib.request.Request(
-                self.endpoint,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            urllib.request.urlopen(req, timeout=3)
-        except Exception:
-            pass # Never crash the host application
-
-# Initialize in your main entrypoint:
-tracker = DevPulseTracker()
+devpulse_sdk.add_breadcrumb(category="custom", message="Worker booted")
 `;
 }
 
 export function getNodeSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
-  return `/**
- * DevPulse Zero-Dependency Node.js Error & Telemetry Tracker
- */
-export function initDevPulse({
-  apiKey = "${apiKey}",
-  version = "1.0.0",
-  endpoint = "${hostUrl}/api/v1/event"
-} = {}) {
-  const sendError = async (error, errorName = "UnhandledError") => {
-    try {
-      await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiKey,
-          errorName: error?.name || errorName,
-          message: error?.message || String(error),
-          stackTrace: error?.stack || null,
-          runtime: \`node \${process.version}\`,
-          os: \`\${process.platform} \${process.arch}\`,
-          version
-        }),
-      });
-    } catch {
-      // Never crash user process if network fails
-    }
-  };
+  return `// Install official SDK: npm install @ritualdev/devpulse
+import { init, addBreadcrumb, trackEvent } from "@ritualdev/devpulse";
 
-  process.on("uncaughtException", async (err) => {
-    await sendError(err, "UncaughtException");
-    process.exit(1);
-  });
+init({
+  apiKey: "${apiKey}",
+  endpoint: "${hostUrl}",
+  release: "v1.0.0",
+  commitSha: process.env.GIT_COMMIT_SHA,
+});
 
-  process.on("unhandledRejection", async (reason) => {
-    await sendError(reason, "UnhandledRejection");
-  });
-
-  return { captureError: sendError };
-}
-
-// In your app/CLI entrypoint:
-// initDevPulse();
+addBreadcrumb({ category: "custom", level: "info", message: "Service ready" });
+trackEvent("app_launch");
 `;
 }
 
@@ -132,27 +73,17 @@ curl -X POST "${hostUrl}/api/v1/event" \\
 }
 
 export function getWebAppSnippet(apiKey: string, hostUrl = "https://devpulse.ritualdev.in"): string {
-  return `// Browser / React / Next.js / Electron Sentry-Style Tracker
-export function initDevPulseWebApp() {
-  const endpoint = "${hostUrl}/api/v1/event";
-  const send = (errorName, message, stackTrace) =>
-    fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        apiKey: "${apiKey}",
-        errorName,
-        message,
-        stackTrace,
-        runtime: "browser",
-        os: navigator.platform || "Web",
-        environment: "production"
-      }),
-      keepalive: true
-    }).catch(() => {});
+  return `// npm install @ritualdev/devpulse
+// Captures HTTP/DOM breadcrumbs, offline retries, release sessions & source maps
+import { init } from "@ritualdev/devpulse";
 
-  window.addEventListener("error", (e) => send(e.error?.name || "UncaughtError", e.message, e.error?.stack));
-  window.addEventListener("unhandledrejection", (e) => send("UnhandledRejection", String(e.reason), e.reason?.stack));
-}
+init({
+  apiKey: "${apiKey}",
+  endpoint: "${hostUrl}",
+  release: "v1.0.0",
+});
+
+// CI Source Map upload:
+// npx devpulse-sdk upload-sourcemaps --key ${apiKey} --release v1.0.0 --dir ./dist
 `;
 }

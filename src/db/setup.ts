@@ -89,6 +89,8 @@ export async function initDb() {
     "ALTER TABLE pageviews ADD COLUMN event_name TEXT DEFAULT 'pageview' NOT NULL;",
     "ALTER TABLE pageviews ADD COLUMN os TEXT DEFAULT 'Unknown' NOT NULL;",
     "ALTER TABLE pageviews ADD COLUMN app_version TEXT;",
+    "ALTER TABLE error_events ADD COLUMN breadcrumbs_json TEXT;",
+    "ALTER TABLE error_events ADD COLUMN commit_sha TEXT;",
   ];
 
   for (const query of optionalColumns) {
@@ -277,6 +279,35 @@ export async function initDb() {
       bucket_key TEXT PRIMARY KEY,
       count INTEGER DEFAULT 0 NOT NULL,
       expires_at INTEGER NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS project_releases (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      version TEXT NOT NULL,
+      commit_sha TEXT,
+      commit_author TEXT,
+      commit_message TEXT,
+      branch TEXT,
+      source TEXT DEFAULT 'sdk' NOT NULL,
+      total_sessions INTEGER DEFAULT 0 NOT NULL,
+      crash_count INTEGER DEFAULT 0 NOT NULL,
+      released_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS source_maps (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      version TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      r2_object_key TEXT NOT NULL,
+      size_bytes INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
 
