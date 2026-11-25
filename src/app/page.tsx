@@ -432,7 +432,7 @@ export default function HomePage() {
               </ul>
             </div>
             <Link
-              href="/dashboard"
+              href="/dashboard?upgrade=pro"
               className="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-center text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition"
             >
               Upgrade to Pro
@@ -469,7 +469,7 @@ export default function HomePage() {
               </ul>
             </div>
             <Link
-              href="/dashboard"
+              href="/dashboard?upgrade=team"
               className="w-full py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-center text-xs font-bold text-white transition"
             >
               Launch Team Workspace

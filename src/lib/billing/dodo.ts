@@ -41,6 +41,31 @@ export function resolveItemKeyFromProductId(productId?: string | null): BillingI
   return null;
 }
 
+export function buildHostedDodoCheckoutUrl(params: {
+  itemKey: BillingItemKey;
+  quantity?: number;
+  userId: string;
+  userEmail?: string | null;
+  returnUrl: string;
+}): string {
+  const productId = getDodoProductId(params.itemKey);
+  const quantity = Math.max(1, Math.min(20, Math.floor(params.quantity || 1)));
+  const isTest = (process.env.DODO_PAYMENTS_ENVIRONMENT || "live").toLowerCase().includes("test");
+  const origin = isTest ? "https://test.checkout.dodopayments.com" : "https://checkout.dodopayments.com";
+
+  const url = new URL(`${origin}/buy/${productId}`);
+  url.searchParams.set("quantity", String(quantity));
+  url.searchParams.set("redirect_url", params.returnUrl);
+  url.searchParams.set("metadata_app", "devpulse");
+  url.searchParams.set("metadata_userId", params.userId);
+  url.searchParams.set("metadata_itemKey", params.itemKey);
+  url.searchParams.set("metadata_quantity", String(quantity));
+  if (params.userEmail) {
+    url.searchParams.set("email", params.userEmail);
+  }
+  return url.toString();
+}
+
 export async function createDodoCheckoutSession(params: {
   itemKey: BillingItemKey;
   quantity?: number;
@@ -51,12 +76,15 @@ export async function createDodoCheckoutSession(params: {
   returnUrl: string;
 }): Promise<{ checkoutUrl: string; sessionId: string }> {
   const apiKey = getDodoApiKey();
-  if (!apiKey) {
-    throw new Error("DODO_PAYMENTS_API_KEY is not configured on the server.");
-  }
-
   const productId = getDodoProductId(params.itemKey);
   const quantity = Math.max(1, Math.min(20, Math.floor(params.quantity || 1)));
+
+  if (!apiKey) {
+    return {
+      checkoutUrl: buildHostedDodoCheckoutUrl(params),
+      sessionId: `hosted_${params.itemKey}_${Date.now()}`,
+    };
+  }
 
   const body: Record<string, unknown> = {
     product_cart: [{ product_id: productId, quantity }],

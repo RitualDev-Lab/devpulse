@@ -172,12 +172,12 @@ export function PublicPortalView({
 
           {!user.isWhiteLabeled ? (
             <a
-              href="https://devpulse.ritualdev.in"
+              href="https://devpulse.ritualdev.in/#pricing"
               target="_blank"
               rel="noreferrer"
               className="text-zinc-400 hover:text-white transition"
             >
-              Powered by <span className="font-semibold text-indigo-400">DevPulse</span>
+              Powered by <span className="font-semibold text-indigo-400">DevPulse</span> &mdash; Claim your free telemetry subdomain
             </a>
           ) : (
             <span className="text-zinc-500 font-mono text-[11px]">{portalHost}</span>

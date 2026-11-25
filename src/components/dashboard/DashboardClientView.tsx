@@ -50,27 +50,37 @@ export function DashboardClientView({
   const [customCss, setCustomCss] = useState(() => initialData.project.customCss || "");
 
   useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("billing") === "success") {
-        setBillingSuccessBanner(true);
+    const frame = requestAnimationFrame(() => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("billing") === "success") {
+          setBillingSuccessBanner(true);
+        }
+        const upgradeParam = params.get("upgrade");
+        if (upgradeParam === "pro" || upgradeParam === "team" || upgradeParam === "extra_domain" || upgradeParam === "extra_storage") {
+          setIsBillingOpen(true);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   // In demo mode, restore persisted theme/CSS from localStorage if customized locally
   useEffect(() => {
     if (!isDemo) return;
-    try {
-      const savedTheme = localStorage.getItem(`devpulse_theme_${data.project.id}`);
-      const savedCss = localStorage.getItem(`devpulse_css_${data.project.id}`);
-      if (savedTheme) setCurrentTheme(normalizeThemeId(savedTheme));
-      if (savedCss !== null) setCustomCss(savedCss);
-    } catch {
-      // ignore
-    }
+    const frame = requestAnimationFrame(() => {
+      try {
+        const savedTheme = localStorage.getItem(`devpulse_theme_${data.project.id}`);
+        const savedCss = localStorage.getItem(`devpulse_css_${data.project.id}`);
+        if (savedTheme) setCurrentTheme(normalizeThemeId(savedTheme));
+        if (savedCss !== null) setCustomCss(savedCss);
+      } catch {
+        // ignore
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, [data.project.id, isDemo]);
 
   const handleResetLayout = async () => {
