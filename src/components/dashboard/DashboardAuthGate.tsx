@@ -30,10 +30,11 @@ export function DashboardAuthGate() {
 
   const handleSignIn = async () => {
     setLoading(true);
+    const nextPath = `/dashboard${window.location.search || ""}`;
     await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
       },
     });
   };
@@ -146,7 +147,7 @@ export function DashboardAuthGate() {
 
       {/* Footer */}
       <footer className="border-t border-zinc-900 bg-zinc-950 py-6 text-center text-xs text-zinc-600">
-        DevPulse &bull; Open Source Developer Mission Control &bull; 100% Free & Self-Hostable
+        DevPulse &bull; Free Subdomain Included &bull; Optional Pro ($14/mo) &amp; Team ($49/mo) Upgrades
       </footer>
     </div>
   );
