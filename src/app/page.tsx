@@ -12,6 +12,8 @@ import {
   Globe,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
+import { WaitlistForm } from "@/components/WaitlistForm";
+import { PLAN_DEFINITIONS, EXTRA_DOMAIN_ADDON_PRICE_MONTHLY } from "@/lib/billing/plans";
 
 export const metadata = {
   title: "DevPulse - Unified Developer Headquarters & Telemetry Engine",
@@ -45,7 +47,7 @@ export default function HomePage() {
           <nav className="hidden md:flex items-center gap-6 text-xs font-medium text-zinc-400">
             <a href="#about" className="hover:text-white transition">About</a>
             <a href="#features" className="hover:text-white transition">Features</a>
-            <a href="#revenue" className="hover:text-white transition">Revenue Engine</a>
+            <a href="#pricing" className="hover:text-white transition">Pricing</a>
             <a href="#cli" className="hover:text-white transition">Terminal CLI</a>
             <a
               href="https://github.com/ritualdev-lab/devpulse"
@@ -346,6 +348,82 @@ export default function HomePage() {
               Embed live dynamic shields like <code className="text-zinc-300">/api/badge/downloads/...svg</code> directly into GitHub READMEs.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* Pricing & Public Beta Waitlist Section */}
+      <section id="pricing" className="max-w-7xl mx-auto px-4 sm:px-6 py-20 border-t border-zinc-900 space-y-12">
+        <div className="max-w-2xl mx-auto text-center space-y-3">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+            Simple SaaS Pricing &bull; Free Subdomain Included
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+            Start Free. Scale Custom Domains &amp; R2 Storage.
+          </h2>
+          <p className="text-sm text-zinc-400">
+            Every developer gets 1 free subdomain (<code className="text-zinc-200">you.devpulse.ritualdev.in</code>) and 100 MB crash log storage. Upgrade anytime for custom CNAMEs, white-label embeds, and up to 50 GB Cloudflare R2 storage.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[PLAN_DEFINITIONS.free, PLAN_DEFINITIONS.pro, PLAN_DEFINITIONS.team].map((plan) => (
+            <div
+              key={plan.tier}
+              className={`p-6 rounded-3xl border flex flex-col justify-between space-y-6 ${
+                plan.tier === "pro"
+                  ? "bg-indigo-950/20 border-indigo-500/60 shadow-xl shadow-indigo-500/10"
+                  : "bg-zinc-900/40 border-zinc-800"
+              }`}
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                    {plan.label}
+                  </span>
+                  {plan.tier === "pro" && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      Most Popular
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-extrabold text-white">${plan.priceMonthly}</span>
+                  <span className="text-xs text-zinc-500">/month</span>
+                </div>
+                <ul className="space-y-2.5 text-xs text-zinc-300">
+                  {plan.features.map((feat) => (
+                    <li key={feat} className="flex items-start gap-2">
+                      <span className="text-emerald-400 font-bold">&check;</span>
+                      <span>{feat}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <Link
+                href="/dashboard"
+                className={`w-full py-2.5 rounded-xl text-center text-xs font-semibold transition ${
+                  plan.tier === "pro"
+                    ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+                    : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                }`}
+              >
+                {plan.tier === "free" ? "Launch Free Workspace" : `Start with ${plan.label}`}
+              </Link>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-center text-xs text-zinc-500">
+          Need additional branded hostnames? Add extra custom domains anytime for <strong className="text-zinc-300">+${EXTRA_DOMAIN_ADDON_PRICE_MONTHLY}/mo</strong> each via Dodo Payments.
+        </p>
+
+        {/* Beta Waitlist / Changelog Digest Capture */}
+        <div className="p-8 rounded-3xl bg-zinc-900/50 border border-zinc-800 text-center space-y-4">
+          <h3 className="text-lg font-bold text-white">Join the DevPulse Public Beta List</h3>
+          <p className="text-xs text-zinc-400 max-w-md mx-auto">
+            Get early feature drops (new registry collectors, R2 log viewers, and weekly ecosystem benchmarks) directly in your inbox.
+          </p>
+          <WaitlistForm source="homepage" />
         </div>
       </section>
 

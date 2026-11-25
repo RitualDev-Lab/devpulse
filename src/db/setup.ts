@@ -42,8 +42,13 @@ export async function initDb() {
     );
   `);
 
-  // Migrate existing tables to add new webhook and revenue columns if missing
+  // Migrate existing tables to add new webhook, domain, billing and revenue columns if missing
   const optionalColumns = [
+    "ALTER TABLE users ADD COLUMN subdomain TEXT;",
+    "ALTER TABLE users ADD COLUMN extra_custom_domains INTEGER DEFAULT 0 NOT NULL;",
+    "ALTER TABLE users ADD COLUMN dodo_customer_id TEXT;",
+    "ALTER TABLE users ADD COLUMN dodo_subscription_id TEXT;",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_subdomain ON users(subdomain);",
     "ALTER TABLE projects ADD COLUMN discord_webhook_url TEXT;",
     "ALTER TABLE projects ADD COLUMN slack_webhook_url TEXT;",
     "ALTER TABLE projects ADD COLUMN telegram_bot_token TEXT;",
@@ -136,6 +141,33 @@ export async function initDb() {
       country TEXT DEFAULT 'Global' NOT NULL,
       device TEXT DEFAULT 'desktop' NOT NULL,
       browser TEXT DEFAULT 'other' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS custom_domains (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      hostname TEXT NOT NULL UNIQUE,
+      cloudflare_hostname_id TEXT,
+      ssl_status TEXT DEFAULT 'pending_validation' NOT NULL,
+      verification_record_name TEXT,
+      verification_record_value TEXT,
+      verified INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS waitlist_signups (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      github_username TEXT,
+      repo_url TEXT,
+      source TEXT DEFAULT 'landing' NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);

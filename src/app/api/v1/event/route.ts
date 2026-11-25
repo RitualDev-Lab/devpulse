@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { projects, errorEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { uploadCrashAttachment } from "@/lib/storage/r2";
 
 // Enable CORS for telemetry beacons from any client
 export async function OPTIONS() {
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
     const [project] = await db
       .select({
         id: projects.id,
+        userId: projects.userId,
         name: projects.name,
         slug: projects.slug,
         discordWebhookUrl: projects.discordWebhookUrl,
@@ -54,12 +56,40 @@ export async function POST(req: NextRequest) {
     const eventId = `err_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const errorName = String(body.errorName || body.name || "RuntimeError").slice(0, 255);
     const message = String(body.message || "An unexpected error occurred").slice(0, 2000);
-    const stackTrace = body.stackTrace || body.stack ? String(body.stackTrace || body.stack).slice(0, 8000) : null;
+    const rawStack = body.stackTrace || body.stack ? String(body.stackTrace || body.stack) : null;
+    const stackTrace = rawStack ? rawStack.slice(0, 8000) : null;
     const runtime = String(body.runtime || "node").slice(0, 50);
     const version = body.version ? String(body.version).slice(0, 50) : null;
     const os = body.os ? String(body.os).slice(0, 100) : null;
     const environment = String(body.environment || "production").slice(0, 50);
     const reporterEmail = body.reporterEmail ? String(body.reporterEmail).slice(0, 255) : null;
+
+    // Upload optional crash attachment or oversized log to Cloudflare R2 / BYOS
+    let attachmentUrl: string | null = null;
+    let storageWarning: string | undefined;
+    const attachmentPayload =
+      typeof body.attachment === "string" && body.attachment.length > 0
+        ? body.attachment
+        : rawStack && rawStack.length > 8000
+          ? rawStack
+          : null;
+
+    if (attachmentPayload) {
+      const uploadRes = await uploadCrashAttachment({
+        userId: project.userId,
+        projectId: project.id,
+        eventId,
+        filename: String(body.attachmentName || "crash-log.txt"),
+        content: attachmentPayload.slice(0, 2_000_000),
+        contentType: String(body.attachmentContentType || "text/plain; charset=utf-8"),
+      }).catch(() => ({ uploaded: false, attachmentUrl: null, quotaExceeded: false, reason: undefined }));
+
+      if (uploadRes.uploaded && uploadRes.attachmentUrl) {
+        attachmentUrl = uploadRes.attachmentUrl;
+      } else if (uploadRes.quotaExceeded) {
+        storageWarning = uploadRes.reason;
+      }
+    }
 
     await db.insert(errorEvents).values({
       id: eventId,
@@ -72,6 +102,7 @@ export async function POST(req: NextRequest) {
       os,
       environment,
       status: "unresolved",
+      attachmentUrl,
       reporterEmail,
     });
 
@@ -102,6 +133,8 @@ export async function POST(req: NextRequest) {
         success: true,
         eventId,
         project: project.name,
+        attachmentUrl,
+        ...(storageWarning ? { storageWarning } : {}),
       },
       {
         status: 201,

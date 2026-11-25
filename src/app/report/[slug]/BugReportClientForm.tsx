@@ -14,9 +14,28 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
   const [stackTrace, setStackTrace] = useState("");
   const [runtime, setRuntime] = useState("node");
   const [reporterEmail, setReporterEmail] = useState("");
+  const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  const [attachmentText, setAttachmentText] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setAttachmentName(null);
+      setAttachmentText(null);
+      return;
+    }
+    if (file.size > 512 * 1024) {
+      setErrorMessage("Attachment exceeds 500 KB max limit.");
+      return;
+    }
+    const text = await file.text();
+    setAttachmentName(file.name);
+    setAttachmentText(text);
+    setErrorMessage("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +54,8 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
           runtime,
           environment: "production",
           reporterEmail: reporterEmail || null,
+          attachment: attachmentText || undefined,
+          attachmentName: attachmentName || undefined,
         }),
       });
 
@@ -155,6 +176,18 @@ export function BugReportClientForm({ apiKey, projectName }: BugReportClientForm
           onChange={(e) => setStackTrace(e.target.value)}
           placeholder="Paste terminal error logs or stack trace here..."
           className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 transition resize-none"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-zinc-300 mb-1">
+          Attach Log File (Optional &bull; Stored in R2 up to 500 KB)
+        </label>
+        <input
+          type="file"
+          accept=".log,.txt,.json"
+          onChange={handleFileChange}
+          className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-zinc-700 file:text-xs file:font-semibold file:bg-zinc-900 file:text-zinc-200 hover:file:bg-zinc-800"
         />
       </div>
 

@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { getCurrentUser } from "@/lib/auth";
+import { getPlanLimits } from "@/lib/billing/plans";
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       projectId,
@@ -20,7 +27,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    // Update webhook settings in database
+    const [ownedProject] = await db
+      .select({ id: projects.id, name: projects.name, slug: projects.slug })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
+      .limit(1);
+
+    if (!ownedProject) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    const configuredChannels = [
+      Boolean(discordWebhookUrl?.trim()),
+      Boolean(slackWebhookUrl?.trim()),
+      Boolean(telegramBotToken?.trim() && telegramChatId?.trim()),
+    ].filter(Boolean).length;
+
+    const limits = getPlanLimits(user.storageTier);
+    if (configuredChannels > limits.alertChannelsLimit) {
+      return NextResponse.json(
+        {
+          error: `Your ${limits.label} plan includes ${limits.alertChannelsLimit} alert channel. Upgrade to Pro ($14/mo) for multi-channel alerts.`,
+          upgradeRequired: true,
+        },
+        { status: 403 }
+      );
+    }
+
     await db
       .update(projects)
       .set({
@@ -29,9 +62,8 @@ export async function POST(req: NextRequest) {
         telegramBotToken: telegramBotToken || null,
         telegramChatId: telegramChatId || null,
       })
-      .where(eq(projects.id, projectId));
+      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)));
 
-    // If testPing requested, dispatch a test notification
     if (testPing) {
       await dispatchCrashAlerts(
         {
@@ -41,10 +73,10 @@ export async function POST(req: NextRequest) {
           telegramChatId,
         },
         {
-          projectName: "DevPulse Alert Test",
-          projectSlug: "devpulse",
+          projectName: ownedProject.name,
+          projectSlug: ownedProject.slug,
           errorName: "TestAlert: Webhook Connected",
-          message: "🎉 Success! DevPulse instant crash alerts are now active on this channel.",
+          message: "Success! DevPulse instant crash alerts are now active on this channel.",
           runtime: "system-test",
           version: "v1.0.0",
           os: "Cloudflare Edge",

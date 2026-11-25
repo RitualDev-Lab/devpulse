@@ -14,6 +14,7 @@ export interface ErrorEventItem {
   os?: string | null;
   environment?: string | null;
   status: "unresolved" | "resolved" | "ignored";
+  attachmentUrl?: string | null;
   reporterEmail?: string | null;
   createdAt: string;
 }
@@ -31,11 +32,31 @@ export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: E
 
   const unresolvedCount = errors.filter((e) => e.status === "unresolved").length;
 
-  const markResolved = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setErrors((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: "resolved" } : item))
-    );
+  const updateErrorStatus = async (
+    id: string,
+    status: "resolved" | "ignored" | "unresolved",
+    e?: React.MouseEvent
+  ) => {
+    if (e) e.stopPropagation();
+    const prevSnapshot = errors;
+    setErrors((prev) => prev.map((item) => (item.id === id ? { ...item, status } : item)));
+    if (selectedError?.id === id) {
+      setSelectedError((prev) => (prev ? { ...prev, status } : null));
+    }
+
+    try {
+      const res = await fetch(`/api/v1/errors/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        // Revert optimistic update only on explicit non-demo persistence failure
+        setErrors(prevSnapshot);
+      }
+    } catch {
+      setErrors(prevSnapshot);
+    }
   };
 
   const testBeaconCommand = `curl -X POST https://devpulse.ritualdev.in/api/v1/event -H "Content-Type: application/json" -d '{"api_key":"${telemetryApiKey || "YOUR_KEY"}","error_name":"FirstTestError","message":"Verifying DevPulse crash telemetry ingest"}'`;
@@ -132,7 +153,7 @@ export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: E
                 <div className="flex items-center gap-1.5 shrink-0 pt-1">
                   {err.status === "unresolved" && (
                     <button
-                      onClick={(e) => markResolved(err.id, e)}
+                      onClick={(e) => updateErrorStatus(err.id, "resolved", e)}
                       title="Mark as Resolved"
                       className="text-zinc-500 hover:text-emerald-400 p-1 rounded hover:bg-zinc-800 transition"
                     >
@@ -207,13 +228,42 @@ export function ErrorStreamCard({ initialErrors, projectId, telemetryApiKey }: E
               </pre>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-end gap-2">
-              <button
-                onClick={() => setSelectedError(null)}
-                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition"
-              >
-                Close
-              </button>
+            <div className="mt-4 pt-3 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {selectedError.attachmentUrl && (
+                  <a
+                    href={`/api/v1/attachments/${encodeURIComponent(selectedError.id)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium transition"
+                  >
+                    Download R2 Log Attachment
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedError.status !== "resolved" ? (
+                  <button
+                    onClick={() => updateErrorStatus(selectedError.id, "resolved")}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition"
+                  >
+                    Mark Resolved
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => updateErrorStatus(selectedError.id, "unresolved")}
+                    className="px-3.5 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 text-xs font-medium transition"
+                  >
+                    Reopen Issue
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedError(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

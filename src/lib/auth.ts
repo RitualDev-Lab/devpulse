@@ -6,10 +6,12 @@ import { eq, sql } from "drizzle-orm";
 export interface AuthenticatedUser {
   id: string;
   githubUsername: string;
+  subdomain: string | null;
   name: string | null;
   email: string | null;
   avatarUrl: string | null;
   storageTier: string;
+  extraCustomDomains: number;
   customDomain: string | null;
   customDomainVerified: boolean;
 }
@@ -40,6 +42,12 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     const email = user.email || null;
     const avatarUrl = metadata.avatar_url || null;
 
+    const defaultSubdomain = githubUsername
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || `dev-${user.id.slice(0, 6)}`;
+
     // Ensure user row exists in Turso
     try {
       await db
@@ -47,10 +55,12 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
         .values({
           id: user.id,
           githubUsername,
+          subdomain: defaultSubdomain,
           name,
           email,
           avatarUrl,
           storageTier: "free",
+          extraCustomDomains: 0,
           customDomainVerified: false,
         })
         .onConflictDoUpdate({
@@ -89,10 +99,12 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       return {
         id: u.id,
         githubUsername: u.githubUsername,
+        subdomain: u.subdomain || defaultSubdomain,
         name: u.name,
         email: u.email,
         avatarUrl: u.avatarUrl,
         storageTier: u.storageTier,
+        extraCustomDomains: u.extraCustomDomains ?? 0,
         customDomain: u.customDomain,
         customDomainVerified: u.customDomainVerified,
       };
@@ -101,10 +113,12 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     return {
       id: user.id,
       githubUsername,
+      subdomain: defaultSubdomain,
       name,
       email,
       avatarUrl,
       storageTier: "free",
+      extraCustomDomains: 0,
       customDomain: null,
       customDomainVerified: false,
     };

@@ -6,11 +6,12 @@ import {
   Sliders,
   Palette,
   Globe,
-  HardDrive,
   RefreshCw,
   Bell,
   Plug,
   Plus,
+  Share2,
+  Sparkles,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 import {
@@ -27,6 +28,10 @@ interface DashboardHeaderProps {
   onOpenStyling: () => void;
   onOpenAlerts: () => void;
   onOpenIntegrations: () => void;
+  onOpenDomains: () => void;
+  onOpenShare: () => void;
+  onOpenBilling: () => void;
+  subdomain?: string | null;
   customDomain?: string | null;
   storageTier: string;
   onResetLayout: () => void;
@@ -41,6 +46,10 @@ export function DashboardHeader({
   onOpenStyling,
   onOpenAlerts,
   onOpenIntegrations,
+  onOpenDomains,
+  onOpenShare,
+  onOpenBilling,
+  subdomain,
   customDomain,
   storageTier,
   onResetLayout,
@@ -67,10 +76,8 @@ export function DashboardHeader({
               </span>
             </a>
 
-            {/* Separator */}
             <div className="h-5 w-[1px] bg-zinc-800" />
 
-            {/* Project Switcher Dropdown */}
             <ProjectWorkspaceSwitcher
               currentProject={currentProject}
               projects={projectList}
@@ -86,28 +93,29 @@ export function DashboardHeader({
 
           {/* Center / Right: Meta Statuses & Actions */}
           <div className="flex items-center flex-wrap gap-2 text-xs">
-            {customDomain && (
-              <div
-                className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300"
-                title="Verified Custom Domain"
-              >
-                <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="font-mono text-[11px]">{customDomain}</span>
-              </div>
-            )}
-
-            <div
-              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400"
-              title="Cloudflare R2 Storage Tier"
+            <button
+              type="button"
+              onClick={onOpenDomains}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition"
+              title="Subdomain, Custom Domains & R2 Storage"
             >
-              <HardDrive className="w-3.5 h-3.5 text-purple-400" />
-              <span>R2:</span>
-              <span className="text-zinc-200 uppercase font-semibold text-[10px]">
-                {storageTier}
+              <Globe className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden lg:inline font-mono text-[11px] max-w-[140px] truncate">
+                {customDomain || (subdomain ? `${subdomain}.devpulse...` : "Domains / R2")}
               </span>
-            </div>
+              <span className="lg:hidden">Domains</span>
+            </button>
 
-            {/* 1-Click Import Button */}
+            <button
+              type="button"
+              onClick={onOpenBilling}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 transition"
+              title="Manage Plan & Storage Quota"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="uppercase font-semibold text-[10px]">{storageTier}</span>
+            </button>
+
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 text-indigo-300 hover:text-white transition shadow-sm"
@@ -117,14 +125,13 @@ export function DashboardHeader({
               <span>Import Repo</span>
             </button>
 
-            {/* Action Buttons */}
             <button
               onClick={onOpenIntegrations}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"
-              title="Connect or disconnect package tabs (npm, PyPI, Rust, VS Code)"
+              title="Connect or disconnect package tabs (npm, PyPI, Rust, Go, VS Code)"
             >
               <Plug className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Connect Data</span>
+              <span className="hidden sm:inline">Connect</span>
             </button>
 
             <button
@@ -133,7 +140,16 @@ export function DashboardHeader({
               title="Configure Discord / Slack / Telegram webhooks"
             >
               <Bell className="w-3.5 h-3.5 text-red-400" />
-              <span>Alerts</span>
+              <span className="hidden sm:inline">Alerts</span>
+            </button>
+
+            <button
+              onClick={onOpenShare}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"
+              title="Public share link, SVG badges & iframe embed"
+            >
+              <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Share</span>
             </button>
 
             <button
@@ -141,7 +157,7 @@ export function DashboardHeader({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition shadow-sm"
             >
               <Palette className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Theme / CSS</span>
+              <span className="hidden sm:inline">Theme / CSS</span>
             </button>
 
             <button
@@ -153,7 +169,7 @@ export function DashboardHeader({
               }`}
             >
               <Sliders className="w-3.5 h-3.5 text-indigo-300" />
-              <span>{isCustomizing ? "Save Layout" : "Customize"}</span>
+              <span>{isCustomizing ? "Done" : "Customize"}</span>
             </button>
 
             {isCustomizing && (
@@ -173,7 +189,6 @@ export function DashboardHeader({
         </div>
       </header>
 
-      {/* 1-Click Import Modal */}
       <ImportRepositoryModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}

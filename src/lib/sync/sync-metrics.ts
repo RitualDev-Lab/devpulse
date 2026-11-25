@@ -1,10 +1,14 @@
 import { db } from "@/db";
-import { projects, dailyMetrics } from "@/db/schema";
+import { projects, dailyMetrics, errorEvents, pageviews, users } from "@/db/schema";
+import { and, eq, lt } from "drizzle-orm";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchRustCrateStats } from "@/lib/integrations/crates";
+import { fetchGoModuleStats } from "@/lib/integrations/go";
 import { fetchDockerRepoStats } from "@/lib/integrations/docker";
+import { getPlanLimits } from "@/lib/billing/plans";
+import { deleteCrashAttachment } from "@/lib/storage/r2";
 
 export interface SyncResult {
   projectId: string;
@@ -251,6 +255,84 @@ export async function syncAllProjects(): Promise<SyncResult[]> {
       } catch (err: any) {
         errors.push(`github: ${err?.message || "Failed to fetch GitHub stats"}`);
       }
+    }
+
+    // 6. Sync Go Module Metrics
+    if (proj.goModule) {
+      try {
+        const goStats = await fetchGoModuleStats(proj.goModule);
+        if (goStats) {
+          const goMetricId = `met_go_${proj.id}_${todayStr}`;
+          await db
+            .insert(dailyMetrics)
+            .values({
+              id: goMetricId,
+              projectId: proj.id,
+              source: "go",
+              metricType: "versions",
+              date: todayStr,
+              value: goStats.versionCount,
+              metadataJson: JSON.stringify({
+                latestVersion: goStats.latestVersion,
+                versionCount: goStats.versionCount,
+                publishedAt: goStats.publishedAt,
+              }),
+            })
+            .onConflictDoUpdate({
+              target: dailyMetrics.id,
+              set: {
+                value: goStats.versionCount,
+                metadataJson: JSON.stringify({
+                  latestVersion: goStats.latestVersion,
+                  versionCount: goStats.versionCount,
+                  publishedAt: goStats.publishedAt,
+                }),
+              },
+            });
+          syncedSources.push("go");
+        }
+      } catch (err: any) {
+        errors.push(`go: ${err?.message || "Failed to fetch Go module stats"}`);
+      }
+    }
+
+    // 7. Automated Per-Tier Retention Pruning (7d Free / 90d Pro / 365d Team)
+    try {
+      const [ownerRow] = await db
+        .select({ storageTier: users.storageTier })
+        .from(users)
+        .where(eq(users.id, proj.userId))
+        .limit(1);
+
+      const limits = getPlanLimits(ownerRow?.storageTier || "free");
+      const cutoffDate = new Date(Date.now() - limits.retentionDays * 86400_000);
+      const cutoffDateStr = cutoffDate.toISOString().split("T")[0];
+      const cutoffIso = cutoffDate.toISOString().replace("T", " ").slice(0, 19);
+
+      await db
+        .delete(dailyMetrics)
+        .where(and(eq(dailyMetrics.projectId, proj.id), lt(dailyMetrics.date, cutoffDateStr)));
+
+      await db
+        .delete(pageviews)
+        .where(and(eq(pageviews.projectId, proj.id), lt(pageviews.createdAt, cutoffIso)));
+
+      const expiredErrors = await db
+        .select({ id: errorEvents.id, attachmentUrl: errorEvents.attachmentUrl })
+        .from(errorEvents)
+        .where(and(eq(errorEvents.projectId, proj.id), lt(errorEvents.createdAt, cutoffIso)));
+
+      for (const exp of expiredErrors) {
+        if (exp.attachmentUrl) {
+          await deleteCrashAttachment({
+            userId: proj.userId,
+            attachmentUrl: exp.attachmentUrl,
+          }).catch(() => {});
+        }
+        await db.delete(errorEvents).where(eq(errorEvents.id, exp.id));
+      }
+    } catch (pruneErr: any) {
+      errors.push(`retention: ${pruneErr?.message || "Prune skipped"}`);
     }
 
     results.push({

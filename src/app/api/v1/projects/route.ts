@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import crypto from "crypto";
+import { getPlanLimits } from "@/lib/billing/plans";
 
 export async function GET() {
   try {
@@ -48,6 +49,22 @@ export async function POST(request: Request) {
 
     if (!name || typeof name !== "string") {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
+    }
+
+    const existingProjects = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.userId, user.id));
+
+    const limits = getPlanLimits(user.storageTier, user.extraCustomDomains);
+    if (existingProjects.length >= limits.maxProjects) {
+      return NextResponse.json(
+        {
+          error: `Your ${limits.label} plan supports up to ${limits.maxProjects} project(s). Upgrade to Developer Pro ($14/mo) for up to 5 projects.`,
+          upgradeRequired: true,
+        },
+        { status: 403 }
+      );
     }
 
     const baseSlug = name

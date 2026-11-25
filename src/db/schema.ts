@@ -8,12 +8,16 @@ import { sql } from "drizzle-orm";
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(), // Supabase or GitHub UUID
   githubUsername: text("github_username").notNull().unique(),
+  subdomain: text("subdomain").unique(), // 1 free subdomain per user: {subdomain}.devpulse.ritualdev.in
   name: text("name"),
   email: text("email"),
   avatarUrl: text("avatar_url"),
-  storageTier: text("storage_tier", { enum: ["free", "pro", "byos"] }).default("free").notNull(),
-  customDomain: text("custom_domain").unique(), // 1 custom domain per user
+  storageTier: text("storage_tier", { enum: ["free", "pro", "team", "byos"] }).default("free").notNull(),
+  extraCustomDomains: integer("extra_custom_domains").default(0).notNull(),
+  customDomain: text("custom_domain").unique(), // Legacy primary custom domain
   customDomainVerified: integer("custom_domain_verified", { mode: "boolean" }).default(false).notNull(),
+  dodoCustomerId: text("dodo_customer_id"),
+  dodoSubscriptionId: text("dodo_subscription_id"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
@@ -89,8 +93,8 @@ export const dashboardWidgets = sqliteTable("dashboard_widgets", {
 export const dailyMetrics = sqliteTable("daily_metrics", {
   id: text("id").primaryKey(),
   projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
-  source: text("source", { enum: ["github", "npm", "pypi", "vscode", "docker", "web", "crates"] }).notNull(),
-  metricType: text("metric_type", { enum: ["downloads", "stars", "views", "clones", "installs", "pageviews", "pulls"] }).notNull(),
+  source: text("source", { enum: ["github", "npm", "pypi", "vscode", "docker", "web", "crates", "go", "mcp"] }).notNull(),
+  metricType: text("metric_type", { enum: ["downloads", "stars", "views", "clones", "installs", "pageviews", "pulls", "versions"] }).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
   value: integer("value").notNull(),
   metadataJson: text("metadata_json"),
@@ -145,6 +149,35 @@ export const pageviews = sqliteTable("pageviews", {
   country: text("country").default("Global").notNull(),
   device: text("device").default("desktop").notNull(),
   browser: text("browser").default("other").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Custom Domains Table (Cloudflare for SaaS Custom Hostnames)
+ */
+export const customDomains = sqliteTable("custom_domains", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+  hostname: text("hostname").notNull().unique(),
+  cloudflareHostnameId: text("cloudflare_hostname_id"),
+  sslStatus: text("ssl_status").default("pending_validation").notNull(),
+  verificationRecordName: text("verification_record_name"),
+  verificationRecordValue: text("verification_record_value"),
+  verified: integer("verified", { mode: "boolean" }).default(false).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Public Beta / Early Access Waitlist Signups
+ */
+export const waitlistSignups = sqliteTable("waitlist_signups", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  githubUsername: text("github_username"),
+  repoUrl: text("repo_url"),
+  source: text("source").default("landing").notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

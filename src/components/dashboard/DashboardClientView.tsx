@@ -6,34 +6,55 @@ import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
 import { IntegrationsModal } from "./IntegrationsModal";
+import { DomainsStorageModal } from "./DomainsStorageModal";
+import { ShareEmbedModal } from "./ShareEmbedModal";
+import { BillingModal } from "./BillingModal";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
+import { buildThemeCss, getThemePreset, scopeCustomCss } from "@/lib/styling/themes";
 
 interface DashboardClientViewProps {
   initialData: DashboardData;
   projects?: ProjectSummary[];
+  subdomain?: string | null;
   customDomain?: string | null;
   storageTier: string;
+  extraCustomDomains?: number;
   isDemo?: boolean;
 }
 
 export function DashboardClientView({
   initialData,
   projects = [],
+  subdomain,
   customDomain,
   storageTier,
+  extraCustomDomains = 0,
   isDemo = false,
 }: DashboardClientViewProps) {
-  const [data, setData] = useState<DashboardData>(initialData);
+  const [data] = useState<DashboardData>(initialData);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isStylingOpen, setIsStylingOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState("dark");
-  const [customCss, setCustomCss] = useState("");
+  const [isDomainsOpen, setIsDomainsOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isBillingOpen, setIsBillingOpen] = useState(false);
 
-  const handleResetLayout = () => {
+  const [currentTheme, setCurrentTheme] = useState(initialData.project.theme || "dark");
+  const [customCss, setCustomCss] = useState(initialData.project.customCss || "");
+  const [isPublic, setIsPublic] = useState(initialData.project.isPublic ?? true);
+
+  const handleResetLayout = async () => {
     try {
       localStorage.removeItem(`devpulse_layout_${data.project.id}`);
+      localStorage.removeItem(`devpulse_layout_v2_${data.project.id}`);
+      if (!isDemo) {
+        await fetch("/api/v1/projects/layout", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: data.project.id, widgets: [] }),
+        });
+      }
       window.location.reload();
     } catch {
       // ignore
@@ -50,13 +71,20 @@ export function DashboardClientView({
     rustCrate: data.project.rustCrate,
     goModule: data.project.goModule,
     dockerImage: data.project.dockerImage,
-    telemetryApiKey: data.project.telemetryApiKey,
+    telemetryApiKey: data.project.telemetryApiKey || "",
   };
 
+  const themePreset = getThemePreset(currentTheme);
+  const themeVarsCss = buildThemeCss(currentTheme);
+  const scopedCss = customCss ? scopeCustomCss(customCss) : "";
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-indigo-500/30 selection:text-white">
-      {/* Dynamic Custom CSS injection */}
-      {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+    <div
+      data-theme={themePreset.id}
+      className={`devpulse-dashboard min-h-screen ${themePreset.wrapperClass} flex flex-col selection:bg-indigo-500/30 selection:text-white`}
+    >
+      {/* Scoped Theme Variables + Custom CSS overrides */}
+      <style dangerouslySetInnerHTML={{ __html: `${themeVarsCss}\n${scopedCss}` }} />
 
       {/* Top Navbar */}
       <DashboardHeader
@@ -67,6 +95,10 @@ export function DashboardClientView({
         onOpenStyling={() => setIsStylingOpen(true)}
         onOpenAlerts={() => setIsAlertsOpen(true)}
         onOpenIntegrations={() => setIsIntegrationsOpen(true)}
+        onOpenDomains={() => setIsDomainsOpen(true)}
+        onOpenShare={() => setIsShareOpen(true)}
+        onOpenBilling={() => setIsBillingOpen(true)}
+        subdomain={subdomain}
         customDomain={customDomain}
         storageTier={storageTier}
         onResetLayout={handleResetLayout}
@@ -75,13 +107,14 @@ export function DashboardClientView({
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* Customization Alert Banner */}
         {isCustomizing && (
           <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/40 text-indigo-200 text-xs flex flex-wrap items-center justify-between gap-2 shadow-lg shadow-indigo-950/40">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-              <span className="font-semibold text-white">Customization Mode Active:</span>
-              <span>Drag cards by the handle in the top-right corner to reorder. Click the eye icon to hide.</span>
+              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+              <span className="font-semibold text-white">2D Customization Mode Active:</span>
+              <span>
+                Drag cards to reorder, drag the bottom-right corner handle to resize in 2D, or toggle visibility.
+              </span>
             </div>
             <button
               onClick={() => setIsCustomizing(false)}
@@ -92,8 +125,8 @@ export function DashboardClientView({
           </div>
         )}
 
-        {/* Drag & Drop Card Grid */}
-        <DragDropGrid data={data} isCustomizing={isCustomizing} />
+        {/* True 2D Draggable & Resizable Card Grid */}
+        <DragDropGrid data={data} isCustomizing={isCustomizing} isDemo={isDemo} />
       </main>
 
       {/* Footer */}
@@ -102,7 +135,7 @@ export function DashboardClientView({
           <div className="flex items-center gap-2">
             <span className="font-semibold text-zinc-300">DevPulse</span>
             <span>&bull;</span>
-            <span>Open Source Developer Command Center</span>
+            <span>Multi-Tenant Developer Telemetry Headquarters</span>
           </div>
           <div className="flex items-center gap-4 text-zinc-400">
             <a
@@ -114,19 +147,27 @@ export function DashboardClientView({
               ritualdev-lab
             </a>
             <span>&bull;</span>
-            <span>100% Free & Open</span>
+            <a href={`/p/${data.project.slug}`} className="hover:text-white transition">
+              Public Dashboard
+            </a>
           </div>
         </div>
       </footer>
 
-      {/* Custom Theme & CSS Modal */}
+      {/* Custom Theme & Scoped CSS Modal */}
       <CustomCssModal
         isOpen={isStylingOpen}
         onClose={() => setIsStylingOpen(false)}
+        projectId={data.project.id}
         currentTheme={currentTheme}
-        onApplyTheme={(theme) => setCurrentTheme(theme)}
         customCss={customCss}
-        onSaveCustomCss={(css) => setCustomCss(css)}
+        isPublic={isPublic}
+        isDemo={isDemo}
+        onSaved={(next) => {
+          setCurrentTheme(next.theme);
+          setCustomCss(next.customCss);
+          setIsPublic(next.isPublic);
+        }}
       />
 
       {/* Webhook & Instant Crash Alerts Modal */}
@@ -153,6 +194,34 @@ export function DashboardClientView({
         initialDockerImage={data.project.dockerImage}
         initialVsCode={data.project.vscodeExtension}
         initialMcp={data.project.mcpServerName}
+      />
+
+      {/* Subdomain, Custom Domains & R2 Storage Quotas Modal */}
+      <DomainsStorageModal
+        isOpen={isDomainsOpen}
+        onClose={() => setIsDomainsOpen(false)}
+        projectId={data.project.id}
+        initialSubdomain={subdomain}
+        onOpenBilling={() => setIsBillingOpen(true)}
+      />
+
+      {/* Share Public Link, SVG Badges & Iframe Embeds Modal */}
+      <ShareEmbedModal
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        projectName={data.project.name}
+        projectSlug={data.project.slug}
+        subdomain={subdomain}
+        customDomain={customDomain}
+        isPublic={isPublic}
+      />
+
+      {/* Dodo Payments Plans & Billing Upgrade Modal */}
+      <BillingModal
+        isOpen={isBillingOpen}
+        onClose={() => setIsBillingOpen(false)}
+        currentTier={storageTier}
+        extraCustomDomains={extraCustomDomains}
       />
     </div>
   );

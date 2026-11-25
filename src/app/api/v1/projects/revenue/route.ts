@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       projectId,
@@ -18,7 +24,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    // Update project revenue keys in Turso database
+    const [ownedProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
+      .limit(1);
+
+    if (!ownedProject) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
     await db
       .update(projects)
       .set({
@@ -27,7 +42,7 @@ export async function POST(req: NextRequest) {
         dodoPaymentsEnvironment: dodoPaymentsEnvironment || "live",
         githubSponsorsUsername: githubSponsorsUsername ? githubSponsorsUsername.trim() : null,
       })
-      .where(eq(projects.id, projectId));
+      .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)));
 
     return NextResponse.json({
       success: true,

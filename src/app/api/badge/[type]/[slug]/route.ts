@@ -5,6 +5,8 @@ import { eq, count, and } from "drizzle-orm";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
+import { fetchRustCrateStats } from "@/lib/integrations/crates";
+import { fetchGoModuleStats } from "@/lib/integrations/go";
 
 export const dynamic = "force-dynamic";
 
@@ -97,10 +99,71 @@ export async function GET(req: NextRequest, { params }: BadgeRouteParams) {
           const pypi = await fetchPyPiStats(project.pypiPackage);
           if (pypi) total += pypi.downloadsLastMonth;
         }
+        if (project.rustCrate) {
+          const crateStats = await fetchRustCrateStats(project.rustCrate);
+          if (crateStats) total += crateStats.recentDownloads || crateStats.totalDownloads;
+        }
 
         value = total > 0 ? `${formatNumber(total)}/mo` : "active";
         color = "#10b981"; // Emerald
         break;
+      }
+
+      case "version": {
+        label = "version";
+        if (project.npmPackage) {
+          const npm = await fetchNpmStats(project.npmPackage);
+          value = npm?.latestVersion || "latest";
+        } else if (project.pypiPackage) {
+          const pypi = await fetchPyPiStats(project.pypiPackage);
+          value = pypi?.latestVersion || "latest";
+        } else if (project.rustCrate) {
+          const crateStats = await fetchRustCrateStats(project.rustCrate);
+          value = crateStats?.maxVersion || "latest";
+        } else if (project.goModule) {
+          const goStats = await fetchGoModuleStats(project.goModule);
+          value = goStats?.latestVersion || "latest";
+        } else {
+          value = "latest";
+        }
+        color = "#06b6d4";
+        break;
+      }
+
+      case "card": {
+        const [npm, pypi, crateStats, gh] = await Promise.all([
+          project.npmPackage ? fetchNpmStats(project.npmPackage).catch(() => null) : Promise.resolve(null),
+          project.pypiPackage ? fetchPyPiStats(project.pypiPackage).catch(() => null) : Promise.resolve(null),
+          project.rustCrate ? fetchRustCrateStats(project.rustCrate).catch(() => null) : Promise.resolve(null),
+          project.githubRepo ? fetchGitHubRepoStats(project.githubRepo).catch(() => null) : Promise.resolve(null),
+        ]);
+        const monthlyDownloads =
+          (npm?.downloadsLastMonth || 0) +
+          (pypi?.downloadsLastMonth || 0) +
+          (crateStats?.recentDownloads || 0);
+        const stars = gh?.stars ?? 0;
+        const safeName = project.name.replace(/[<>&"]/g, "");
+        const cardSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="118" viewBox="0 0 420 118" role="img" aria-label="${safeName} Telemetry">
+  <rect width="420" height="118" rx="14" fill="#09090b" stroke="#27272a" stroke-width="1.5"/>
+  <text x="18" y="28" fill="#ffffff" font-family="Inter,Segoe UI,sans-serif" font-size="14" font-weight="700">${safeName}</text>
+  <text x="402" y="28" text-anchor="end" fill="#818cf8" font-family="Inter,Segoe UI,sans-serif" font-size="10" font-weight="600">Powered by DevPulse</text>
+  <rect x="18" y="44" width="122" height="56" rx="10" fill="#18181b" stroke="#27272a"/>
+  <text x="28" y="64" fill="#a1a1aa" font-family="Inter,Segoe UI,sans-serif" font-size="10">Downloads / 90d</text>
+  <text x="28" y="88" fill="#34d399" font-family="monospace" font-size="16" font-weight="700">${formatNumber(monthlyDownloads)}</text>
+  <rect x="149" y="44" width="122" height="56" rx="10" fill="#18181b" stroke="#27272a"/>
+  <text x="159" y="64" fill="#a1a1aa" font-family="Inter,Segoe UI,sans-serif" font-size="10">GitHub Stars</text>
+  <text x="159" y="88" fill="#fbbf24" font-family="monospace" font-size="16" font-weight="700">${formatNumber(stars)}</text>
+  <rect x="280" y="44" width="122" height="56" rx="10" fill="#18181b" stroke="#27272a"/>
+  <text x="290" y="64" fill="#a1a1aa" font-family="Inter,Segoe UI,sans-serif" font-size="10">Open Issues / PRs</text>
+  <text x="290" y="88" fill="#60a5fa" font-family="monospace" font-size="16" font-weight="700">${gh ? `${gh.openIssuesCount}/${gh.openPrCount}` : "—"}</text>
+</svg>`;
+        return new NextResponse(cardSvg, {
+          status: 200,
+          headers: {
+            "Content-Type": "image/svg+xml",
+            "Cache-Control": "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400",
+          },
+        });
       }
 
       case "health": {

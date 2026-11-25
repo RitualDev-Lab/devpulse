@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { projects, dashboardWidgets } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import crypto from "crypto";
+import { getPlanLimits } from "@/lib/billing/plans";
 
 export async function POST(request: Request) {
   try {
@@ -48,6 +49,22 @@ export async function POST(request: Request) {
         project: existing[0],
         summary: scanned.summary,
       });
+    }
+
+    // Enforce project quota per user tier
+    const userProjects = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.userId, user.id));
+    const limits = getPlanLimits(user.storageTier, user.extraCustomDomains);
+    if (userProjects.length >= limits.maxProjects) {
+      return NextResponse.json(
+        {
+          error: `Your ${limits.label} plan includes up to ${limits.maxProjects} project(s). Upgrade to Developer Pro ($14/mo) to track more repositories.`,
+          upgradeRequired: true,
+        },
+        { status: 403 }
+      );
     }
 
     // 3. Generate unique slug for user's project
