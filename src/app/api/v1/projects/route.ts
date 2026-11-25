@@ -8,6 +8,7 @@ import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { listAccessibleProjects } from "@/lib/security/rbac";
 import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 
 export async function GET() {
   try {
@@ -51,6 +52,27 @@ export async function POST(request: Request) {
 
     if (!name || typeof name !== "string") {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
+    }
+
+    let verifiedGithubRepo: string | null = null;
+    if (githubRepo && typeof githubRepo === "string" && githubRepo.trim()) {
+      const ownership = await verifyGitHubRepoOwnership(user, githubRepo);
+      if (!ownership.allowed) {
+        await recordAuditEvent({
+          userId: user.id,
+          actorUsername: user.githubUsername,
+          action: "project.create_denied",
+          resourceType: "project",
+          resourceId: ownership.githubRepo,
+          status: "denied",
+          headers: request.headers,
+        });
+        return NextResponse.json(
+          { error: ownership.reason || "You can only link your own GitHub repositories." },
+          { status: 403 }
+        );
+      }
+      verifiedGithubRepo = ownership.githubRepo;
     }
 
     const entitlements = getEffectiveEntitlements({ storageTier: user.storageTier });
@@ -98,7 +120,7 @@ export async function POST(request: Request) {
       userId: user.id,
       name,
       slug,
-      githubRepo: githubRepo || null,
+      githubRepo: verifiedGithubRepo,
       npmPackage: npmPackage || null,
       pypiPackage: pypiPackage || null,
       rustCrate: rustCrate || null,

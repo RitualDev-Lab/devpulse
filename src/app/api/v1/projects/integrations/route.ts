@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,17 +50,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Clean strings: trim and convert empty to null
     const cleanStr = (val?: string | null) => {
       if (!val) return null;
       const trimmed = val.trim();
       return trimmed.length > 0 ? trimmed : null;
     };
 
+    let cleanGithub = cleanStr(githubRepo);
+    if (cleanGithub && cleanGithub.toLowerCase() !== (access.project.githubRepo || "").toLowerCase()) {
+      const ownership = await verifyGitHubRepoOwnership(user, cleanGithub);
+      if (!ownership.allowed) {
+        await recordAuditEvent({
+          userId: user.id,
+          actorUsername: user.githubUsername,
+          projectId: access.project.id,
+          action: "integrations.github_denied",
+          resourceType: "project",
+          resourceId: ownership.githubRepo,
+          status: "denied",
+          headers: req.headers,
+        });
+        return NextResponse.json(
+          { error: ownership.reason || "You can only connect GitHub repositories you own or maintain." },
+          { status: 403 }
+        );
+      }
+      cleanGithub = ownership.githubRepo;
+    }
+
     await db
       .update(projects)
       .set({
-        githubRepo: cleanStr(githubRepo),
+        githubRepo: cleanGithub,
         npmPackage: cleanStr(npmPackage),
         pypiPackage: cleanStr(pypiPackage),
         rustCrate: cleanStr(rustCrate),

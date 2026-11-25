@@ -9,6 +9,7 @@ import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
 import { recordAuditEvent } from "@/lib/security/audit";
+import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 
 export async function POST(request: Request) {
   try {
@@ -30,8 +31,30 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Run GitHub Root Scanner
-    const scanned = await scanGitHubRepository(repo.trim());
+    // 0. Enforce strict Personal / Verified GitHub Organization ownership
+    const ownership = await verifyGitHubRepoOwnership(user, repo);
+    if (!ownership.allowed) {
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        action: "project.import_denied",
+        resourceType: "project",
+        resourceId: ownership.githubRepo,
+        status: "denied",
+        headers: request.headers,
+        metadata: { reason: ownership.reason },
+      });
+      return NextResponse.json(
+        {
+          error: ownership.reason || "You can only import repositories you own or maintain.",
+          code: ownership.needsOrgReauth ? "ORG_REAUTH_REQUIRED" : "REPO_NOT_OWNED",
+        },
+        { status: 403 }
+      );
+    }
+
+    // 1. Run GitHub Root Scanner (with user's OAuth token when present)
+    const scanned = await scanGitHubRepository(ownership.githubRepo, ownership.token || undefined);
 
     // 2. Check if this repository is already tracked by this user
     const existing = await db

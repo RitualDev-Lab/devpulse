@@ -4,20 +4,23 @@ import React, { useState, useEffect } from "react";
 import {
   X,
   CheckCircle2,
-  ArrowRight,
   Loader2,
   Sparkles,
-  GitBranch,
   Star,
   Lock,
   Search,
+  Building2,
+  RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 interface GitHubRepoChoice {
   id: number;
   name: string;
   fullName: string;
+  owner: string;
+  ownerType: "personal" | "organization";
   description: string | null;
   language: string | null;
   stars: number;
@@ -25,22 +28,28 @@ interface GitHubRepoChoice {
   alreadyImported: boolean;
 }
 
+interface GitHubOrgSummary {
+  login: string;
+  avatarUrl: string | null;
+}
+
 interface ImportRepositoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportSuccess?: (project: any) => void;
-  suggestedRepo?: string;
 }
 
 export function ImportRepositoryModal({
   isOpen,
   onClose,
   onImportSuccess,
-  suggestedRepo = "",
 }: ImportRepositoryModalProps) {
   const router = useRouter();
-  const [repoInput, setRepoInput] = useState(suggestedRepo);
   const [repos, setRepos] = useState<GitHubRepoChoice[]>([]);
+  const [orgs, setOrgs] = useState<GitHubOrgSummary[]>([]);
+  const [githubUsername, setGithubUsername] = useState<string>("");
+  const [hasOAuthToken, setHasOAuthToken] = useState(true);
+  const [selectedOwner, setSelectedOwner] = useState<string>("all");
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isScanning, setIsScanning] = useState(false);
@@ -54,10 +63,14 @@ export function ImportRepositoryModal({
   useEffect(() => {
     if (!isOpen) return;
     setLoadingRepos(true);
+    setError(null);
     fetch("/api/v1/github/repos")
       .then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d.repos)) setRepos(d.repos);
+        if (Array.isArray(d.orgs)) setOrgs(d.orgs);
+        if (d.githubUsername) setGithubUsername(d.githubUsername);
+        if (typeof d.hasOAuthToken === "boolean") setHasOAuthToken(d.hasOAuthToken);
       })
       .catch(() => {})
       .finally(() => setLoadingRepos(false));
@@ -65,22 +78,27 @@ export function ImportRepositoryModal({
 
   if (!isOpen) return null;
 
-  const handleScanAndImport = async (targetRepo?: string) => {
-    const clean = (targetRepo ?? repoInput).trim().replace(/^https?:\/\/github\.com\//, "");
-    if (!clean || !clean.includes("/")) {
-      setError("Please enter a valid repository in 'owner/repo' format.");
-      return;
-    }
+  const syncGitHubOrgs = async () => {
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: {
+        scopes: "read:user user:email read:org",
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+  };
 
+  const handleScanAndImport = async (targetRepo: string) => {
     setError(null);
     setIsScanning(true);
-    setScanStep(`Scanning ${clean} root manifests (package.json, Cargo.toml, pyproject.toml, go.mod)...`);
+    setScanStep(`Verifying ownership & scanning ${targetRepo} manifests...`);
 
     try {
       const res = await fetch("/api/v1/projects/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo: clean }),
+        body: JSON.stringify({ repo: targetRepo }),
       });
 
       const data = await res.json();
@@ -107,7 +125,14 @@ export function ImportRepositoryModal({
     }
   };
 
+  const ownerTabs = Array.from(
+    new Set([githubUsername, ...orgs.map((o) => o.login)].filter(Boolean))
+  );
+
   const filteredRepos = repos.filter((r) => {
+    if (selectedOwner !== "all" && r.owner.toLowerCase() !== selectedOwner.toLowerCase()) {
+      return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -126,9 +151,11 @@ export function ImportRepositoryModal({
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">Import Your GitHub Repository</h3>
+              <h3 className="text-base font-semibold text-white">
+                Import Personal or Org Repository
+              </h3>
               <p className="text-xs text-zinc-400">
-                1-Click Scanner detects npm, PyPI, Rust, Go, Docker &amp; MCP manifests
+                Verified ownership only &bull; Protects telemetry, API keys &amp; analytics
               </p>
             </div>
           </div>
@@ -141,7 +168,58 @@ export function ImportRepositoryModal({
         </div>
 
         <div className="space-y-4 overflow-y-auto flex-1 pr-1">
-          {/* Searchable Real Repos */}
+          {!loadingRepos && (!hasOAuthToken || orgs.length === 0) && (
+            <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/40 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-indigo-200">
+                <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>Sync GitHub Organizations (e.g. RitualDev-Lab) with read:org access.</span>
+              </div>
+              <button
+                type="button"
+                onClick={syncGitHubOrgs}
+                className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Sync Orgs</span>
+              </button>
+            </div>
+          )}
+
+          {/* Owner / Organization Tabs */}
+          {ownerTabs.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setSelectedOwner("all")}
+                className={`px-2.5 py-1 rounded-lg font-medium transition ${
+                  selectedOwner === "all"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                All ({repos.length})
+              </button>
+              {ownerTabs.map((owner) => (
+                <button
+                  key={owner}
+                  type="button"
+                  onClick={() => setSelectedOwner(owner)}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
+                    selectedOwner.toLowerCase() === owner.toLowerCase()
+                      ? "bg-indigo-600 text-white"
+                      : "bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {owner.toLowerCase() !== githubUsername.toLowerCase() && (
+                    <Building2 className="w-3 h-3 text-cyan-400" />
+                  )}
+                  <span>{owner}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Searchable Owned + Organization Repos */}
           <div className="rounded-xl bg-zinc-950 border border-zinc-800 overflow-hidden">
             <div className="p-2.5 border-b border-zinc-800 flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-zinc-500" />
@@ -149,19 +227,19 @@ export function ImportRepositoryModal({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search your GitHub repositories..."
+                placeholder="Search your repositories & organizations..."
                 className="w-full bg-transparent text-xs text-white placeholder-zinc-500 focus:outline-none"
               />
             </div>
-            <div className="max-h-48 overflow-y-auto divide-y divide-zinc-800/60">
+            <div className="max-h-64 overflow-y-auto divide-y divide-zinc-800/60">
               {loadingRepos ? (
-                <div className="p-4 flex items-center justify-center gap-2 text-xs text-zinc-400">
+                <div className="p-5 flex items-center justify-center gap-2 text-xs text-zinc-400">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                  <span>Fetching your repositories from GitHub...</span>
+                  <span>Loading your personal &amp; organization repositories...</span>
                 </div>
               ) : filteredRepos.length === 0 ? (
-                <div className="p-4 text-center text-xs text-zinc-500">
-                  No matching repositories found. Enter any <code className="text-zinc-300">owner/repo</code> below.
+                <div className="p-5 text-center text-xs text-zinc-500">
+                  No owned or organization repositories found in this view.
                 </div>
               ) : (
                 filteredRepos.map((repo) => (
@@ -172,6 +250,11 @@ export function ImportRepositoryModal({
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 text-xs font-medium text-white truncate">
                         <span className="truncate">{repo.fullName}</span>
+                        {repo.ownerType === "organization" && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                            Org
+                          </span>
+                        )}
                         {repo.isPrivate && <Lock className="w-3 h-3 text-amber-400 shrink-0" />}
                         {repo.language && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
@@ -198,81 +281,45 @@ export function ImportRepositoryModal({
             </div>
           </div>
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleScanAndImport();
-            }}
-            className="space-y-3"
-          >
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                Or Enter Repository Manually (owner/repo)
-              </label>
-              <div className="relative">
-                <GitBranch className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={repoInput}
-                  onChange={(e) => {
-                    setRepoInput(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder="owner/repository"
-                  disabled={isScanning}
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition font-mono"
-                />
+          {error && (
+            <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/30 text-red-300 text-xs">
+              {error}
+            </div>
+          )}
+
+          {isScanning && (
+            <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-2">
+              <div className="flex items-center gap-2 text-indigo-300 text-xs font-medium">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                <span>{scanStep}</span>
               </div>
             </div>
+          )}
 
-            {error && (
-              <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/30 text-red-300 text-xs">
-                {error}
+          {scanResult && (
+            <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200 text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Scan Complete! Auto-Configured:</span>
               </div>
-            )}
-
-            {isScanning && (
-              <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-2">
-                <div className="flex items-center gap-2 text-indigo-300 text-xs font-medium">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                  <span>{scanStep}</span>
-                </div>
-              </div>
-            )}
-
-            {scanResult && (
-              <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200 text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Scan Complete! Auto-Configured:</span>
-                </div>
-                <ul className="space-y-0.5 pl-4 list-disc text-emerald-300/90 text-[11px]">
-                  {scanResult.summary.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isScanning}
-                className="px-3.5 py-1.5 rounded-xl text-xs text-zinc-400 hover:text-white transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isScanning || !repoInput.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition"
-              >
-                <span>Scan &amp; Import</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <ul className="space-y-0.5 pl-4 list-disc text-emerald-300/90 text-[11px]">
+                {scanResult.summary.map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
+              </ul>
             </div>
-          </form>
+          )}
+
+          <div className="flex items-center justify-end pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isScanning}
+              className="px-3.5 py-1.5 rounded-xl text-xs text-zinc-400 hover:text-white transition"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>

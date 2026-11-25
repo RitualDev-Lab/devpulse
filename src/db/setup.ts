@@ -82,6 +82,7 @@ export async function initDb() {
     "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT;",
     "ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'active' NOT NULL;",
     "ALTER TABLE users ADD COLUMN current_period_end TEXT;",
+    "ALTER TABLE users ADD COLUMN github_access_token TEXT;",
     "ALTER TABLE projects ADD COLUMN pagerduty_routing_key TEXT;",
     "ALTER TABLE projects ADD COLUMN organization_id TEXT;",
     "ALTER TABLE pageviews ADD COLUMN source_type TEXT DEFAULT 'web' NOT NULL;",

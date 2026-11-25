@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -17,10 +20,20 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       try {
-        await getCurrentUser();
+        const synced = await getCurrentUser();
+        const providerToken = data?.session?.provider_token;
+        if (synced && providerToken) {
+          await db
+            .update(users)
+            .set({
+              githubAccessToken: providerToken,
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(users.id, synced.id));
+        }
       } catch (e) {
         console.error("User sync error in callback:", e);
       }

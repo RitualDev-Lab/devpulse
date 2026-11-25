@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { withEdgeCache } from "@/lib/integrations/cached";
 import { getPlanDefinition } from "@/lib/billing/plans";
 import { listAccessibleProjects } from "@/lib/security/rbac";
+import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
@@ -96,6 +97,8 @@ export default async function DashboardPage(props: DashboardPageProps) {
     Date.now() - planDef.historyDays * 24 * 60 * 60 * 1000
   ).toISOString();
 
+  const userGhToken = user ? await getUserGitHubAccessToken(user.id).catch(() => null) : null;
+
   // 6. Fetch live registry metrics & genuine revenue data for the active project
   const [
     githubStats,
@@ -112,7 +115,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
   ] = await Promise.all([
     activeProject.githubRepo
       ? withEdgeCache(`gh:${activeProject.githubRepo}`, 300, 2600, () =>
-          fetchGitHubRepoStats(activeProject.githubRepo!)
+          fetchGitHubRepoStats(activeProject.githubRepo!, userGhToken || undefined)
         )
       : Promise.resolve(null),
     activeProject.npmPackage

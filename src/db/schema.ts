@@ -29,6 +29,7 @@ export const users = sqliteTable("users", {
   stripeCustomerId: text("stripe_customer_id"),
   subscriptionStatus: text("subscription_status").default("active").notNull(),
   currentPeriodEnd: text("current_period_end"),
+  githubAccessToken: text("github_access_token"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });

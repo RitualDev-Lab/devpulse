@@ -33,6 +33,7 @@ export function DashboardAuthGate() {
     await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
+        scopes: "read:user user:email read:org",
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
