@@ -247,6 +247,8 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
         initialTelegramChatId={project.telegramChatId}
         initialGenericWebhook={project.genericWebhookUrl}
         initialPagerDuty={project.pagerdutyRoutingKey}
+        initialHasOpsgenie={Boolean((project as any).hasOpsgenieApiKey)}
+        initialTeamsWebhook={(project as any).teamsWebhookUrl || null}
         initialNotificationEmail={project.notificationEmail}
         initialEmailProvider={project.emailProvider}
         initialHasEmailApiKey={project.hasEmailApiKey}

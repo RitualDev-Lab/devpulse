@@ -122,6 +122,16 @@ export function PublicPortalView({
                 <a
                   href={
                     portalHost === "devpulse.ritualdev.in" || portalHost.startsWith("localhost")
+                      ? `/portal/${encodeURIComponent(user.subdomain)}/status?project=${encodeURIComponent(activeProject.slug)}`
+                      : `/status?project=${encodeURIComponent(activeProject.slug)}`
+                  }
+                  className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-emerald-300 transition"
+                >
+                  90-Day Status
+                </a>
+                <a
+                  href={
+                    portalHost === "devpulse.ritualdev.in" || portalHost.startsWith("localhost")
                       ? `/portal/${encodeURIComponent(user.subdomain)}/changelog?project=${encodeURIComponent(activeProject.slug)}`
                       : `/changelog?project=${encodeURIComponent(activeProject.slug)}`
                   }

@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { sendProjectDigest } from "@/lib/alerts/digest";
+import { processPendingEscalations } from "@/lib/alerts/smart-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,10 @@ async function handleSync(req: NextRequest) {
       error: e instanceof Error ? e.message : "Uptime check failed",
     }));
 
+    const escalationSummary = await processPendingEscalations().catch(() => ({
+      escalated: 0,
+    }));
+
     // Dispatch weekly maintainer digest for projects opted into digestEnabled (>7 days since lastDigestSentAt)
     let digestsSent = 0;
     try {
@@ -66,6 +71,7 @@ async function handleSync(req: NextRequest) {
       completedAt,
       projectsSynced: results.length,
       uptimeSummary,
+      escalationSummary,
       digestsSent,
       details: results,
     });

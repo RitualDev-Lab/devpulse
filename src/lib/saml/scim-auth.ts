@@ -114,8 +114,10 @@ export async function authenticateScimRequest(
 
 export function mapScimRole(raw?: string | null): OrgRole {
   const r = String(raw || "").trim().toLowerCase();
-  if (r.includes("owner") || r.includes("admin")) return "owner";
-  if (r.includes("maintain") || r.includes("dev") || r.includes("write")) return "maintainer";
+  if (r.includes("owner")) return "owner";
+  if (r.includes("admin")) return "admin";
+  if (r.includes("billing")) return "billing";
+  if (r.includes("maintain") || r.includes("dev") || r.includes("write")) return "developer";
   return "viewer";
 }
 

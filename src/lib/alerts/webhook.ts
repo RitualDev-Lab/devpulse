@@ -26,7 +26,18 @@ export interface WebhookConfig {
   telegramChatId?: string | null;
   genericWebhookUrl?: string | null;
   pagerdutyRoutingKey?: string | null;
+  opsgenieApiKey?: string | null;
+  teamsWebhookUrl?: string | null;
 }
+
+export type AlertChannelId =
+  | "discord"
+  | "slack"
+  | "telegram"
+  | "generic"
+  | "pagerduty"
+  | "opsgenie"
+  | "teams";
 
 /**
  * Dispatch alerts to all configured webhooks concurrently.
@@ -36,24 +47,46 @@ export async function dispatchCrashAlerts(
   config: WebhookConfig,
   payload: AlertPayload
 ) {
-  const promises: Promise<any>[] = [];
+  return dispatchTargetedChannels(
+    config,
+    ["discord", "slack", "telegram", "generic", "pagerduty", "opsgenie", "teams"],
+    payload
+  );
+}
 
-  if (config.discordWebhookUrl) {
+/**
+ * Dispatches an alert strictly to the selected subset of channels (used by Step-1 / Step-2 Escalation Policies).
+ */
+export async function dispatchTargetedChannels(
+  config: WebhookConfig,
+  channels: readonly string[],
+  payload: AlertPayload
+) {
+  const promises: Promise<any>[] = [];
+  const wanted = new Set(channels.map((c) => c.toLowerCase()));
+
+  if (wanted.has("discord") && config.discordWebhookUrl) {
     promises.push(sendDiscordAlert(config.discordWebhookUrl, payload));
   }
-  if (config.slackWebhookUrl) {
+  if (wanted.has("slack") && config.slackWebhookUrl) {
     promises.push(sendSlackAlert(config.slackWebhookUrl, payload));
   }
-  if (config.telegramBotToken && config.telegramChatId) {
+  if (wanted.has("telegram") && config.telegramBotToken && config.telegramChatId) {
     promises.push(
       sendTelegramAlert(config.telegramBotToken, config.telegramChatId, payload)
     );
   }
-  if (config.genericWebhookUrl) {
+  if (wanted.has("generic") && config.genericWebhookUrl) {
     promises.push(sendGenericWebhookAlert(config.genericWebhookUrl, payload));
   }
-  if (config.pagerdutyRoutingKey) {
+  if (wanted.has("pagerduty") && config.pagerdutyRoutingKey) {
     promises.push(sendPagerDutyAlert(config.pagerdutyRoutingKey, payload));
+  }
+  if (wanted.has("opsgenie") && config.opsgenieApiKey) {
+    promises.push(sendOpsGenieAlert(config.opsgenieApiKey, payload));
+  }
+  if (wanted.has("teams") && config.teamsWebhookUrl) {
+    promises.push(sendTeamsAlert(config.teamsWebhookUrl, payload));
   }
 
   return Promise.allSettled(promises);
@@ -279,6 +312,93 @@ export async function sendPagerDutyAlert(routingKey: string, data: AlertPayload)
     return res.ok;
   } catch (err) {
     console.error("Failed to send PagerDuty alert:", err);
+    return false;
+  }
+}
+
+/**
+ * Send OpsGenie Alert API v2 Incident (EU/US compatible via OPSGENIE_API_BASE)
+ */
+export async function sendOpsGenieAlert(apiKey: string, data: AlertPayload) {
+  const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
+  const baseUrl = process.env.OPSGENIE_API_BASE || "https://api.opsgenie.com";
+
+  const body = {
+    message: `[${data.projectName}] ${data.errorName}: ${data.message.slice(0, 110)}`,
+    alias: data.eventId || `${data.projectSlug}-${data.errorName}`.slice(0, 200),
+    description: `${data.message}\n\nRuntime: ${data.runtime}\nVersion: ${data.version || "N/A"}\nDashboard: ${url}`,
+    priority: "P1",
+    source: "DevPulse",
+    tags: ["devpulse", data.projectSlug, data.environment || "production"],
+    details: {
+      project: data.projectName,
+      runtime: data.runtime,
+      version: data.version || "N/A",
+      os: data.os || "Unknown",
+      dashboardUrl: url,
+    },
+  };
+
+  try {
+    const res = await fetch(`${baseUrl}/v2/alerts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `GenieKey ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(4000),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to send OpsGenie alert:", err);
+    return false;
+  }
+}
+
+/**
+ * Send Microsoft Teams Webhook MessageCard Alert
+ */
+export async function sendTeamsAlert(webhookUrl: string, data: AlertPayload) {
+  const url = data.dashboardUrl || `https://devpulse.ritualdev.in/dashboard?project=${data.projectSlug}`;
+
+  const body = {
+    "@type": "MessageCard",
+    "@context": "http://schema.org/extensions",
+    themeColor: "EF4444",
+    summary: `[DevPulse] ${data.projectName}: ${data.errorName}`,
+    sections: [
+      {
+        activityTitle: `🚨 ${data.projectName} — ${data.errorName}`,
+        activitySubtitle: `${data.environment || "production"} • ${data.runtime} (${data.version || "N/A"})`,
+        text: data.message.slice(0, 800),
+        facts: [
+          { name: "Runtime", value: data.runtime },
+          { name: "Version", value: data.version || "N/A" },
+          { name: "OS", value: data.os || "Unknown" },
+        ],
+        markdown: true,
+      },
+    ],
+    potentialAction: [
+      {
+        "@type": "OpenUri",
+        name: "Inspect in DevPulse",
+        targets: [{ os: "default", uri: url }],
+      },
+    ],
+  };
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(4000),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to send Microsoft Teams alert:", err);
     return false;
   }
 }

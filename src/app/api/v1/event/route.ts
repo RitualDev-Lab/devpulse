@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { errorEvents, projectReleases } from "@/db/schema";
+import { errorEvents, projectReleases, workspaces } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { evaluateProjectAlertRules } from "@/lib/alerts/smart-engine";
 import { checkAndReserveStorageQuota } from "@/lib/storage/quota";
 import { putR2Object } from "@/lib/storage/r2";
 import { hashApiKey, verifyTelemetryApiKey } from "@/lib/security/api-keys";
@@ -82,6 +83,30 @@ export async function POST(req: NextRequest) {
         { error: "Invalid, rotated, or revoked telemetry apiKey" },
         { status: 403 }
       );
+    }
+
+    // Enforce Workspace Monthly Event Cap when assigned to an Organization Workspace
+    if (project.workspaceId) {
+      const [ws] = await db
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.id, project.workspaceId))
+        .limit(1);
+      if (ws && ws.monthlyEventsUsed >= ws.monthlyEventLimit) {
+        return NextResponse.json(
+          {
+            error: `Workspace '${ws.name}' monthly event cap (${ws.monthlyEventLimit.toLocaleString()}) exceeded.`,
+            code: "WORKSPACE_EVENT_CAP_EXCEEDED",
+          },
+          { status: 429 }
+        );
+      }
+      if (ws) {
+        db.update(workspaces)
+          .set({ monthlyEventsUsed: sql`${workspaces.monthlyEventsUsed} + 1` })
+          .where(eq(workspaces.id, ws.id))
+          .catch(() => {});
+      }
     }
 
     const eventId = `err_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -189,16 +214,21 @@ export async function POST(req: NextRequest) {
       commitSha,
     });
 
-    // Fire instant crash alerts to Discord / Slack / Telegram / Generic Webhook
+    // Fire instant crash alerts to Discord / Slack / Telegram / PagerDuty / OpsGenie / Teams / Generic Webhook
     const hasWebhooks = Boolean(
       project.discordWebhookUrl ||
       project.slackWebhookUrl ||
       (project.telegramBotToken && project.telegramChatId) ||
       project.genericWebhookUrl ||
-      project.pagerdutyRoutingKey
+      project.pagerdutyRoutingKey ||
+      project.opsgenieApiKeyEncrypted ||
+      project.teamsWebhookUrl
     );
 
     if (hasWebhooks) {
+      const opsgenieKey = project.opsgenieApiKeyEncrypted
+        ? await decryptSecret(project.opsgenieApiKeyEncrypted).catch(() => null)
+        : null;
       await dispatchCrashAlerts(
         {
           discordWebhookUrl: project.discordWebhookUrl,
@@ -207,6 +237,8 @@ export async function POST(req: NextRequest) {
           telegramChatId: project.telegramChatId,
           genericWebhookUrl: project.genericWebhookUrl,
           pagerdutyRoutingKey: project.pagerdutyRoutingKey,
+          opsgenieApiKey: opsgenieKey,
+          teamsWebhookUrl: project.teamsWebhookUrl,
         },
         {
           eventId,
@@ -244,6 +276,11 @@ export async function POST(req: NextRequest) {
         apiKey: emailKey,
       }).catch((err) => console.error("Email alert error:", err));
     }
+
+    // Run Smart Alert Rules & Z-Score Anomaly Detector safely
+    await evaluateProjectAlertRules(project.id).catch((err) =>
+      console.error("Smart alert rule evaluation warning:", err)
+    );
 
     return NextResponse.json(
       {

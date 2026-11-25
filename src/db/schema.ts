@@ -42,6 +42,7 @@ export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
   userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   organizationId: text("organization_id"),
+  workspaceId: text("workspace_id"),
   name: text("name").notNull(),
   slug: text("slug").notNull(), // Unique per user for subdomains/paths
   description: text("description"),
@@ -72,6 +73,8 @@ export const projects = sqliteTable("projects", {
   telegramChatId: text("telegram_chat_id"),
   genericWebhookUrl: text("generic_webhook_url"),
   pagerdutyRoutingKey: text("pagerduty_routing_key"),
+  opsgenieApiKeyEncrypted: text("opsgenie_api_key_encrypted"),
+  teamsWebhookUrl: text("teams_webhook_url"),
 
   // Email Notifications & Weekly Maintainer Digest (Resend / Postmark)
   notificationEmail: text("notification_email"),
@@ -224,8 +227,8 @@ export const billingEvents = sqliteTable("billing_events", {
 });
 
 /**
- * Organizations & RBAC Team Permissions
- * Supports Owner, Maintainer, and Viewer access control
+ * Organizations -> Workspaces -> Projects Hierarchy & 5-Role RBAC
+ * Roles: owner, admin, developer (alias: maintainer), viewer, billing
  */
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey(),
@@ -235,14 +238,30 @@ export const organizations = sqliteTable("organizations", {
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
+export const workspaces = sqliteTable("workspaces", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  billingPlan: text("billing_plan", { enum: ["free", "pro", "team", "enterprise"] }).default("free").notNull(),
+  monthlyEventLimit: integer("monthly_event_limit").default(10000).notNull(),
+  monthlyEventsUsed: integer("monthly_events_used").default(0).notNull(),
+  memberLimit: integer("member_limit").default(3).notNull(),
+  projectLimit: integer("project_limit").default(2).notNull(),
+  billingEmail: text("billing_email"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
 export const organizationMembers = sqliteTable("organization_members", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  workspaceId: text("workspace_id"),
   userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
   githubUsername: text("github_username").notNull(),
   email: text("email"),
   scimExternalId: text("scim_external_id"),
-  role: text("role", { enum: ["owner", "maintainer", "viewer"] }).default("viewer").notNull(),
+  role: text("role", { enum: ["owner", "admin", "developer", "viewer", "billing", "maintainer"] }).default("viewer").notNull(),
   status: text("status", { enum: ["active", "pending", "suspended"] }).default("pending").notNull(),
   invitedByUserId: text("invited_by_user_id"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
@@ -275,6 +294,7 @@ export const auditLogs = sqliteTable("audit_logs", {
   userId: text("user_id").notNull(),
   actorUsername: text("actor_username").notNull(),
   organizationId: text("organization_id"),
+  workspaceId: text("workspace_id"),
   projectId: text("project_id"),
   action: text("action").notNull(),
   resourceType: text("resource_type").notNull(),
@@ -343,6 +363,7 @@ export const uptimeMonitors = sqliteTable("uptime_monitors", {
   lastLatencyMs: integer("last_latency_ms"),
   p95LatencyMs: integer("p95_latency_ms").default(0).notNull(),
   uptimeBasisPoints: integer("uptime_basis_points").default(10000).notNull(), // 10000 = 100.00%
+  slaTargetBp: integer("sla_target_bp").default(9990).notNull(), // 9990 = 99.90%, 9995 = 99.95%
   lastError: text("last_error"),
   lastCheckedAt: text("last_checked_at"),
   alertOnDown: integer("alert_on_down", { mode: "boolean" }).default(true).notNull(),
@@ -432,6 +453,84 @@ export const samlSessions = sqliteTable("saml_sessions", {
   organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   redirectTo: text("redirect_to").default("/dashboard").notNull(),
   expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * SLA Incidents & Root Cause Analysis (RCA) Timeline
+ * Feeds monthly SLA compliance PDFs & public 90-day status history pages
+ */
+export const uptimeIncidents = sqliteTable("uptime_incidents", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  monitorId: text("monitor_id").references(() => uptimeMonitors.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  severity: text("severity", { enum: ["minor", "major", "critical"] }).default("major").notNull(),
+  status: text("status", { enum: ["investigating", "identified", "monitoring", "resolved"] }).default("investigating").notNull(),
+  rcaText: text("rca_text"),
+  impactSummary: text("impact_summary"),
+  startedAt: text("started_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  resolvedAt: text("resolved_at"),
+  durationMinutes: integer("duration_minutes").default(0).notNull(),
+  isPublic: integer("is_public", { mode: "boolean" }).default(true).notNull(),
+  createdByUserId: text("created_by_user_id"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Escalation Policies (Step 1 Primary On-Call -> ack timeout -> Step 2 Lead)
+ */
+export const escalationPolicies = sqliteTable("escalation_policies", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  step1Target: text("step1_target").notNull(),
+  step1ChannelsJson: text("step1_channels_json").default("[\"slack\",\"email\"]").notNull(),
+  ackTimeoutMinutes: integer("ack_timeout_minutes").default(15).notNull(),
+  step2Target: text("step2_target").notNull(),
+  step2ChannelsJson: text("step2_channels_json").default("[\"pagerduty\",\"opsgenie\",\"teams\",\"email\"]").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Smart Alert Rules (Threshold + Z-Score / EWMA Anomaly Detection)
+ */
+export const alertRules = sqliteTable("alert_rules", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  ruleType: text("rule_type", { enum: ["crash_rate", "error_spike_anomaly", "uptime_down", "latency_p95"] }).notNull(),
+  thresholdPercent: integer("threshold_percent").default(5).notNull(),
+  windowMinutes: integer("window_minutes").default(5).notNull(),
+  anomalyZScoreBp: integer("anomaly_z_score_bp").default(250).notNull(), // 250 = 2.50 sigma
+  escalationPolicyId: text("escalation_policy_id").references(() => escalationPolicies.id, { onDelete: "set null" }),
+  channelsJson: text("channels_json").default("[\"slack\",\"pagerduty\"]").notNull(),
+  isEnabled: integer("is_enabled", { mode: "boolean" }).default(true).notNull(),
+  lastTriggeredAt: text("last_triggered_at"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Triggered Alert Incidents (Tracks Ack & Step-2 Escalation State)
+ */
+export const alertIncidents = sqliteTable("alert_incidents", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  ruleId: text("rule_id").references(() => alertRules.id, { onDelete: "set null" }),
+  policyId: text("policy_id").references(() => escalationPolicies.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  severity: text("severity", { enum: ["warning", "critical"] }).default("critical").notNull(),
+  triggerValue: text("trigger_value").notNull(),
+  anomalyScore: text("anomaly_score"),
+  status: text("status", { enum: ["triggered", "acknowledged", "escalated", "resolved"] }).default("triggered").notNull(),
+  currentStep: integer("current_step").default(1).notNull(),
+  escalateAt: text("escalate_at"),
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgedAt: text("acknowledged_at"),
+  resolvedAt: text("resolved_at"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

@@ -13,9 +13,10 @@ import {
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { UptimeMonitorsCard } from "../widgets/UptimeMonitorsCard";
+import { SlaCompliancePanel } from "../widgets/SlaCompliancePanel";
 
 export function UptimeFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
-  const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
+  const { initialData, projects, customDomain, storageTier, user, isDemo } = workspace;
   const project = initialData.project;
   const summary = initialData.uptimeSummary;
   const monitors = summary?.monitors || [];
@@ -139,6 +140,13 @@ export function UptimeFullView({ workspace }: { workspace: LoadedWorkspaceReady 
             )}
           </div>
         </div>
+
+        <SlaCompliancePanel
+          projectId={project.id}
+          projectSlug={project.slug}
+          subdomain={user?.subdomain || undefined}
+          isDemo={isDemo}
+        />
       </div>
     </WorkspaceShell>
   );

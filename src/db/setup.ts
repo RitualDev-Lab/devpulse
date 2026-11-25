@@ -99,7 +99,13 @@ export async function initDb() {
     "ALTER TABLE projects ADD COLUMN stack_preset TEXT DEFAULT 'saas' NOT NULL;",
     "ALTER TABLE projects ADD COLUMN npm_token_encrypted TEXT;",
     "ALTER TABLE projects ADD COLUMN github_token_encrypted TEXT;",
+    "ALTER TABLE projects ADD COLUMN workspace_id TEXT;",
+    "ALTER TABLE projects ADD COLUMN opsgenie_api_key_encrypted TEXT;",
+    "ALTER TABLE projects ADD COLUMN teams_webhook_url TEXT;",
     "ALTER TABLE organization_members ADD COLUMN scim_external_id TEXT;",
+    "ALTER TABLE organization_members ADD COLUMN workspace_id TEXT;",
+    "ALTER TABLE audit_logs ADD COLUMN workspace_id TEXT;",
+    "ALTER TABLE uptime_monitors ADD COLUMN sla_target_bp INTEGER DEFAULT 9990 NOT NULL;",
   ];
 
   for (const query of optionalColumns) {
@@ -415,6 +421,96 @@ export async function initDb() {
       organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
       redirect_to TEXT DEFAULT '/dashboard' NOT NULL,
       expires_at TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      billing_plan TEXT DEFAULT 'free' NOT NULL,
+      monthly_event_limit INTEGER DEFAULT 10000 NOT NULL,
+      monthly_events_used INTEGER DEFAULT 0 NOT NULL,
+      member_limit INTEGER DEFAULT 3 NOT NULL,
+      project_limit INTEGER DEFAULT 2 NOT NULL,
+      billing_email TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS uptime_incidents (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      monitor_id TEXT REFERENCES uptime_monitors(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      severity TEXT DEFAULT 'major' NOT NULL,
+      status TEXT DEFAULT 'investigating' NOT NULL,
+      rca_text TEXT,
+      impact_summary TEXT,
+      started_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      resolved_at TEXT,
+      duration_minutes INTEGER DEFAULT 0 NOT NULL,
+      is_public INTEGER DEFAULT 1 NOT NULL,
+      created_by_user_id TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS escalation_policies (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      step1_target TEXT NOT NULL,
+      step1_channels_json TEXT DEFAULT '["slack","email"]' NOT NULL,
+      ack_timeout_minutes INTEGER DEFAULT 15 NOT NULL,
+      step2_target TEXT NOT NULL,
+      step2_channels_json TEXT DEFAULT '["pagerduty","opsgenie","teams","email"]' NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS alert_rules (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      rule_type TEXT NOT NULL,
+      threshold_percent INTEGER DEFAULT 5 NOT NULL,
+      window_minutes INTEGER DEFAULT 5 NOT NULL,
+      anomaly_z_score_bp INTEGER DEFAULT 250 NOT NULL,
+      escalation_policy_id TEXT REFERENCES escalation_policies(id) ON DELETE SET NULL,
+      channels_json TEXT DEFAULT '["slack","pagerduty"]' NOT NULL,
+      is_enabled INTEGER DEFAULT 1 NOT NULL,
+      last_triggered_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS alert_incidents (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      rule_id TEXT REFERENCES alert_rules(id) ON DELETE SET NULL,
+      policy_id TEXT REFERENCES escalation_policies(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      severity TEXT DEFAULT 'critical' NOT NULL,
+      trigger_value TEXT NOT NULL,
+      anomaly_score TEXT,
+      status TEXT DEFAULT 'triggered' NOT NULL,
+      current_step INTEGER DEFAULT 1 NOT NULL,
+      escalate_at TEXT,
+      acknowledged_by TEXT,
+      acknowledged_at TEXT,
+      resolved_at TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);

@@ -16,7 +16,11 @@ import {
   Loader2,
   Lock,
   KeyRound,
+  FileDown,
+  HardDriveUpload,
+  Layers,
 } from "lucide-react";
+import type { OrgRole } from "@/lib/security/rbac";
 import { SsoScimPanel } from "./SsoScimPanel";
 
 interface SecurityModalProps {
@@ -24,7 +28,7 @@ interface SecurityModalProps {
   onClose: () => void;
   projectId: string;
   projectName: string;
-  accessRole?: "owner" | "maintainer" | "viewer";
+  accessRole?: OrgRole;
   isDemo?: boolean;
 }
 
@@ -43,15 +47,30 @@ interface OrgMember {
   id: string;
   githubUsername: string;
   email: string | null;
-  role: "owner" | "maintainer" | "viewer";
-  status: "active" | "pending";
+  role: OrgRole;
+  status: "active" | "pending" | "suspended";
+}
+
+interface WorkspaceRow {
+  id: string;
+  organizationId: string;
+  name: string;
+  slug: string;
+  billingPlan: "free" | "pro" | "team" | "enterprise";
+  monthlyEventLimit: number;
+  monthlyEventsUsed: number;
+  memberLimit: number;
+  projectLimit: number;
+  billingEmail: string | null;
+  projects: Array<{ id: string; name: string; slug: string }>;
 }
 
 interface OrganizationRow {
   id: string;
   name: string;
   slug: string;
-  myRole: "owner" | "maintainer" | "viewer";
+  myRole: OrgRole;
+  workspaces?: WorkspaceRow[];
   members: OrgMember[];
 }
 
@@ -81,27 +100,38 @@ export function SecurityModal({
 
   // API Keys State
   const [keys, setKeys] = useState<TelemetryKeyRow[]>([]);
-  const [canManageSecurity, setCanManageSecurity] = useState(accessRole === "owner");
+  const [canManageSecurity, setCanManageSecurity] = useState(
+    accessRole === "owner" || accessRole === "admin"
+  );
   const [newKeyName, setNewKeyName] = useState("");
   const [revealedRawKey, setRevealedRawKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [keyBusy, setKeyBusy] = useState(false);
 
-  // Organizations & RBAC State
+  // Organizations, Workspaces & RBAC State
   const [orgs, setOrgs] = useState<OrganizationRow[]>([]);
   const [ownedProjects, setOwnedProjects] = useState<
-    Array<{ id: string; name: string; slug: string; organizationId: string | null }>
+    Array<{ id: string; name: string; slug: string; organizationId: string | null; workspaceId?: string | null }>
   >([]);
   const [newOrgName, setNewOrgName] = useState("");
+  const [newWsName, setNewWsName] = useState("");
+  const [newWsPlan, setNewWsPlan] = useState<"free" | "pro" | "team" | "enterprise">("team");
   const [inviteOrgId, setInviteOrgId] = useState("");
   const [inviteHandle, setInviteHandle] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"owner" | "maintainer" | "viewer">("maintainer");
+  const [inviteRole, setInviteRole] = useState<OrgRole>("developer");
   const [inviteStatusMsg, setInviteStatusMsg] = useState<string | null>(null);
   const [orgBusy, setOrgBusy] = useState(false);
 
   // Audit Log State
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
+  const [auditExportBusy, setAuditExportBusy] = useState(false);
+  const [auditStorageResult, setAuditStorageResult] = useState<{
+    objectKey: string;
+    downloadUrl: string;
+    provider: string;
+    recordCount: number;
+  } | null>(null);
 
   const loadTabData = useCallback(async () => {
     if (isDemo || !isOpen) return;
@@ -198,7 +228,7 @@ export function SecurityModal({
 
   const handleInviteMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isDemo || !inviteOrgId || !inviteHandle.trim()) return;
+    if (isDemo || !inviteOrgId || (!inviteHandle.trim() && !inviteEmail.trim())) return;
     setOrgBusy(true);
     setErrorMsg(null);
     try {
@@ -208,7 +238,7 @@ export function SecurityModal({
         body: JSON.stringify({
           action: "invite_member",
           organizationId: inviteOrgId,
-          githubUsername: inviteHandle,
+          githubUsername: inviteHandle.trim() || undefined,
           email: inviteEmail.trim() || undefined,
           role: inviteRole,
         }),
@@ -219,8 +249,8 @@ export function SecurityModal({
       setInviteEmail("");
       setInviteStatusMsg(
         data.emailNotification?.sent
-          ? `Member added & email invitation delivered via ${data.emailNotification.provider}!`
-          : "Member added to organization RBAC list."
+          ? `Member invited & email sent via ${data.emailNotification.provider}!`
+          : "Member added to organization RBAC directory."
       );
       await loadTabData();
     } catch (e: any) {
@@ -233,7 +263,7 @@ export function SecurityModal({
   const handleRoleChange = async (
     organizationId: string,
     memberId: string,
-    role: "owner" | "maintainer" | "viewer"
+    role: OrgRole
   ) => {
     if (isDemo) return;
     setOrgBusy(true);
@@ -253,14 +283,23 @@ export function SecurityModal({
     }
   };
 
-  const handleAssignProject = async (organizationId: string, targetProjectId: string) => {
+  const handleAssignProject = async (
+    organizationId: string,
+    targetProjectId: string,
+    workspaceId?: string
+  ) => {
     if (isDemo) return;
     setOrgBusy(true);
     try {
       const res = await fetch("/api/v1/security/orgs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "assign_project", organizationId, projectId: targetProjectId }),
+        body: JSON.stringify({
+          action: "assign_project",
+          organizationId,
+          projectId: targetProjectId,
+          workspaceId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to assign project");
@@ -269,6 +308,81 @@ export function SecurityModal({
       setErrorMsg(e.message);
     } finally {
       setOrgBusy(false);
+    }
+  };
+
+  const handleCreateWorkspace = async (organizationId: string) => {
+    if (isDemo || !newWsName.trim()) return;
+    setOrgBusy(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/v1/security/orgs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_workspace",
+          organizationId,
+          name: newWsName.trim(),
+          billingPlan: newWsPlan,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create workspace");
+      setNewWsName("");
+      await loadTabData();
+    } catch (e: any) {
+      setErrorMsg(e.message);
+    } finally {
+      setOrgBusy(false);
+    }
+  };
+
+  const handleUpdateWorkspacePlan = async (
+    organizationId: string,
+    workspaceId: string,
+    billingPlan: "free" | "pro" | "team" | "enterprise"
+  ) => {
+    if (isDemo) return;
+    setOrgBusy(true);
+    try {
+      const res = await fetch("/api/v1/security/orgs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_workspace",
+          organizationId,
+          workspaceId,
+          billingPlan,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Failed to update workspace billing");
+      await loadTabData();
+    } catch (e: any) {
+      setErrorMsg(e.message);
+    } finally {
+      setOrgBusy(false);
+    }
+  };
+
+  const handleExportAuditToStorage = async () => {
+    if (isDemo) return;
+    setAuditExportBusy(true);
+    setErrorMsg(null);
+    setAuditStorageResult(null);
+    try {
+      const res = await fetch("/api/v1/security/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "export_to_storage", projectId }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Failed to export audit log to R2/S3");
+      setAuditStorageResult(d);
+    } catch (e: any) {
+      setErrorMsg(e.message);
+    } finally {
+      setAuditExportBusy(false);
     }
   };
 
@@ -536,28 +650,30 @@ export function SecurityModal({
                     type="text"
                     value={inviteHandle}
                     onChange={(e) => setInviteHandle(e.target.value)}
-                    placeholder="GitHub username"
+                    placeholder="GitHub handle (optional)"
                     className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500"
                   />
                   <input
                     type="email"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="Invite email (optional)"
+                    placeholder="Invite by email *"
                     className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500"
                   />
                   <select
                     value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value as any)}
+                    onChange={(e) => setInviteRole(e.target.value as OrgRole)}
                     className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white"
                   >
                     <option value="viewer">Viewer (Read-Only)</option>
-                    <option value="maintainer">Maintainer (Triage & Config)</option>
-                    <option value="owner">Owner (Full Admin & Keys)</option>
+                    <option value="billing">Billing (Invoices &amp; Caps)</option>
+                    <option value="developer">Developer (Telemetry &amp; Incidents)</option>
+                    <option value="admin">Admin (RBAC &amp; Keys)</option>
+                    <option value="owner">Owner (Full Org Control)</option>
                   </select>
                   <button
                     type="submit"
-                    disabled={orgBusy || !inviteHandle.trim()}
+                    disabled={orgBusy || (!inviteHandle.trim() && !inviteEmail.trim())}
                     className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold disabled:opacity-50"
                   >
                     Invite Member
@@ -614,6 +730,97 @@ export function SecurityModal({
                         )}
                       </div>
 
+                      {/* Workspaces Hierarchy inside Org */}
+                      <div className="p-3 rounded-xl bg-zinc-900/70 border border-zinc-800/80 space-y-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>Workspaces &amp; Usage Caps ({org.workspaces?.length || 0})</span>
+                          </span>
+                          {(org.myRole === "owner" || org.myRole === "admin") && (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={newWsName}
+                                onChange={(e) => setNewWsName(e.target.value)}
+                                placeholder="New Workspace (e.g. Production)"
+                                className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] text-white"
+                              />
+                              <select
+                                value={newWsPlan}
+                                onChange={(e) => setNewWsPlan(e.target.value as any)}
+                                className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] text-white"
+                              >
+                                <option value="free">Free (10k/mo)</option>
+                                <option value="pro">Pro (100k/mo)</option>
+                                <option value="team">Team (1M/mo)</option>
+                                <option value="enterprise">Enterprise (10M/mo)</option>
+                              </select>
+                              <button
+                                type="button"
+                                disabled={orgBusy || !newWsName.trim()}
+                                onClick={() => handleCreateWorkspace(org.id)}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold disabled:opacity-50"
+                              >
+                                + Workspace
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {(org.workspaces || []).map((ws) => (
+                          <div
+                            key={ws.id}
+                            className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                          >
+                            <div>
+                              <span className="font-bold text-white">{ws.name}</span>
+                              <span className="ml-2 font-mono text-zinc-400">
+                                Events: {ws.monthlyEventsUsed.toLocaleString()} /{" "}
+                                {ws.monthlyEventLimit.toLocaleString()} • Members cap: {ws.memberLimit} • Projects:{" "}
+                                {ws.projects.length}/{ws.projectLimit}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {(org.myRole === "owner" ||
+                                org.myRole === "admin" ||
+                                org.myRole === "billing") && (
+                                <select
+                                  value={ws.billingPlan}
+                                  onChange={(e) =>
+                                    handleUpdateWorkspacePlan(org.id, ws.id, e.target.value as any)
+                                  }
+                                  className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] text-emerald-300 font-semibold uppercase"
+                                >
+                                  <option value="free">Free</option>
+                                  <option value="pro">Pro</option>
+                                  <option value="team">Team</option>
+                                  <option value="enterprise">Enterprise</option>
+                                </select>
+                              )}
+                              {ownedProjects.length > 0 &&
+                                (org.myRole === "owner" || org.myRole === "admin") && (
+                                  <select
+                                    value=""
+                                    onChange={(e) =>
+                                      e.target.value &&
+                                      handleAssignProject(org.id, e.target.value, ws.id)
+                                    }
+                                    className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300"
+                                  >
+                                    <option value="">+ Assign project...</option>
+                                    {ownedProjects.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
                       <div className="divide-y divide-zinc-800/70">
                         {org.members.map((m) => (
                           <div
@@ -621,21 +828,25 @@ export function SecurityModal({
                             className="py-2 flex items-center justify-between text-xs"
                           >
                             <div className="flex items-center gap-2">
-                              <span className="font-mono text-white">@{m.githubUsername}</span>
+                              <span className="font-mono text-white">
+                                {m.email ? m.email : `@${m.githubUsername}`}
+                              </span>
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
                                 {m.status}
                               </span>
                             </div>
-                            {org.myRole === "owner" ? (
+                            {org.myRole === "owner" || org.myRole === "admin" ? (
                               <select
                                 value={m.role}
                                 onChange={(e) =>
-                                  handleRoleChange(org.id, m.id, e.target.value as any)
+                                  handleRoleChange(org.id, m.id, e.target.value as OrgRole)
                                 }
                                 className="px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-200"
                               >
                                 <option value="owner">Owner</option>
-                                <option value="maintainer">Maintainer</option>
+                                <option value="admin">Admin</option>
+                                <option value="developer">Developer</option>
+                                <option value="billing">Billing</option>
                                 <option value="viewer">Viewer</option>
                               </select>
                             ) : (
@@ -654,7 +865,55 @@ export function SecurityModal({
           ) : activeTab === "sso" ? (
             <SsoScimPanel isDemo={isDemo} />
           ) : (
-            <div className="rounded-xl bg-zinc-950 border border-zinc-800 overflow-hidden">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-zinc-950 border border-zinc-800">
+                <span className="text-xs text-zinc-300">
+                  SOC 2 &amp; ISO 27001 Compliance Export (up to 500 immutable events)
+                </span>
+                <div className="flex items-center gap-2">
+                  {!isDemo && (
+                    <a
+                      href={`/api/v1/security/audit?projectId=${encodeURIComponent(projectId)}&format=csv`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/40 text-emerald-200 text-xs font-semibold"
+                    >
+                      <FileDown className="w-3.5 h-3.5" />
+                      <span>Download CSV</span>
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    disabled={isDemo || auditExportBusy}
+                    onClick={handleExportAuditToStorage}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-200 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {auditExportBusy ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <HardDriveUpload className="w-3.5 h-3.5" />
+                    )}
+                    <span>Archive to R2 / S3</span>
+                  </button>
+                </div>
+              </div>
+
+              {auditStorageResult && (
+                <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-700/50 text-xs text-emerald-200 flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    Archived {auditStorageResult.recordCount} logs to{" "}
+                    <code className="font-mono text-white">{auditStorageResult.objectKey}</code>
+                  </span>
+                  <a
+                    href={auditStorageResult.downloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-semibold text-white"
+                  >
+                    Presigned Download &rarr;
+                  </a>
+                </div>
+              )}
+
+              <div className="rounded-xl bg-zinc-950 border border-zinc-800 overflow-hidden">
               <table className="w-full text-left text-xs">
                 <thead className="bg-zinc-900/70 text-zinc-400 border-b border-zinc-800">
                   <tr>
@@ -708,6 +967,7 @@ export function SecurityModal({
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>

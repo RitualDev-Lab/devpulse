@@ -29,9 +29,13 @@ export async function GET() {
         pypiPackage: p.pypiPackage,
         rustCrate: p.rustCrate,
         goModule: p.goModule,
-        telemetryApiKey: p.accessRole === "viewer" ? p.telemetryApiKey.slice(0, 12) + "..." : p.telemetryApiKey,
+        telemetryApiKey:
+          p.accessRole === "viewer" || p.accessRole === "billing"
+            ? p.telemetryApiKey.slice(0, 12) + "..."
+            : p.telemetryApiKey,
         accessRole: p.accessRole,
         organizationId: p.organizationId,
+        workspaceId: p.workspaceId,
         createdAt: p.createdAt,
       })),
     });

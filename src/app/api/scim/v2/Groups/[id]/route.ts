@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 function resolveGroupRole(id: string): OrgRole | null {
   const clean = id.trim().toLowerCase();
-  if (["owner", "maintainer", "viewer"].includes(clean)) return clean as OrgRole;
+  if (clean === "maintainer") return "developer";
+  if (["owner", "admin", "developer", "viewer", "billing"].includes(clean)) return clean as OrgRole;
   return null;
 }
 

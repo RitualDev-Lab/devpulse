@@ -7,6 +7,7 @@ import { WorkspaceShell } from "../WorkspaceShell";
 import { ErrorStreamCard } from "../widgets/ErrorStreamCard";
 import { ReleaseHealthCard } from "../widgets/ReleaseHealthCard";
 import { LanguageSdkTabs } from "../LanguageSdkTabs";
+import { SmartAlertsPanel } from "../widgets/SmartAlertsPanel";
 
 export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
@@ -40,6 +41,7 @@ export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady
         />
 
         <div className="grid grid-cols-1 gap-5">
+          <SmartAlertsPanel projectId={project.id} isDemo={isDemo} />
           <ReleaseHealthCard
             releases={initialData.releases || []}
             githubRepo={project.githubRepo}

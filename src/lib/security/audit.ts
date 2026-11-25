@@ -6,6 +6,7 @@ export interface AuditEventInput {
   userId: string;
   actorUsername: string;
   organizationId?: string | null;
+  workspaceId?: string | null;
   projectId?: string | null;
   action: string;
   resourceType: string;
@@ -28,6 +29,7 @@ export async function recordAuditEvent(input: AuditEventInput): Promise<void> {
       userId: input.userId,
       actorUsername: input.actorUsername,
       organizationId: input.organizationId || null,
+      workspaceId: input.workspaceId || null,
       projectId: input.projectId || null,
       action: input.action,
       resourceType: input.resourceType,

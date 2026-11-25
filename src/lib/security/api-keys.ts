@@ -27,6 +27,7 @@ export interface VerifiedProjectRecord {
   id: string;
   userId: string;
   organizationId: string | null;
+  workspaceId: string | null;
   name: string;
   slug: string;
   discordWebhookUrl: string | null;
@@ -35,6 +36,8 @@ export interface VerifiedProjectRecord {
   telegramChatId: string | null;
   genericWebhookUrl: string | null;
   pagerdutyRoutingKey: string | null;
+  opsgenieApiKeyEncrypted: string | null;
+  teamsWebhookUrl: string | null;
   notificationEmail: string | null;
   emailProvider: string | null;
   emailApiKeyEncrypted: string | null;
@@ -68,6 +71,7 @@ export async function verifyTelemetryApiKey(rawKey: string): Promise<VerifiedPro
         id: projects.id,
         userId: projects.userId,
         organizationId: projects.organizationId,
+        workspaceId: projects.workspaceId,
         name: projects.name,
         slug: projects.slug,
         discordWebhookUrl: projects.discordWebhookUrl,
@@ -76,6 +80,8 @@ export async function verifyTelemetryApiKey(rawKey: string): Promise<VerifiedPro
         telegramChatId: projects.telegramChatId,
         genericWebhookUrl: projects.genericWebhookUrl,
         pagerdutyRoutingKey: projects.pagerdutyRoutingKey,
+        opsgenieApiKeyEncrypted: projects.opsgenieApiKeyEncrypted,
+        teamsWebhookUrl: projects.teamsWebhookUrl,
         notificationEmail: projects.notificationEmail,
         emailProvider: projects.emailProvider,
         emailApiKeyEncrypted: projects.emailApiKeyEncrypted,
@@ -101,6 +107,7 @@ export async function verifyTelemetryApiKey(rawKey: string): Promise<VerifiedPro
       id: projects.id,
       userId: projects.userId,
       organizationId: projects.organizationId,
+      workspaceId: projects.workspaceId,
       name: projects.name,
       slug: projects.slug,
       discordWebhookUrl: projects.discordWebhookUrl,
@@ -109,6 +116,8 @@ export async function verifyTelemetryApiKey(rawKey: string): Promise<VerifiedPro
       telegramChatId: projects.telegramChatId,
       genericWebhookUrl: projects.genericWebhookUrl,
       pagerdutyRoutingKey: projects.pagerdutyRoutingKey,
+      opsgenieApiKeyEncrypted: projects.opsgenieApiKeyEncrypted,
+      teamsWebhookUrl: projects.teamsWebhookUrl,
       notificationEmail: projects.notificationEmail,
       emailProvider: projects.emailProvider,
       emailApiKeyEncrypted: projects.emailApiKeyEncrypted,

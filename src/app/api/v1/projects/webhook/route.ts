@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
       telegramChatId,
       genericWebhookUrl,
       pagerdutyRoutingKey,
+      opsgenieApiKey,
+      teamsWebhookUrl,
       notificationEmail,
       emailProvider,
       emailApiKey,
@@ -64,15 +66,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if ((slackWebhookUrl && !canUseAlertChannel(user.storageTier, "slack")) ||
-        (pagerdutyRoutingKey && !canUseAlertChannel(user.storageTier, "pagerduty"))) {
+    if (
+      (slackWebhookUrl && !canUseAlertChannel(user.storageTier, "slack")) ||
+      (pagerdutyRoutingKey && !canUseAlertChannel(user.storageTier, "pagerduty")) ||
+      (opsgenieApiKey && !canUseAlertChannel(user.storageTier, "opsgenie")) ||
+      (teamsWebhookUrl && !canUseAlertChannel(user.storageTier, "teams"))
+    ) {
       return NextResponse.json(
         {
-          error: "Slack & PagerDuty multi-channel alert routing requires Team / Studio ($49/mo).",
+          error:
+            "Slack, PagerDuty, OpsGenie & Microsoft Teams alert routing requires Team / Studio ($49/mo).",
           code: "ALERT_TEAM_REQUIRED",
         },
         { status: 402 }
       );
+    }
+
+    let nextOpsgenieKeyEncrypted = access.project.opsgenieApiKeyEncrypted || null;
+    if (typeof opsgenieApiKey === "string") {
+      const trimmedOg = opsgenieApiKey.trim();
+      if (!trimmedOg) {
+        nextOpsgenieKeyEncrypted = null;
+      } else if (!trimmedOg.startsWith("••") && !trimmedOg.includes("••••")) {
+        nextOpsgenieKeyEncrypted = await encryptSecret(trimmedOg);
+      }
     }
 
     // Preserve existing encrypted email API key unless explicitly changed or cleared
@@ -96,6 +113,8 @@ export async function POST(req: NextRequest) {
         telegramChatId: telegramChatId || null,
         genericWebhookUrl: genericWebhookUrl || null,
         pagerdutyRoutingKey: pagerdutyRoutingKey || null,
+        opsgenieApiKeyEncrypted: nextOpsgenieKeyEncrypted,
+        teamsWebhookUrl: teamsWebhookUrl || null,
         notificationEmail: notificationEmail ? String(notificationEmail).trim() : null,
         emailProvider: emailProvider === "postmark" ? "postmark" : "resend",
         emailApiKeyEncrypted: nextEmailKeyEncrypted,
@@ -118,6 +137,8 @@ export async function POST(req: NextRequest) {
         hasTelegram: Boolean(telegramBotToken && telegramChatId),
         hasGeneric: Boolean(genericWebhookUrl),
         hasPagerDuty: Boolean(pagerdutyRoutingKey),
+        hasOpsGenie: Boolean(nextOpsgenieKeyEncrypted),
+        hasTeams: Boolean(teamsWebhookUrl),
         hasEmailAlerts: Boolean(notificationEmail),
         digestEnabled: Boolean(digestEnabled),
       },
@@ -125,6 +146,7 @@ export async function POST(req: NextRequest) {
 
     // If testPing requested, dispatch a test notification
     if (testPing) {
+      const plainOpsgenie = await decryptSecret(nextOpsgenieKeyEncrypted);
       await dispatchCrashAlerts(
         {
           discordWebhookUrl,
@@ -133,6 +155,8 @@ export async function POST(req: NextRequest) {
           telegramChatId,
           genericWebhookUrl,
           pagerdutyRoutingKey,
+          opsgenieApiKey: plainOpsgenie,
+          teamsWebhookUrl,
         },
         {
           eventId: "err_test_ping",

@@ -24,7 +24,7 @@ interface DashboardClientViewProps {
   projects?: ProjectSummary[];
   customDomain?: string | null;
   storageTier: string;
-  accessRole?: "owner" | "maintainer" | "viewer";
+  accessRole?: import("@/lib/security/rbac").OrgRole;
   isDemo?: boolean;
 }
 

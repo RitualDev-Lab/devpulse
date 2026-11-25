@@ -69,7 +69,12 @@ export function proxy(request: NextRequest) {
   }
 
   const rewriteUrl = request.nextUrl.clone();
-  const subPath = pathname === "/changelog" ? "/changelog" : "";
+  const subPath =
+    pathname === "/changelog"
+      ? "/changelog"
+      : pathname === "/status"
+      ? "/status"
+      : "";
   rewriteUrl.pathname = `/portal/${encodeURIComponent(hostKey)}${subPath}`;
   if (search) {
     rewriteUrl.search = search;

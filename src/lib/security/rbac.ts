@@ -1,24 +1,47 @@
 import { db } from "@/db";
 import { projects, organizations, organizationMembers } from "@/db/schema";
-import { eq, and, or, desc, inArray } from "drizzle-orm";
+import { eq, and, or, desc, inArray, sql } from "drizzle-orm";
 import type { AuthenticatedUser } from "@/lib/auth";
 
-export type OrgRole = "owner" | "maintainer" | "viewer";
+export type OrgRole = "owner" | "admin" | "developer" | "viewer" | "billing";
+
+export const VALID_ORG_ROLES: readonly OrgRole[] = [
+  "owner",
+  "admin",
+  "developer",
+  "viewer",
+  "billing",
+];
+
+/**
+ * Normalizes legacy role names ("maintainer" -> "developer") cleanly.
+ */
+export function normalizeOrgRole(raw?: string | null): OrgRole {
+  const r = String(raw || "viewer").trim().toLowerCase();
+  if (r === "maintainer") return "developer";
+  if ((VALID_ORG_ROLES as readonly string[]).includes(r)) return r as OrgRole;
+  return "viewer";
+}
 
 export interface ProjectAccessResult {
   project: typeof projects.$inferSelect;
   role: OrgRole;
   canRead: boolean;
-  canWrite: boolean; // owner | maintainer
-  canManageSecurity: boolean; // owner only (key rotation, billing, domains, org RBAC)
+  canWrite: boolean; // owner | admin | developer
+  canManageSecurity: boolean; // owner | admin
+  canManageBilling: boolean; // owner | billing
 }
 
 export function roleAllowsWrite(role: OrgRole): boolean {
-  return role === "owner" || role === "maintainer";
+  return role === "owner" || role === "admin" || role === "developer";
 }
 
 export function roleAllowsSecurityAdmin(role: OrgRole): boolean {
-  return role === "owner";
+  return role === "owner" || role === "admin";
+}
+
+export function roleAllowsBilling(role: OrgRole): boolean {
+  return role === "owner" || role === "billing";
 }
 
 /**
@@ -46,6 +69,7 @@ export async function resolveProjectAccess(
       canRead: true,
       canWrite: true,
       canManageSecurity: true,
+      canManageBilling: true,
     };
   }
 
@@ -66,10 +90,12 @@ export async function resolveProjectAccess(
       canRead: true,
       canWrite: true,
       canManageSecurity: true,
+      canManageBilling: true,
     };
   }
 
   const normalizedHandle = user.githubUsername.toLowerCase();
+  const normalizedEmail = user.email ? user.email.toLowerCase() : null;
   const [membership] = await db
     .select()
     .from(organizationMembers)
@@ -78,7 +104,8 @@ export async function resolveProjectAccess(
         eq(organizationMembers.organizationId, proj.organizationId),
         or(
           eq(organizationMembers.userId, user.id),
-          eq(organizationMembers.githubUsername, normalizedHandle)
+          eq(organizationMembers.githubUsername, normalizedHandle),
+          normalizedEmail ? sql`lower(${organizationMembers.email}) = ${normalizedEmail}` : sql`0`
         )
       )
     )
@@ -94,21 +121,23 @@ export async function resolveProjectAccess(
       .catch(() => {});
   }
 
-  const role = membership.role as OrgRole;
+  const role = normalizeOrgRole(membership.role);
   return {
     project: proj,
     role,
     canRead: true,
     canWrite: roleAllowsWrite(role),
     canManageSecurity: roleAllowsSecurityAdmin(role),
+    canManageBilling: roleAllowsBilling(role),
   };
 }
 
 /**
- * Lists all projects accessible to a maintainer (direct owned + organization-shared).
+ * Lists all projects accessible to a user across multi-org / workspace memberships.
  */
 export async function listAccessibleProjects(user: AuthenticatedUser) {
   const normalizedHandle = user.githubUsername.toLowerCase();
+  const normalizedEmail = user.email ? user.email.toLowerCase() : null;
 
   const memberships = await db
     .select({
@@ -120,7 +149,8 @@ export async function listAccessibleProjects(user: AuthenticatedUser) {
     .where(
       or(
         eq(organizationMembers.userId, user.id),
-        eq(organizationMembers.githubUsername, normalizedHandle)
+        eq(organizationMembers.githubUsername, normalizedHandle),
+        normalizedEmail ? sql`lower(${organizationMembers.email}) = ${normalizedEmail}` : sql`0`
       )
     );
 
@@ -132,7 +162,7 @@ export async function listAccessibleProjects(user: AuthenticatedUser) {
   const orgRoleMap = new Map<string, OrgRole>();
   for (const m of memberships) {
     if (m.status === "suspended") continue;
-    orgRoleMap.set(m.organizationId, m.role as OrgRole);
+    orgRoleMap.set(m.organizationId, normalizeOrgRole(m.role));
   }
   for (const o of ownedOrgs) {
     orgRoleMap.set(o.id, "owner");

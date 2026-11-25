@@ -15,7 +15,15 @@ export interface PlanDefinition {
   allowCustomCss: boolean;
   allowByos: boolean;
   allowWhiteLabel: boolean;
-  alertChannels: readonly ("discord" | "telegram" | "slack" | "pagerduty" | "generic")[];
+  alertChannels: readonly (
+    | "discord"
+    | "telegram"
+    | "slack"
+    | "pagerduty"
+    | "opsgenie"
+    | "teams"
+    | "generic"
+  )[];
   features: readonly string[];
 }
 
@@ -82,7 +90,15 @@ export const PLANS: Record<"free" | "pro" | "team", PlanDefinition> = {
     allowCustomCss: true,
     allowByos: true,
     allowWhiteLabel: true,
-    alertChannels: ["discord", "telegram", "slack", "pagerduty", "generic"],
+    alertChannels: [
+      "discord",
+      "telegram",
+      "slack",
+      "pagerduty",
+      "opsgenie",
+      "teams",
+      "generic",
+    ],
     features: [
       "Unlimited Projects & workspaces",
       "5 Custom Domains with automatic SSL",
@@ -154,7 +170,14 @@ export function getEffectiveEntitlements(input: {
 
 export function canUseAlertChannel(
   tier: string | null | undefined,
-  channel: "discord" | "telegram" | "slack" | "pagerduty" | "generic"
+  channel:
+    | "discord"
+    | "telegram"
+    | "slack"
+    | "pagerduty"
+    | "opsgenie"
+    | "teams"
+    | "generic"
 ): boolean {
   const plan = getPlanDefinition(tier);
   return plan.alertChannels.includes(channel);

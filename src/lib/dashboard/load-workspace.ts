@@ -90,7 +90,7 @@ export interface LoadedWorkspaceReady {
   projects: ProjectSummary[];
   customDomain: string | null;
   storageTier: string;
-  accessRole: "owner" | "maintainer" | "viewer";
+  accessRole: import("@/lib/security/rbac").OrgRole;
   isDemo: boolean;
 }
 
@@ -473,6 +473,8 @@ export async function loadDashboardWorkspace(searchParams?: {
       telegramChatId: activeProject.telegramChatId,
       genericWebhookUrl: activeProject.genericWebhookUrl,
       pagerdutyRoutingKey: activeProject.pagerdutyRoutingKey,
+      hasOpsgenieApiKey: Boolean(activeProject.opsgenieApiKeyEncrypted),
+      teamsWebhookUrl: activeProject.teamsWebhookUrl,
       notificationEmail: activeProject.notificationEmail,
       emailProvider: activeProject.emailProvider,
       hasEmailApiKey: Boolean(activeProject.emailApiKeyEncrypted),
@@ -637,7 +639,7 @@ export async function loadDashboardWorkspace(searchParams?: {
     projects: projectSummaries,
     customDomain: user?.customDomainVerified ? user.customDomain : null,
     storageTier: user?.storageTier || "free",
-    accessRole: (activeProject?.accessRole as "owner" | "maintainer" | "viewer") || "owner",
+    accessRole: (activeProject?.accessRole as import("@/lib/security/rbac").OrgRole) || "owner",
     isDemo: isDemoView,
   };
 }

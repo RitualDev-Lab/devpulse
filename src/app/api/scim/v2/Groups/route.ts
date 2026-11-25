@@ -9,7 +9,9 @@ export const dynamic = "force-dynamic";
 
 const ROLE_GROUPS: Array<{ id: OrgRole; displayName: string }> = [
   { id: "owner", displayName: "DevPulse Owners" },
-  { id: "maintainer", displayName: "DevPulse Maintainers" },
+  { id: "admin", displayName: "DevPulse Admins" },
+  { id: "developer", displayName: "DevPulse Developers" },
+  { id: "billing", displayName: "DevPulse Billing" },
   { id: "viewer", displayName: "DevPulse Viewers" },
 ];
 
