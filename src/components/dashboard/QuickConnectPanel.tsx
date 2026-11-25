@@ -42,6 +42,7 @@ export function QuickConnectPanel({
   const [linksText, setLinksText] = useState("");
   const [npmToken, setNpmToken] = useState(hasNpmToken ? "••••••••" : "");
   const [githubToken, setGithubToken] = useState(hasGithubToken ? "••••••••" : "");
+  const [dockerToken, setDockerToken] = useState("");
   const [preset, setPreset] = useState<StackPresetId>(
     (initialPreset as StackPresetId) || "saas"
   );
@@ -74,6 +75,7 @@ export function QuickConnectPanel({
           linksText,
           npmToken,
           githubToken,
+          dockerToken,
           stackPreset: preset,
           applyPresetWidgets,
         }),
@@ -174,10 +176,10 @@ export function QuickConnectPanel({
         </button>
 
         {showTokens && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
             <div>
               <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-                npm Read Token (AES-256 Encrypted)
+                npm Read Token (Private @org/pkg)
               </label>
               <input
                 type="password"
@@ -189,13 +191,25 @@ export function QuickConnectPanel({
             </div>
             <div>
               <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-                GitHub PAT Override (Optional for Traffic/PRs)
+                GitHub PAT (Private Repos &amp; Clones)
               </label>
               <input
                 type="password"
                 value={githubToken}
                 onChange={(e) => setGithubToken(e.target.value)}
                 placeholder="ghp_xxxxxxxxxxxxxxxx"
+                className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono text-white placeholder-zinc-600"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+                Docker Hub PAT (Optional)
+              </label>
+              <input
+                type="password"
+                value={dockerToken}
+                onChange={(e) => setDockerToken(e.target.value)}
+                placeholder="dckr_pat_xxxxxxxxxxxx"
                 className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-mono text-white placeholder-zinc-600"
               />
             </div>

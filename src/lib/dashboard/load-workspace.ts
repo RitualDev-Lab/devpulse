@@ -8,6 +8,7 @@ import {
   uptimeMonitors,
   uptimeChecks,
   projectConnectors,
+  dailyMetrics,
 } from "@/db/schema";
 import { eq, desc, and, gte } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
@@ -49,6 +50,12 @@ export interface LoadedWorkspaceReady {
       metadataJson: string | null;
       hasCredentials: boolean;
       lastSyncedAt: string | null;
+    }>;
+    customMetrics?: Array<{
+      metricName: string;
+      latestValue: number;
+      samples: number;
+      lastRecordedAt: string;
     }>;
   };
   projects: ProjectSummary[];
@@ -132,6 +139,33 @@ export async function loadDashboardWorkspace(searchParams?: {
   const decryptedStripeKey = await decryptSecret(activeProject.stripeApiKey).catch(() => null);
   const decryptedDodoKey = await decryptSecret(activeProject.dodoPaymentsApiKey).catch(() => null);
 
+  const rawConnectors = await db
+    .select()
+    .from(projectConnectors)
+    .where(eq(projectConnectors.projectId, activeProject.id))
+    .orderBy(desc(projectConnectors.createdAt))
+    .limit(30)
+    .catch(() => []);
+
+  const decryptedPaymentConnectors = await Promise.all(
+    rawConnectors
+      .filter((c) => c.category === "payment")
+      .map(async (c) => ({
+        id: c.id,
+        provider: c.provider,
+        label: c.label,
+        targetUrl: c.targetUrl,
+        apiKey: await decryptSecret(c.credentialsEncrypted).catch(() => null),
+      }))
+  );
+
+  const dockerTokenConn = rawConnectors.find(
+    (c) => c.category === "package" && c.provider === "docker" && c.credentialsEncrypted
+  );
+  const decryptedDockerToken = dockerTokenConn
+    ? await decryptSecret(dockerTokenConn.credentialsEncrypted).catch(() => null)
+    : null;
+
   const [
     githubStats,
     npmStats,
@@ -147,7 +181,7 @@ export async function loadDashboardWorkspace(searchParams?: {
     rawReleases,
     rawMonitors,
     rawUptimeChecks,
-    rawConnectors,
+    rawDailyMetrics,
     rawPageviews,
   ] = await Promise.all([
     activeProject.githubRepo
@@ -176,8 +210,8 @@ export async function loadDashboardWorkspace(searchParams?: {
         )
       : Promise.resolve(null),
     activeProject.dockerImage
-      ? withEdgeCache(`docker:${activeProject.dockerImage}`, 300, 2600, () =>
-          fetchDockerRepoStats(activeProject.dockerImage!)
+      ? withEdgeCache(`docker:${activeProject.dockerImage}:${Boolean(decryptedDockerToken)}`, 300, 2600, () =>
+          fetchDockerRepoStats(activeProject.dockerImage!, decryptedDockerToken)
         )
       : Promise.resolve(null),
     activeProject.vscodeExtension
@@ -193,12 +227,13 @@ export async function loadDashboardWorkspace(searchParams?: {
           () => fetchMcpStats(activeProject.mcpServerName!, activeProject.githubRepo)
         )
       : Promise.resolve(null),
-    withEdgeCache(`rev:${activeProject.id}`, 120, 2600, () =>
+    withEdgeCache(`rev:${activeProject.id}:${decryptedPaymentConnectors.length}`, 120, 2600, () =>
       fetchRevenueStats({
         stripeKey: decryptedStripeKey,
         dodoKey: decryptedDodoKey,
         dodoEnv: activeProject.dodoPaymentsEnvironment,
         githubSponsorsUsername: activeProject.githubSponsorsUsername,
+        modularConnectors: decryptedPaymentConnectors,
       })
     ),
     db
@@ -241,10 +276,10 @@ export async function loadDashboardWorkspace(searchParams?: {
       .catch(() => []),
     db
       .select()
-      .from(projectConnectors)
-      .where(eq(projectConnectors.projectId, activeProject.id))
-      .orderBy(desc(projectConnectors.createdAt))
-      .limit(30)
+      .from(dailyMetrics)
+      .where(eq(dailyMetrics.projectId, activeProject.id))
+      .orderBy(desc(dailyMetrics.createdAt))
+      .limit(100)
       .catch(() => []),
     db
       .select()
@@ -409,6 +444,30 @@ export async function loadDashboardWorkspace(searchParams?: {
       hasCredentials: Boolean(c.credentialsEncrypted),
       lastSyncedAt: c.lastSyncedAt,
     })),
+    customMetrics: (() => {
+      const map = new Map<string, { metricName: string; latestValue: number; samples: number; lastRecordedAt: string }>();
+      for (const m of rawDailyMetrics || []) {
+        if (!m.metadataJson) continue;
+        try {
+          const meta = JSON.parse(m.metadataJson);
+          if (meta?.kind !== "custom_metric" || !meta.metricName) continue;
+          const prev = map.get(meta.metricName);
+          if (!prev) {
+            map.set(meta.metricName, {
+              metricName: String(meta.metricName),
+              latestValue: Number(meta.metricValue ?? m.value),
+              samples: 1,
+              lastRecordedAt: m.createdAt,
+            });
+          } else {
+            prev.samples += 1;
+          }
+        } catch {
+          // ignore malformed metadataJson
+        }
+      }
+      return Array.from(map.values());
+    })(),
     errors,
     releases: (rawReleases || []).map((r) => {
       const sessions = Math.max(r.totalSessions, r.crashCount);

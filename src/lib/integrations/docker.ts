@@ -25,25 +25,28 @@ export interface DockerRepoStats {
   hubUrl: string;
 }
 
-export async function fetchDockerRepoStats(imageName: string): Promise<DockerRepoStats | null> {
+export async function fetchDockerRepoStats(
+  imageName: string,
+  dockerToken?: string | null
+): Promise<DockerRepoStats | null> {
   try {
     const cleanImage = imageName.trim();
     const parts = cleanImage.split("/");
     const namespace = parts.length === 1 ? "library" : parts[0];
     const repository = parts.length === 1 ? parts[0] : parts.slice(1).join("/");
 
-    const headers = {
-      "User-Agent": "DevPulse-HQ/1.0 (https://devpulse.ritualdev.in)",
+    const headers: Record<string, string> = {
+      "User-Agent": "Docker-Client/24.0.0 (linux)",
       Accept: "application/json",
     };
+    if (dockerToken) {
+      headers.Authorization = `Bearer ${dockerToken.trim()}`;
+    }
 
     let repoRes = await fetch(
       `https://hub.docker.com/v2/repositories/${namespace}/${repository}`,
       {
-        headers: {
-          "User-Agent": "Docker-Client/24.0.0 (linux)",
-          Accept: "application/json",
-        },
+        headers,
         next: { revalidate: 3600 },
       }
     ).catch(() => null);
@@ -52,10 +55,7 @@ export async function fetchDockerRepoStats(imageName: string): Promise<DockerRep
       repoRes = await fetch(
         `https://registry.hub.docker.com/v2/repositories/${namespace}/${repository}`,
         {
-          headers: {
-            "User-Agent": "Docker-Client/24.0.0 (linux)",
-            Accept: "application/json",
-          },
+          headers,
           next: { revalidate: 3600 },
         }
       ).catch(() => null);
@@ -73,10 +73,7 @@ export async function fetchDockerRepoStats(imageName: string): Promise<DockerRep
     let tagsRes = await fetch(
       `https://hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=5`,
       {
-        headers: {
-          "User-Agent": "Docker-Client/24.0.0 (linux)",
-          Accept: "application/json",
-        },
+        headers,
         next: { revalidate: 3600 },
       }
     ).catch(() => null);
@@ -85,10 +82,7 @@ export async function fetchDockerRepoStats(imageName: string): Promise<DockerRep
       tagsRes = await fetch(
         `https://registry.hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=5`,
         {
-          headers: {
-            "User-Agent": "Docker-Client/24.0.0 (linux)",
-            Accept: "application/json",
-          },
+          headers,
           next: { revalidate: 3600 },
         }
       ).catch(() => null);

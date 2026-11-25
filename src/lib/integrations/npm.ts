@@ -138,3 +138,27 @@ export async function fetchNpmStats(
     return null;
   }
 }
+
+/**
+ * Discover packages belonging to an npm org (uses npm Read Token when private/org).
+ */
+export async function fetchNpmOrgPackages(
+  orgName: string,
+  npmToken?: string | null
+): Promise<string[]> {
+  try {
+    const cleanOrg = orgName.trim().replace(/^@/, "");
+    if (!cleanOrg) return [];
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (npmToken) headers.Authorization = `Bearer ${npmToken}`;
+    const res = await fetch(`https://registry.npmjs.org/-/org/${encodeURIComponent(cleanOrg)}/package`, {
+      headers,
+      next: { revalidate: 1800 },
+    }).catch(() => null);
+    if (!res?.ok) return [];
+    const json = (await res.json()) as Record<string, string>;
+    return Object.keys(json || {}).slice(0, 50);
+  } catch {
+    return [];
+  }
+}

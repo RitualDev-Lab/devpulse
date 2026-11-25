@@ -6,7 +6,7 @@ import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { ErrorStreamCard } from "../widgets/ErrorStreamCard";
 import { ReleaseHealthCard } from "../widgets/ReleaseHealthCard";
-import { TelemetrySetupCard } from "../widgets/TelemetrySetupCard";
+import { LanguageSdkTabs } from "../LanguageSdkTabs";
 
 export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
@@ -39,12 +39,16 @@ export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady
           telemetryApiKey={project.telemetryApiKey}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 gap-5">
           <ReleaseHealthCard
             releases={initialData.releases || []}
             githubRepo={project.githubRepo}
           />
-          <TelemetrySetupCard apiKey={project.telemetryApiKey} />
+          <LanguageSdkTabs
+            apiKey={project.telemetryApiKey}
+            projectSlug={project.slug}
+            isDemo={isDemo}
+          />
         </div>
 
         <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-2">

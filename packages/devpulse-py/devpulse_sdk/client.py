@@ -113,6 +113,26 @@ class DevPulseClient:
             },
         )
 
+    def track_metric(
+        self,
+        metric_name: str,
+        metric_value: float,
+        properties: Optional[Dict[str, Any]] = None,
+        source_type: str = "app",
+    ) -> bool:
+        return self._send_or_queue(
+            f"{self.endpoint}/api/v1/analytics",
+            {
+                "project": self.api_key,
+                "metricName": metric_name,
+                "metricValue": metric_value,
+                "properties": properties,
+                "sourceType": source_type,
+                "os": f"{platform.system()} {platform.release()}",
+                "appVersion": self.release,
+            },
+        )
+
     def capture_exception(self, exc_info=None) -> bool:
         if exc_info is None:
             exc_info = sys.exc_info()

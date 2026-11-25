@@ -13,6 +13,7 @@ import {
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { WebAnalyticsCard } from "../widgets/WebAnalyticsCard";
+import { LanguageSdkTabs } from "../LanguageSdkTabs";
 
 export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
@@ -101,6 +102,30 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
         </div>
 
         <WebAnalyticsCard summary={summary || null} projectSlug={project.slug} />
+
+        {/* Custom Event Metrics (trackMetric("active_jobs", 42)) */}
+        {(initialData.customMetrics || []).length > 0 && (
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <h2 className="text-sm font-bold text-white">
+              Custom Application Metrics (<code className="text-cyan-300">trackMetric</code>)
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(initialData.customMetrics || []).map((m) => (
+                <div key={m.metricName} className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  <div className="text-xs font-mono text-cyan-300 truncate">{m.metricName}</div>
+                  <div className="text-2xl font-bold text-white mt-1">{m.latestValue}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">{m.samples} sample(s)</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <LanguageSdkTabs
+          apiKey={project.telemetryApiKey}
+          projectSlug={project.slug}
+          isDemo={isDemo}
+        />
       </div>
     </WorkspaceShell>
   );

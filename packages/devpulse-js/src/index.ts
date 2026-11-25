@@ -119,6 +119,22 @@ export class DevPulseClient {
     });
   }
 
+  public async trackMetric(
+    metricName: string,
+    metricValue: number,
+    opts?: { properties?: Record<string, unknown>; sourceType?: "web" | "app" | "desktop" | "cli"; os?: string }
+  ): Promise<boolean> {
+    return this.sendOrQueue(`${this.config.endpoint}/api/v1/analytics`, {
+      project: this.config.apiKey,
+      metricName,
+      metricValue,
+      properties: opts?.properties || null,
+      sourceType: opts?.sourceType || (typeof window !== "undefined" ? "web" : "app"),
+      os: opts?.os || this.detectOs(),
+      appVersion: this.config.release || null,
+    });
+  }
+
   public async captureException(
     error: unknown,
     extra?: { errorName?: string; extraMessage?: string; terminalLogs?: string }

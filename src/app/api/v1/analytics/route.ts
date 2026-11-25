@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { projects, pageviews } from "@/db/schema";
+import { projects, pageviews, dailyMetrics } from "@/db/schema";
 import { eq, or } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -88,22 +88,60 @@ export async function POST(req: NextRequest) {
 
     const hitId = `pv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
+    // Support numeric custom event metrics: trackMetric("active_jobs", 42)
+    const rawMetricName = body.metricName || body.metric_name;
+    const rawMetricValue = body.metricValue ?? body.metric_value;
+    const hasCustomMetric =
+      typeof rawMetricName === "string" &&
+      rawMetricName.trim().length > 0 &&
+      typeof rawMetricValue === "number" &&
+      Number.isFinite(rawMetricValue);
+
+    const finalEventName = hasCustomMetric
+      ? `metric:${rawMetricName.trim().slice(0, 56)}`
+      : eventName;
+    const finalPath = hasCustomMetric ? String(rawMetricValue) : path;
+
     await db.insert(pageviews).values({
       id: hitId,
       projectId: project.id,
-      path,
+      path: finalPath,
       referrer,
       country,
       device,
       browser,
       sourceType,
-      eventName,
+      eventName: finalEventName,
       os,
       appVersion,
     });
 
+    if (hasCustomMetric) {
+      const metricId = `dm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      await db.insert(dailyMetrics).values({
+        id: metricId,
+        projectId: project.id,
+        source: "web",
+        metricType: "pageviews",
+        date: new Date().toISOString().slice(0, 10),
+        value: Math.round(rawMetricValue),
+        metadataJson: JSON.stringify({
+          kind: "custom_metric",
+          metricName: rawMetricName.trim().slice(0, 64),
+          metricValue: rawMetricValue,
+          properties: body.properties || null,
+          sourceType,
+          os,
+        }),
+      });
+    }
+
     return NextResponse.json(
-      { success: true, hitId },
+      {
+        success: true,
+        hitId,
+        ...(hasCustomMetric ? { metricName: rawMetricName.trim(), metricValue: rawMetricValue } : {}),
+      },
       {
         status: 201,
         headers: {

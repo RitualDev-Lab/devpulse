@@ -11,6 +11,7 @@ import { parseMultipleConnectorInputs } from "@/lib/integrations/url-parser";
 import { normalizeStackPreset, STACK_PRESETS } from "@/lib/dashboard/presets";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { isValidPublicMonitorUrl, runMonitorCheck } from "@/lib/monitors/checker";
+import { fetchNpmOrgPackages } from "@/lib/integrations/npm";
 
 export const dynamic = "force-dynamic";
 
@@ -163,6 +164,34 @@ export async function POST(req: NextRequest) {
         else if (!t.startsWith("••")) updateFields.githubTokenEncrypted = await encryptSecret(t);
       }
 
+      if (typeof body.dockerToken === "string") {
+        const t = body.dockerToken.trim();
+        if (t && !t.startsWith("••")) {
+          const encDocker = await encryptSecret(t);
+          await db.insert(projectConnectors).values({
+            id: `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+            projectId,
+            category: "package",
+            provider: "docker",
+            label: "Docker Hub PAT",
+            identifier: updateFields.dockerImage || access.project.dockerImage || null,
+            credentialsEncrypted: encDocker,
+          });
+          detectedSummary.push("Docker Hub PAT (Encrypted)");
+        }
+      }
+
+      if (body.npmOrg) {
+        const orgPkgs = await fetchNpmOrgPackages(
+          String(body.npmOrg),
+          typeof body.npmToken === "string" && !body.npmToken.startsWith("••") ? body.npmToken : null
+        );
+        if (orgPkgs.length > 0 && !updateFields.npmPackage && !access.project.npmPackage) {
+          updateFields.npmPackage = orgPkgs[0];
+          detectedSummary.push(`npm org discovered ${orgPkgs.length} package(s)`);
+        }
+      }
+
       if (body.stackPreset) {
         const presetId = normalizeStackPreset(String(body.stackPreset));
         updateFields.stackPreset = presetId;
@@ -260,6 +289,41 @@ export async function POST(req: NextRequest) {
               metadata.totalRevenueCents = json.items.reduce((acc: number, o: any) => acc + Number(o.amount || 0), 0);
               metadata.currency = "USD";
             }
+          }
+        } else if (provider === "paddle") {
+          const res = await fetch("https://api.paddle.com/transactions?per_page=25", {
+            headers: { Authorization: `Bearer ${rawSecret}` },
+          }).catch(() => null);
+          if (res?.ok) {
+            const json = await res.json();
+            const rows = Array.isArray(json.data) ? json.data : [];
+            metadata.totalSales = rows.length;
+            metadata.totalRevenueCents = rows.reduce((acc: number, r: any) => acc + Number(r.details?.totals?.total || 0), 0);
+            metadata.currency = rows[0]?.currency_code || "USD";
+          }
+        } else if (provider === "razorpay") {
+          const authHeader = rawSecret.includes(":")
+            ? `Basic ${Buffer.from(rawSecret).toString("base64")}`
+            : `Bearer ${rawSecret}`;
+          const res = await fetch("https://api.razorpay.com/v1/payments?count=25", {
+            headers: { Authorization: authHeader },
+          }).catch(() => null);
+          if (res?.ok) {
+            const json = await res.json();
+            const items = Array.isArray(json.items) ? json.items : [];
+            metadata.totalSales = items.length;
+            metadata.totalRevenueCents = items.reduce((acc: number, p: any) => acc + (p.status === "captured" ? Number(p.amount || 0) : 0), 0);
+            metadata.currency = items[0]?.currency || "INR";
+          }
+        } else if (provider === "custom" && targetUrl) {
+          const headers: Record<string, string> = { Accept: "application/json" };
+          if (rawSecret) headers.Authorization = `Bearer ${rawSecret}`;
+          const res = await fetch(targetUrl, { headers }).catch(() => null);
+          if (res?.ok) {
+            const json = await res.json();
+            metadata.totalRevenueCents = Math.round((Number(json.mrr ?? json.totalRevenue ?? 0) || 0) * 100);
+            metadata.totalSales = Number(json.payingCustomers ?? json.activeSubscriptions ?? 0) || 0;
+            metadata.currency = String(json.currency || "USD").toUpperCase();
           }
         }
       }

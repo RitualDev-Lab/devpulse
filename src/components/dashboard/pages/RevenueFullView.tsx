@@ -9,7 +9,16 @@ import {
   ExternalLink,
   CheckCircle2,
   DollarSign,
+  TrendingUp,
 } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { RevenueStatsCard } from "../widgets/RevenueStatsCard";
@@ -113,6 +122,45 @@ export function RevenueFullView({ workspace }: { workspace: LoadedWorkspaceReady
             <span>Manage DevPulse Plan ({storageTier.toUpperCase()}) &amp; Sync</span>
           </button>
         </div>
+
+        {/* Built-in + Combined Multi-Provider MRR Chart & Breakdown */}
+        {initialData.revenueStats && (
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span>Combined Multi-Provider MRR &amp; Revenue Trend</span>
+                </h2>
+                <p className="text-xs text-zinc-400">
+                  Unified daily revenue across all active payment connectors ({initialData.revenueStats.providerBreakdown?.length || 1} source(s))
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(initialData.revenueStats.providerBreakdown || []).map((b, idx) => (
+                  <span
+                    key={`${b.provider}-${idx}`}
+                    className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-200"
+                  >
+                    {b.label}: ${b.mrr.toLocaleString()} MRR
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={initialData.revenueStats.history || []}>
+                  <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
+                  />
+                  <Area type="monotone" dataKey="amount" name="Revenue" stroke="#10b981" fill="#10b98125" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {/* Built-in Stripe / Dodo / GitHub Sponsors Overview */}
         <RevenueStatsCard stats={initialData.revenueStats || null} projectId={project.id} />
