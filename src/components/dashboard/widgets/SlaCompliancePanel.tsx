@@ -18,12 +18,12 @@ interface SlaMonitorRow {
   url: string;
   slaTargetPercent: string;
   slaTargetBp: number;
-  actualUptimePercent: string;
-  actualUptimeBp: number;
-  compliant: boolean;
-  p95LatencyMs: number;
+  actualUptimePercent: string | null;
+  actualUptimeBp: number | null;
+  compliant: boolean | null;
+  p95LatencyMs: number | null;
   downtimeMinutes: number;
-  errorBudgetRemainingMinutes: number;
+  errorBudgetRemainingMinutes: number | null;
 }
 
 interface IncidentItem {
@@ -58,9 +58,9 @@ export function SlaCompliancePanel({
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [report, setReport] = useState<{
-    overallUptimePercent: string;
+    overallUptimePercent: string | null;
     overallTargetPercent: string;
-    overallCompliant: boolean;
+    overallCompliant: boolean | null;
     totalDowntimeMinutes: number;
     monitors: SlaMonitorRow[];
   } | null>(null);
@@ -235,7 +235,7 @@ export function SlaCompliancePanel({
               <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800">
                 <div className="text-[11px] text-zinc-500">Monthly Availability</div>
                 <div className="text-lg font-extrabold text-white font-mono">
-                  {report.overallUptimePercent}%
+                  {report.overallUptimePercent === null ? "No data" : `${report.overallUptimePercent}%`}
                 </div>
               </div>
               <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800">
@@ -253,7 +253,11 @@ export function SlaCompliancePanel({
               <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800">
                 <div className="text-[11px] text-zinc-500">SLA Status</div>
                 <div className="mt-1">
-                  {report.overallCompliant ? (
+                  {report.overallCompliant === null ? (
+                    <span className="inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-zinc-500/15 text-zinc-300 border border-zinc-500/30">
+                      NO DATA
+                    </span>
+                  ) : report.overallCompliant ? (
                     <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       COMPLIANT
@@ -301,26 +305,32 @@ export function SlaCompliancePanel({
                           </select>
                         </td>
                         <td className="py-2.5 px-3 font-mono font-bold text-white">
-                          {m.actualUptimePercent}%
+                          {m.actualUptimePercent === null ? "No data" : `${m.actualUptimePercent}%`}
                         </td>
                         <td
                           className={`py-2.5 px-3 font-mono ${
-                            m.errorBudgetRemainingMinutes >= 0
+                            m.errorBudgetRemainingMinutes === null
+                              ? "text-zinc-400"
+                              : m.errorBudgetRemainingMinutes >= 0
                               ? "text-emerald-300"
                               : "text-red-300"
                           }`}
                         >
-                          {m.errorBudgetRemainingMinutes} min
+                          {m.errorBudgetRemainingMinutes === null
+                            ? "No data"
+                            : `${m.errorBudgetRemainingMinutes} min`}
                         </td>
                         <td className="py-2.5 px-3">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              m.compliant
+                              m.compliant === null
+                                ? "bg-zinc-500/15 text-zinc-300"
+                                : m.compliant
                                 ? "bg-emerald-500/15 text-emerald-300"
                                 : "bg-red-500/15 text-red-300"
                             }`}
                           >
-                            {m.compliant ? "PASS" : "BREACH"}
+                            {m.compliant === null ? "NO DATA" : m.compliant ? "PASS" : "BREACH"}
                           </span>
                         </td>
                       </tr>

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { projects, uptimeChecks, uptimeIncidents, uptimeMonitors } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
-import { computeMonthlySlaReport, renderSlaReportHtml } from "@/lib/monitors/sla";
+import { computeMonthlySlaReport, monthBounds, renderSlaReportHtml } from "@/lib/monitors/sla";
 import { isPublicDemoProject } from "@/lib/security/demo-project";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,11 @@ export async function GET(req: NextRequest) {
 
     if (!projectId) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+    }
+
+    const bounds = monthBounds(month);
+    if (!bounds) {
+      return NextResponse.json({ error: "month must be YYYY-MM" }, { status: 400 });
     }
 
     let proj: typeof projects.$inferSelect | null = null;
@@ -46,15 +51,25 @@ export async function GET(req: NextRequest) {
       db
         .select()
         .from(uptimeChecks)
-        .where(eq(uptimeChecks.projectId, proj.id))
-        .orderBy(desc(uptimeChecks.checkedAt))
-        .limit(1500),
+        .where(
+          and(
+            eq(uptimeChecks.projectId, proj.id),
+            gte(uptimeChecks.checkedAt, bounds.start),
+            lt(uptimeChecks.checkedAt, bounds.end)
+          )
+        )
+        .orderBy(desc(uptimeChecks.checkedAt)),
       db
         .select()
         .from(uptimeIncidents)
-        .where(eq(uptimeIncidents.projectId, proj.id))
-        .orderBy(desc(uptimeIncidents.startedAt))
-        .limit(100),
+        .where(
+          and(
+            eq(uptimeIncidents.projectId, proj.id),
+            gte(uptimeIncidents.startedAt, bounds.start),
+            lt(uptimeIncidents.startedAt, bounds.end)
+          )
+        )
+        .orderBy(desc(uptimeIncidents.startedAt)),
     ]);
 
     const report = computeMonthlySlaReport({

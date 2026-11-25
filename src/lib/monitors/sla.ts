@@ -10,24 +10,27 @@ export interface MonitorSlaSummary {
   url: string;
   slaTargetPercent: string;
   slaTargetBp: number;
-  actualUptimePercent: string;
-  actualUptimeBp: number;
-  compliant: boolean;
+  actualUptimePercent: string | null;
+  actualUptimeBp: number | null;
+  /** null when the month has no probe results or incidents for this monitor. */
+  compliant: boolean | null;
   totalChecks: number;
   downChecks: number;
   degradedChecks: number;
-  p95LatencyMs: number;
+  p95LatencyMs: number | null;
   downtimeMinutes: number;
-  errorBudgetRemainingMinutes: number;
+  errorBudgetRemainingMinutes: number | null;
 }
 
 export interface MonthlySlaReport {
   month: string;
   projectName: string;
   projectSlug: string;
-  overallUptimePercent: string;
+  overallUptimePercent: string | null;
   overallTargetPercent: string;
-  overallCompliant: boolean;
+  overallCompliant: boolean | null;
+  /** Monitors with no measurements this month; excluded from the overall uptime average. */
+  monitorsWithoutData: number;
   totalDowntimeMinutes: number;
   monitors: MonitorSlaSummary[];
   incidents: IncidentRow[];
@@ -56,6 +59,27 @@ function computeP95(values: number[]): number {
   return Math.round(valid[Math.max(0, Math.ceil(0.95 * valid.length) - 1)]);
 }
 
+/** Inclusive start and exclusive end of a YYYY-MM month, as YYYY-MM-DD strings. null when malformed. */
+export function monthBounds(month: string): { start: string; end: string } | null {
+  const match = /^([0-9]{4})-(0[1-9]|1[0-2])$/.exec(month);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const monthNum = Number(match[2]);
+  const nextYear = monthNum === 12 ? year + 1 : year;
+  const nextMonth = monthNum === 12 ? 1 : monthNum + 1;
+  return {
+    start: `${month}-01`,
+    end: `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`,
+  };
+}
+
+/** Real length of a calendar month in minutes (28-31 days). */
+function minutesInCalendarMonth(month: string): number {
+  const [year, monthNum] = month.split("-").map(Number);
+  // Day 0 of the following month is the last day of this month.
+  return new Date(Date.UTC(year, monthNum, 0)).getUTCDate() * 24 * 60;
+}
+
 /**
  * Computes monthly SLA compliance metrics, error budget remaining, and incident downtime.
  */
@@ -68,42 +92,59 @@ export function computeMonthlySlaReport(params: {
   incidents: IncidentRow[];
 }): MonthlySlaReport {
   const { projectName, projectSlug, month, monitors, checks, incidents } = params;
-  const minutesInMonth = 30 * 24 * 60; // 43,200 standard SLA month
+  const minutesInPeriod = minutesInCalendarMonth(month);
 
   const monthChecks = checks.filter((c) => c.checkedAt.startsWith(month));
-  const monthIncidents = incidents.filter((inc) => inc.startedAt.startsWith(month));
+  const monthIncidents = incidents.filter((i) => i.startedAt.startsWith(month));
 
   const monitorSummaries: MonitorSlaSummary[] = monitors.map((mon) => {
+    const slaTargetBp = mon.slaTargetBp || 9990;
     const monChecks = monthChecks.filter((c) => c.monitorId === mon.id);
+    const monIncidents = monthIncidents.filter((i) => i.monitorId === mon.id);
     const totalChecks = monChecks.length;
+
+    // Nothing was measured for this monitor in this month: report no data, not 100%.
+    if (totalChecks === 0 && monIncidents.length === 0) {
+      return {
+        monitorId: mon.id,
+        name: mon.name,
+        url: mon.url,
+        slaTargetPercent: (slaTargetBp / 100).toFixed(2),
+        slaTargetBp,
+        actualUptimePercent: null,
+        actualUptimeBp: null,
+        compliant: null,
+        totalChecks: 0,
+        downChecks: 0,
+        degradedChecks: 0,
+        p95LatencyMs: null,
+        downtimeMinutes: 0,
+        errorBudgetRemainingMinutes: null,
+      };
+    }
+
     const downChecks = monChecks.filter((c) => c.status === "down").length;
     const degradedChecks = monChecks.filter((c) => c.status === "degraded").length;
 
-    // Combine check ratio and recorded incident duration
-    const monIncidents = monthIncidents.filter((inc) => inc.monitorId === mon.id);
-    const recordedDowntime = monIncidents.reduce(
-      (sum, inc) => sum + Math.max(0, inc.durationMinutes || 0),
-      0
-    );
+    const recordedDowntime = monIncidents
+      .filter((i) => i.durationMinutes)
+      .reduce((s, i) => s + Math.max(0, i.durationMinutes || 0), 0);
 
+    // Probe-based uptime is only defined when probes ran; incidents alone still bound it.
     const checkUptimeBp =
-      totalChecks > 0
-        ? Math.round(((totalChecks - downChecks) / totalChecks) * 10000)
-        : mon.uptimeBasisPoints ?? 10000;
+      totalChecks > 0 ? Math.round(((totalChecks - downChecks) / totalChecks) * 10000) : 10000;
 
     const estimatedDowntimeFromChecks =
-      totalChecks > 0 ? Math.round((downChecks / totalChecks) * minutesInMonth) : 0;
+      totalChecks > 0 ? Math.round((downChecks / totalChecks) * minutesInPeriod) : 0;
     const downtimeMinutes = Math.max(recordedDowntime, estimatedDowntimeFromChecks);
 
-    // If explicit downtime incidents occurred without probe failures, adjust SLA basis points
     const incidentAdjustedBp = Math.max(
       0,
-      Math.round(((minutesInMonth - downtimeMinutes) / minutesInMonth) * 10000)
+      Math.round(((minutesInPeriod - downtimeMinutes) / minutesInPeriod) * 10000)
     );
     const actualUptimeBp = Math.min(checkUptimeBp, incidentAdjustedBp);
 
-    const slaTargetBp = mon.slaTargetBp || 9990;
-    const allowedDowntime = ((10000 - slaTargetBp) / 10000) * minutesInMonth;
+    const allowedDowntime = ((10000 - slaTargetBp) / 10000) * minutesInPeriod;
     const errorBudgetRemainingMinutes = Math.round((allowedDowntime - downtimeMinutes) * 10) / 10;
 
     return {
@@ -118,27 +159,25 @@ export function computeMonthlySlaReport(params: {
       totalChecks,
       downChecks,
       degradedChecks,
-      p95LatencyMs:
-        monChecks.length > 0 ? computeP95(monChecks.map((c) => c.latencyMs)) : mon.p95LatencyMs,
+      p95LatencyMs: totalChecks > 0 ? computeP95(monChecks.map((c) => c.latencyMs)) : null,
       downtimeMinutes,
       errorBudgetRemainingMinutes,
     };
   });
 
+  const measured = monitorSummaries.filter((m) => m.actualUptimeBp !== null);
   const avgActualBp =
-    monitorSummaries.length > 0
+    measured.length > 0
       ? Math.round(
-          monitorSummaries.reduce((s, m) => s + m.actualUptimeBp, 0) / monitorSummaries.length
+          measured.reduce((s, m) => s + (m.actualUptimeBp as number), 0) / measured.length
         )
-      : 10000;
+      : null;
   const strictTargetBp =
     monitorSummaries.length > 0
       ? Math.max(...monitorSummaries.map((m) => m.slaTargetBp))
       : 9990;
 
-  const projectOnlyDowntime = monthIncidents
-    .filter((i) => !i.monitorId)
-    .reduce((s, i) => s + Math.max(0, i.durationMinutes || 0), 0);
+  const projectOnlyDowntime = projectLevelDowntime(monthIncidents);
   const totalDowntimeMinutes =
     monitorSummaries.reduce((s, m) => s + m.downtimeMinutes, 0) + projectOnlyDowntime;
 
@@ -146,21 +185,33 @@ export function computeMonthlySlaReport(params: {
     month,
     projectName,
     projectSlug,
-    overallUptimePercent: (avgActualBp / 100).toFixed(2),
+    overallUptimePercent: avgActualBp === null ? null : (avgActualBp / 100).toFixed(2),
     overallTargetPercent: (strictTargetBp / 100).toFixed(2),
     overallCompliant:
-      monitorSummaries.every((m) => m.compliant) && avgActualBp >= strictTargetBp,
+      avgActualBp === null
+        ? null
+        : measured.every((m) => m.compliant === true) && avgActualBp >= strictTargetBp,
+    monitorsWithoutData: monitorSummaries.length - measured.length,
     totalDowntimeMinutes,
     monitors: monitorSummaries,
     incidents: monthIncidents,
   };
 }
 
+/** Downtime from incidents not tied to a monitor (project-level outages). */
+function projectLevelDowntime(incidents: IncidentRow[]): number {
+  return incidents
+    .filter((i) => !i.monitorId)
+    .reduce((s, i) => s + Math.max(0, i.durationMinutes || 0), 0);
+}
+
 /**
  * Generates printable Monthly SLA Compliance PDF Report HTML.
  */
 export function renderSlaReportHtml(report: MonthlySlaReport): string {
-  const statusBadge = report.overallCompliant
+  const statusBadge = report.overallCompliant === null
+    ? `<span style="background:#27272a;color:#a1a1aa;padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;">NO DATA</span>`
+    : report.overallCompliant
     ? `<span style="background:#064e3b;color:#6ee7b7;padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;">SLA COMPLIANT</span>`
     : `<span style="background:#7f1d1d;color:#fca5a5;padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;">SLA BREACHED</span>`;
 
@@ -170,10 +221,10 @@ export function renderSlaReportHtml(report: MonthlySlaReport): string {
       <tr>
         <td style="padding:10px;border-bottom:1px solid #e4e4e7;"><strong>${escapeHtml(m.name)}</strong><br/><span style="color:#71717a;font-size:11px;">${escapeHtml(m.url)}</span></td>
         <td style="padding:10px;border-bottom:1px solid #e4e4e7;font-family:monospace;">${m.slaTargetPercent}%</td>
-        <td style="padding:10px;border-bottom:1px solid #e4e4e7;font-family:monospace;font-weight:700;color:${m.compliant ? "#047857" : "#dc2626"};">${m.actualUptimePercent}%</td>
-        <td style="padding:10px;border-bottom:1px solid #e4e4e7;font-family:monospace;">${m.p95LatencyMs} ms</td>
+        <td style="padding:10px;border-bottom:1px solid #e4e4e7;font-family:monospace;font-weight:700;color:${m.compliant === null ? "#71717a" : m.compliant ? "#047857" : "#dc2626"};">${m.actualUptimePercent === null ? "No data" : m.actualUptimePercent + "%"}</td>
+        <td style="padding:10px;border-bottom:1px solid #e4e4e7;font-family:monospace;">${m.p95LatencyMs === null ? "No data" : m.p95LatencyMs + " ms"}</td>
         <td style="padding:10px;border-bottom:1px solid #e4e4e7;font-family:monospace;">${m.downtimeMinutes} min</td>
-        <td style="padding:10px;border-bottom:1px solid #e4e4e7;font-family:monospace;color:${m.errorBudgetRemainingMinutes >= 0 ? "#047857" : "#dc2626"};">${m.errorBudgetRemainingMinutes} min</td>
+        <td style="padding:10px;border-bottom:1px solid #e4e4e7;font-family:monospace;color:${m.errorBudgetRemainingMinutes === null ? "#71717a" : m.errorBudgetRemainingMinutes >= 0 ? "#047857" : "#dc2626"};">${m.errorBudgetRemainingMinutes === null ? "No data" : m.errorBudgetRemainingMinutes + " min"}</td>
       </tr>`
     )
     .join("");
@@ -221,7 +272,7 @@ export function renderSlaReportHtml(report: MonthlySlaReport): string {
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
-    <div style="border:1px solid #e4e4e7;border-radius:10px;padding:12px;"><div style="font-size:11px;color:#71717a;">Actual Uptime</div><div style="font-size:22px;font-weight:800;">${report.overallUptimePercent}%</div></div>
+    <div style="border:1px solid #e4e4e7;border-radius:10px;padding:12px;"><div style="font-size:11px;color:#71717a;">Actual Uptime</div><div style="font-size:22px;font-weight:800;">${report.overallUptimePercent === null ? "No data" : report.overallUptimePercent + "%"}</div></div>
     <div style="border:1px solid #e4e4e7;border-radius:10px;padding:12px;"><div style="font-size:11px;color:#71717a;">Target SLA</div><div style="font-size:22px;font-weight:800;">${report.overallTargetPercent}%</div></div>
     <div style="border:1px solid #e4e4e7;border-radius:10px;padding:12px;"><div style="font-size:11px;color:#71717a;">Total Downtime</div><div style="font-size:22px;font-weight:800;">${report.totalDowntimeMinutes}m</div></div>
     <div style="border:1px solid #e4e4e7;border-radius:10px;padding:12px;"><div style="font-size:11px;color:#71717a;">Recorded Incidents</div><div style="font-size:22px;font-weight:800;">${report.incidents.length}</div></div>
