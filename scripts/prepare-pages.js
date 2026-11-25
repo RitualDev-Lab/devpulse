@@ -9,6 +9,19 @@ if (!fs.existsSync(openNextDir)) {
   process.exit(1);
 }
 
+// 0. Guard against any remaining cookie@1.x default.parse() calls in OpenNext bundles
+for (const rel of ['middleware/handler.mjs', 'server-functions/default/handler.mjs', 'server-functions/default/index.mjs']) {
+  const bundlePath = path.join(openNextDir, rel);
+  if (fs.existsSync(bundlePath)) {
+    const orig = fs.readFileSync(bundlePath, 'utf-8');
+    const fixed = orig.replace(/import_cookie\.default\.parse\(/g, '(import_cookie.parse || import_cookie.default?.parse)(');
+    if (fixed !== orig) {
+      fs.writeFileSync(bundlePath, fixed, 'utf-8');
+      console.log(`Patched import_cookie.default.parse in ${rel}`);
+    }
+  }
+}
+
 // 1. Create a Pages-compatible _worker.js that checks env.ASSETS first
 const workerContent = `// @ts-expect-error
 import { handleCdnCgiImageRequest, handleImageRequest, isCdnCgiImageRequest } from "./cloudflare/images.js";
