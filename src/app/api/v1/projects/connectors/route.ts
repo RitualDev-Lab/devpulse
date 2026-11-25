@@ -19,6 +19,7 @@ import { validatePublicUrl } from "@/lib/security/ssrf";
 import { fetchExternalAnalyticsSnapshot } from "@/lib/integrations/ga4";
 import { isPublicDemoProject } from "@/lib/security/demo-project";
 import { apiError } from "@/lib/security/api-error";
+import { summarizeRevenue } from "@/lib/revenue/connector-totals";
 
 export const dynamic = "force-dynamic";
 
@@ -373,8 +374,7 @@ export async function POST(req: NextRequest) {
             const json = await res.json();
             if (Array.isArray(json.items)) {
               metadata.totalSales = json.items.length;
-              metadata.totalRevenueCents = json.items.reduce((acc: number, o: any) => acc + Number(o.amount || 0), 0);
-              metadata.currency = "USD";
+              Object.assign(metadata, summarizeRevenue(json.items.map((o: any) => ({ amountMinor: Number(o.amount || 0), currency: o.currency })), "USD"));
             }
           }
         } else if (provider === "paddle") {
@@ -385,8 +385,7 @@ export async function POST(req: NextRequest) {
             const json = await res.json();
             const rows = Array.isArray(json.data) ? json.data : [];
             metadata.totalSales = rows.length;
-            metadata.totalRevenueCents = rows.reduce((acc: number, r: any) => acc + Number(r.details?.totals?.total || 0), 0);
-            metadata.currency = rows[0]?.currency_code || "USD";
+            Object.assign(metadata, summarizeRevenue(rows.map((r: any) => ({ amountMinor: Number(r.details?.totals?.total || 0), currency: r.currency_code })), "USD"));
           }
         } else if (provider === "razorpay") {
           const authHeader = rawSecret.includes(":")
@@ -399,8 +398,7 @@ export async function POST(req: NextRequest) {
             const json = await res.json();
             const items = Array.isArray(json.items) ? json.items : [];
             metadata.totalSales = items.length;
-            metadata.totalRevenueCents = items.reduce((acc: number, p: any) => acc + (p.status === "captured" ? Number(p.amount || 0) : 0), 0);
-            metadata.currency = items[0]?.currency || "INR";
+            Object.assign(metadata, summarizeRevenue(items.filter((p: any) => p.status === "captured").map((p: any) => ({ amountMinor: Number(p.amount || 0), currency: p.currency })), "INR"));
           }
         } else if (provider === "custom" && targetUrl) {
           const headers: Record<string, string> = { Accept: "application/json" };

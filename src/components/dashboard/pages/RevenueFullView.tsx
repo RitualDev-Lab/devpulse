@@ -289,7 +289,7 @@ export function RevenueFullView({ workspace }: { workspace: LoadedWorkspaceReady
                         Sales: <strong className="text-white">{meta.totalSales ?? 0}</strong>
                       </span>
                       <span className="font-mono font-bold text-emerald-300">
-                        {((meta.totalRevenueCents || 0) / 100).toLocaleString()} {meta.currency || "USD"}
+                        {meta.totalRevenueCents == null ? "Mixed currencies (total not shown)" : `${(meta.totalRevenueCents / 100).toLocaleString()} ${meta.currency || "USD"}`}
                       </span>
                     </div>
                   ) : (
