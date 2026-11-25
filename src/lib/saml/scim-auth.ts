@@ -4,6 +4,7 @@ import { scimTokens, organizations, organizationMembers, users } from "@/db/sche
 import { eq } from "drizzle-orm";
 import { hashApiKey } from "@/lib/security/api-keys";
 import type { OrgRole } from "@/lib/security/rbac";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const SCIM_CONTENT_TYPE = "application/scim+json; charset=utf-8";
 
@@ -15,14 +16,12 @@ export interface ScimAuthContext {
   baseUrl: string;
 }
 
-export function resolveScimBaseUrl(req: NextRequest): string {
-  const fwdHost = req.headers.get("x-forwarded-host");
-  const fwdProto = req.headers.get("x-forwarded-proto") || "https";
-  const origin =
-    fwdHost && process.env.NODE_ENV !== "development"
-      ? `${fwdProto}://${fwdHost}`
-      : req.nextUrl.origin;
-  return `${origin}/api/scim/v2`;
+/**
+ * SCIM resource URLs (meta.location, service provider config) use the configured public origin.
+ * Request host headers are not trusted: a client could otherwise change the URLs returned to the IdP.
+ */
+export function resolveScimBaseUrl(): string {
+  return `${PUBLIC_APP_URL}/api/scim/v2`;
 }
 
 export function scimJson(body: unknown, status = 200): NextResponse {
@@ -107,7 +106,7 @@ export async function authenticateScimRequest(
       organizationId: org.id,
       orgOwnerUserId: org.ownerUserId,
       orgName: org.name,
-      baseUrl: resolveScimBaseUrl(req),
+      baseUrl: resolveScimBaseUrl(),
     },
   };
 }
