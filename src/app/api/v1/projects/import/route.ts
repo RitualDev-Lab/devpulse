@@ -6,6 +6,7 @@ import { projects, dashboardWidgets } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
+import { normalizeStackPreset, STACK_PRESETS } from "@/lib/dashboard/presets";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
 import { recordAuditEvent } from "@/lib/security/audit";
@@ -22,7 +23,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { repo } = body;
+    const { repo, stackPreset: rawPreset } = body;
+    const stackPreset = normalizeStackPreset(rawPreset);
 
     if (!repo || typeof repo !== "string" || !repo.trim()) {
       return NextResponse.json(
@@ -133,6 +135,7 @@ export async function POST(request: Request) {
       dockerImage: scanned.detectedEcosystems.dockerImage || null,
       vscodeExtension: scanned.detectedEcosystems.vscodeExtension || null,
       mcpServerName: scanned.detectedEcosystems.mcpServerName || null,
+      stackPreset,
       telemetryApiKey,
       isPublic: true,
       theme: "dark",
@@ -156,20 +159,25 @@ export async function POST(request: Request) {
       metadata: { githubRepo: scanned.githubRepo, slug },
     });
 
-    // 5. Seed initial 2D 12-column widgets for drag-and-drop grid
-    const initialDefs = [
+    // 5. Seed initial 2D 12-column widgets combining Role-Aware Preset + detected ecosystems
+    const presetDefs = STACK_PRESETS[stackPreset].recommendedWidgets;
+    const initialDefsMap = new Map<string, { id: string; title: string; defaultW: number; defaultH: number }>();
+    const ecosystemDefs = [
       { id: "github_stats", title: "GitHub Repository", defaultW: 4, defaultH: 1 },
       ...(scanned.detectedEcosystems.npmPackage ? [{ id: "npm_downloads", title: "npm Registry", defaultW: 4, defaultH: 1 }] : []),
       ...(scanned.detectedEcosystems.pypiPackage ? [{ id: "pypi_downloads", title: "PyPI Package", defaultW: 4, defaultH: 1 }] : []),
       ...(scanned.detectedEcosystems.rustCrate ? [{ id: "rust_crates", title: "Rust Crates.io", defaultW: 4, defaultH: 1 }] : []),
       ...(scanned.detectedEcosystems.dockerImage ? [{ id: "docker_container", title: "Docker Hub Container", defaultW: 4, defaultH: 1 }] : []),
       ...(scanned.detectedEcosystems.vscodeExtension ? [{ id: "vscode_stats", title: "VS Code Extension", defaultW: 4, defaultH: 1 }] : []),
-      ...(scanned.detectedEcosystems.mcpServerName ? [{ id: "mcp_servers", title: "MCP Server Registry", defaultW: 4, defaultH: 1 }] : []),
-      { id: "web_analytics", title: "Cookie-Free Web Traffic", defaultW: 4, defaultH: 1 },
-      { id: "error_stream", title: "Crash & Error Stream", defaultW: 8, defaultH: 1 },
-      { id: "telemetry_setup", title: "SDK Integration", defaultW: 4, defaultH: 1 },
-      { id: "bug_report_badge", title: "Public Bug Portal", defaultW: 4, defaultH: 1 },
+      ...(scanned.detectedEcosystems.mcpServerName ? [{ id: "mcp_stats", title: "MCP Server Registry", defaultW: 4, defaultH: 1 }] : []),
     ];
+    for (const d of [...ecosystemDefs, ...presetDefs]) {
+      if (!initialDefsMap.has(d.id)) initialDefsMap.set(d.id, d);
+    }
+    if (!initialDefsMap.has("bug_report_badge")) {
+      initialDefsMap.set("bug_report_badge", { id: "bug_report_badge", title: "Public Bug Portal", defaultW: 4, defaultH: 1 });
+    }
+    const initialDefs = Array.from(initialDefsMap.values());
 
     const layoutItems = buildDefaultLayout(initialDefs);
     if (layoutItems.length > 0) {

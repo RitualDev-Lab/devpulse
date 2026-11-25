@@ -96,6 +96,9 @@ export async function initDb() {
     "ALTER TABLE projects ADD COLUMN email_api_key_encrypted TEXT;",
     "ALTER TABLE projects ADD COLUMN digest_enabled INTEGER DEFAULT 0 NOT NULL;",
     "ALTER TABLE projects ADD COLUMN last_digest_sent_at TEXT;",
+    "ALTER TABLE projects ADD COLUMN stack_preset TEXT DEFAULT 'saas' NOT NULL;",
+    "ALTER TABLE projects ADD COLUMN npm_token_encrypted TEXT;",
+    "ALTER TABLE projects ADD COLUMN github_token_encrypted TEXT;",
   ];
 
   for (const query of optionalColumns) {
@@ -350,6 +353,23 @@ export async function initDb() {
       edge_region TEXT DEFAULT 'edge' NOT NULL,
       error_message TEXT,
       checked_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS project_connectors (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      category TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      label TEXT NOT NULL,
+      target_url TEXT,
+      identifier TEXT,
+      credentials_encrypted TEXT,
+      metadata_json TEXT,
+      last_synced_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
 

@@ -57,7 +57,10 @@ export const projects = sqliteTable("projects", {
   dockerImage: text("docker_image"), // e.g. "ritualdev/devpulse"
   
   // Telemetry & Security
+  stackPreset: text("stack_preset").default("saas").notNull(), // 'saas' | 'package' | 'desktop' | 'mcp'
   telemetryApiKey: text("telemetry_api_key").unique().notNull(), // For crash reports & events
+  npmTokenEncrypted: text("npm_token_encrypted"), // Optional npm Read Token for private packages
+  githubTokenEncrypted: text("github_token_encrypted"), // Optional repo-scoped GitHub PAT
   isPublic: integer("is_public", { mode: "boolean" }).default(true).notNull(),
   customCss: text("custom_css"), // User custom CSS injection for public view
   theme: text("theme").default("dark").notNull(),
@@ -359,5 +362,25 @@ export const uptimeChecks = sqliteTable("uptime_checks", {
   edgeRegion: text("edge_region").default("edge").notNull(),
   errorMessage: text("error_message"),
   checkedAt: text("checked_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * Modular Flexible Connectors Table
+ * Allows users to attach ANY payment provider (Lemon Squeezy, Polar, Paddle, Gumroad, Stripe, Dodo, Razorpay),
+ * package registry link/token, or custom analytics/telemetry feed without schema limits.
+ */
+export const projectConnectors = sqliteTable("project_connectors", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  category: text("category", { enum: ["payment", "package", "analytics", "telemetry", "custom"] }).notNull(),
+  provider: text("provider").notNull(), // e.g. 'lemonsqueezy', 'polar', 'paddle', 'gumroad', 'stripe', 'dodo', 'npm', 'custom'
+  label: text("label").notNull(),
+  targetUrl: text("target_url"),
+  identifier: text("identifier"),
+  credentialsEncrypted: text("credentials_encrypted"),
+  metadataJson: text("metadata_json"), // cached stats / currency / latest MRR
+  lastSyncedAt: text("last_synced_at"),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

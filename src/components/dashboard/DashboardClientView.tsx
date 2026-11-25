@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { DashboardHeader } from "./DashboardHeader";
+import Link from "next/link";
+import { Sliders, Palette, RefreshCw } from "lucide-react";
+import { WorkspaceShell } from "./WorkspaceShell";
 import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
@@ -120,93 +122,123 @@ export function DashboardClientView({
     .filter(Boolean)
     .join("\n");
 
+  const overviewToolbar = (
+    <div className="flex items-center gap-1.5 text-xs">
+      <button
+        type="button"
+        onClick={() => setIsCustomizing((prev) => !prev)}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-medium border transition ${
+          isCustomizing
+            ? "bg-indigo-600 text-white border-indigo-500"
+            : "bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-800"
+        }`}
+      >
+        <Sliders className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">{isCustomizing ? "Done" : "Customize"}</span>
+      </button>
+      {isCustomizing && (
+        <button
+          type="button"
+          onClick={handleResetLayout}
+          title="Reset Grid Layout"
+          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => setIsStylingOpen(true)}
+        className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium transition"
+      >
+        <Palette className="w-3.5 h-3.5 text-purple-400" />
+        <span>Theme</span>
+      </button>
+    </div>
+  );
+
   return (
     <div
       data-theme={activeThemeId}
-      className="devpulse-shell min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-indigo-500/30 selection:text-white transition-colors duration-300"
+      className="devpulse-shell min-h-screen bg-zinc-950 text-zinc-100 transition-colors duration-300"
     >
       {/* Dynamic Preset Theme + Scoped Custom CSS injection */}
       {combinedDynamicCss && <style dangerouslySetInnerHTML={{ __html: combinedDynamicCss }} />}
 
-      {/* Top Navbar (protected outside .devpulse-workspace) */}
-      <DashboardHeader
-        currentProject={currentProjectSummary}
+      <WorkspaceShell
+        currentProject={{
+          ...currentProjectSummary,
+          stackPreset: (data.project as any).stackPreset,
+          hasNpmToken: (data.project as any).hasNpmToken,
+          hasGithubToken: (data.project as any).hasGithubToken,
+        }}
         projects={projects.length > 0 ? projects : [currentProjectSummary]}
-        isCustomizing={isCustomizing}
-        onToggleCustomizing={() => setIsCustomizing((prev) => !prev)}
-        onOpenStyling={() => setIsStylingOpen(true)}
-        onOpenAlerts={() => setIsAlertsOpen(true)}
-        onOpenIntegrations={() => setIsIntegrationsOpen(true)}
-        onOpenStorage={() => setIsStorageOpen(true)}
-        onOpenDomains={() => setIsDomainsOpen(true)}
-        onOpenBilling={() => setIsBillingOpen(true)}
-        onOpenSecurity={() => setIsSecurityOpen(true)}
-        customDomain={customDomain}
         storageTier={storageTier}
-        onResetLayout={handleResetLayout}
+        customDomain={customDomain}
         isDemo={isDemo}
-      />
-
-      {/* Scoped Workspace Canvas */}
-      <main className="devpulse-workspace flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {billingSuccessBanner && (
-          <div className="p-4 rounded-2xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between gap-2 shadow-lg">
-            <span>
-              Dodo Payments checkout completed! Your DevPulse subscription quotas and custom domain entitlements sync automatically.
-            </span>
-            <button
-              onClick={() => setBillingSuccessBanner(false)}
-              className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-        {/* Customization Alert Banner */}
-        {isCustomizing && (
-          <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/40 text-indigo-200 text-xs flex flex-wrap items-center justify-between gap-2 shadow-lg shadow-indigo-950/40">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-              <span className="font-semibold text-white">2D Grid Customization Active:</span>
-              <span>
-                Drag cards anywhere on the 12-column matrix, use corner resize handles or size pills (1x1..4x2), or hide widgets.
-              </span>
+        rightActions={overviewToolbar}
+      >
+        <div className="devpulse-workspace space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                {data.project.name} Overview
+              </h1>
+              <p className="text-xs text-zinc-400">
+                Modular 2D workspace &bull; Use the Left Sidebar for full-page GitHub PRs, Packages, Daily Users, Crashes &amp; Revenue
+              </p>
             </div>
-            <button
-              onClick={() => setIsCustomizing(false)}
-              className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
-            >
-              Done Customizing
-            </button>
+            <div className="flex items-center gap-2 text-xs">
+              <Link
+                href={isDemo ? "/dashboard/github?demo=1" : `/dashboard/github?project=${encodeURIComponent(data.project.slug)}`}
+                className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-medium transition"
+              >
+                GitHub PRs &amp; Clones &rarr;
+              </Link>
+              <Link
+                href={isDemo ? "/dashboard/revenue?demo=1" : `/dashboard/revenue?project=${encodeURIComponent(data.project.slug)}`}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-medium transition"
+              >
+                Revenue &amp; Add Payment &rarr;
+              </Link>
+            </div>
           </div>
-        )}
 
-        {/* True 2D Drag & Drop + Resizable Card Matrix */}
-        <DragDropGrid data={data} isCustomizing={isCustomizing} isDemo={isDemo} />
-      </main>
+          {billingSuccessBanner && (
+            <div className="p-4 rounded-2xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between gap-2 shadow-lg">
+              <span>
+                Dodo Payments checkout completed! Your DevPulse subscription quotas and custom domain entitlements sync automatically.
+              </span>
+              <button
+                onClick={() => setBillingSuccessBanner(false)}
+                className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
-      {/* Footer */}
-      <footer className="border-t border-zinc-900 bg-zinc-950 py-6 px-4 sm:px-6 text-center text-xs text-zinc-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-zinc-300">DevPulse</span>
-            <span>&bull;</span>
-            <span>Open Source Developer Command Center</span>
-          </div>
-          <div className="flex items-center gap-4 text-zinc-400">
-            <a
-              href="https://github.com/ritualdev-lab"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-white transition"
-            >
-              ritualdev-lab
-            </a>
-            <span>&bull;</span>
-            <span>100% Free & Open</span>
-          </div>
+          {isCustomizing && (
+            <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/40 text-indigo-200 text-xs flex flex-wrap items-center justify-between gap-2 shadow-lg shadow-indigo-950/40">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                <span className="font-semibold text-white">2D Grid Customization Active:</span>
+                <span>
+                  Drag cards anywhere on the 12-column matrix, use corner resize handles or size pills (1x1..4x2), or hide widgets.
+                </span>
+              </div>
+              <button
+                onClick={() => setIsCustomizing(false)}
+                className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition"
+              >
+                Done Customizing
+              </button>
+            </div>
+          )}
+
+          <DragDropGrid data={data} isCustomizing={isCustomizing} isDemo={isDemo} />
         </div>
-      </footer>
+      </WorkspaceShell>
 
       {/* Preset Theme Switcher & Live Scoped Custom CSS Modal */}
       <CustomCssModal

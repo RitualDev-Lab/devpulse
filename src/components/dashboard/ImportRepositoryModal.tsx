@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { STACK_PRESETS, type StackPresetId } from "@/lib/dashboard/presets";
 
 interface GitHubRepoChoice {
   id: number;
@@ -50,6 +51,7 @@ export function ImportRepositoryModal({
   const [githubUsername, setGithubUsername] = useState<string>("");
   const [hasOAuthToken, setHasOAuthToken] = useState(true);
   const [selectedOwner, setSelectedOwner] = useState<string>("all");
+  const [selectedPreset, setSelectedPreset] = useState<StackPresetId>("saas");
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isScanning, setIsScanning] = useState(false);
@@ -98,7 +100,7 @@ export function ImportRepositoryModal({
       const res = await fetch("/api/v1/projects/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo: targetRepo }),
+        body: JSON.stringify({ repo: targetRepo, stackPreset: selectedPreset }),
       });
 
       const data = await res.json();
@@ -184,6 +186,30 @@ export function ImportRepositoryModal({
               </button>
             </div>
           )}
+
+          {/* Role-Aware Stack Preset Picker */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-semibold text-zinc-400">
+              1. Pick Stack Preset (auto-configures widgets &amp; SDK snippet)
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              {Object.values(STACK_PRESETS).map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setSelectedPreset(preset.id)}
+                  className={`p-2 rounded-xl border text-left transition ${
+                    selectedPreset === preset.id
+                      ? "bg-indigo-600/20 border-indigo-500 text-white"
+                      : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="text-[11px] font-bold truncate">{preset.name.split(" ")[0]}</div>
+                  <div className="text-[10px] text-indigo-300 font-mono truncate">{preset.badge}</div>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Owner / Organization Tabs */}
           {ownerTabs.length > 0 && (

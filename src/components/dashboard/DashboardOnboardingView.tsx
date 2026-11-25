@@ -18,6 +18,7 @@ import {
 import { useRouter } from "next/navigation";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { createClient } from "@/lib/supabase/client";
+import { STACK_PRESETS, type StackPresetId } from "@/lib/dashboard/presets";
 
 interface GitHubRepoChoice {
   id: number;
@@ -52,6 +53,7 @@ export function DashboardOnboardingView({ user }: DashboardOnboardingViewProps) 
   const [orgs, setOrgs] = useState<GitHubOrgSummary[]>([]);
   const [hasOAuthToken, setHasOAuthToken] = useState(true);
   const [selectedOwner, setSelectedOwner] = useState<string>("all");
+  const [selectedPreset, setSelectedPreset] = useState<StackPresetId>("saas");
   const [loadingRepos, setLoadingRepos] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isScanning, setIsScanning] = useState(false);
@@ -94,7 +96,7 @@ export function DashboardOnboardingView({ user }: DashboardOnboardingViewProps) 
       const res = await fetch("/api/v1/projects/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo: clean }),
+        body: JSON.stringify({ repo: clean, stackPreset: selectedPreset }),
       });
 
       const data = await res.json();
@@ -225,6 +227,34 @@ export function DashboardOnboardingView({ user }: DashboardOnboardingViewProps) 
             )}
           </div>
         )}
+
+        {/* Role-Aware Preset Picker */}
+        <div className="rounded-2xl bg-zinc-900/70 border border-zinc-800 p-4 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-indigo-400" />
+              <span>Select Role-Aware Stack Preset</span>
+            </span>
+            <span className="text-[11px] text-zinc-400">Auto-sets dashboard &amp; telemetry snippet</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {Object.values(STACK_PRESETS).map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => setSelectedPreset(preset.id)}
+                className={`p-3 rounded-xl border text-left transition ${
+                  selectedPreset === preset.id
+                    ? "bg-indigo-600/20 border-indigo-500 text-white"
+                    : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                }`}
+              >
+                <div className="text-xs font-bold text-white">{preset.name}</div>
+                <div className="text-[10px] font-mono text-indigo-300 mt-0.5">{preset.badge}</div>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Personal + Organization Repository Picker */}
         <div className="rounded-2xl bg-zinc-900/80 border border-zinc-800 shadow-xl overflow-hidden">

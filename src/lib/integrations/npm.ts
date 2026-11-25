@@ -23,12 +23,26 @@ export interface NpmStats {
   description?: string;
 }
 
-export async function fetchNpmStats(packageName: string): Promise<NpmStats | null> {
+export async function fetchNpmStats(
+  packageName: string,
+  npmToken?: string | null
+): Promise<NpmStats | null> {
   try {
-    const encodedPkg = encodeURIComponent(packageName.trim());
+    const cleanName = packageName.trim();
+    const encodedPkg = cleanName.startsWith("@")
+      ? `@${encodeURIComponent(cleanName.slice(1)).replace(/%2F/i, "/")}`
+      : encodeURIComponent(cleanName);
+
+    const registryHeaders: Record<string, string> = {
+      Accept: "application/json",
+    };
+    if (npmToken) {
+      registryHeaders.Authorization = `Bearer ${npmToken}`;
+    }
 
     // 1. Fetch range for the last 30 days
     const rangeRes = await fetch(`https://api.npmjs.org/downloads/range/last-month/${encodedPkg}`, {
+      headers: registryHeaders,
       next: { revalidate: 3600 },
     }).catch(() => null);
 
@@ -49,12 +63,15 @@ export async function fetchNpmStats(packageName: string): Promise<NpmStats | nul
     // 2. Fetch point stats for last week and last day
     const [weekRes, dayRes, metaRes] = await Promise.all([
       fetch(`https://api.npmjs.org/downloads/point/last-week/${encodedPkg}`, {
+        headers: registryHeaders,
         next: { revalidate: 3600 },
       }).catch(() => null),
       fetch(`https://api.npmjs.org/downloads/point/last-day/${encodedPkg}`, {
+        headers: registryHeaders,
         next: { revalidate: 3600 },
       }).catch(() => null),
       fetch(`https://registry.npmjs.org/${encodedPkg}`, {
+        headers: registryHeaders,
         next: { revalidate: 86400 },
       }).catch(() => null),
     ]);

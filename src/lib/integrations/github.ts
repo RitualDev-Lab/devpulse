@@ -25,6 +25,29 @@ export interface GitHubRepoStats {
     publishedAt: string;
     name: string;
   };
+  trafficClones?: {
+    count: number;
+    uniques: number;
+    daily: Array<{ date: string; count: number; uniques: number }>;
+  };
+  trafficViews?: {
+    count: number;
+    uniques: number;
+    daily: Array<{ date: string; count: number; uniques: number }>;
+  };
+  pulls?: Array<{
+    id: number;
+    number: number;
+    title: string;
+    state: string;
+    draft: boolean;
+    author: string;
+    htmlUrl: string;
+    headRef: string;
+    baseRef: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
   recentIssues: Array<{
     id: number;
     number: number;
@@ -80,6 +103,7 @@ export async function fetchGitHubRepoStats(
     // 2. Fetch Open PRs & Calculate PR Review Velocity
     let openPrCount = 0;
     let prReviewVelocityHours = 0;
+    const pulls: NonNullable<GitHubRepoStats["pulls"]> = [];
     try {
       const prsRes = await fetch(
         `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=30`,
@@ -96,6 +120,21 @@ export async function fetchGitHubRepoStats(
               return acc + Math.max(0, diffMs / (1000 * 3600));
             }, 0);
             prReviewVelocityHours = Math.round((totalHours / prsData.length) * 10) / 10;
+          }
+          for (const pr of prsData.slice(0, 15)) {
+            pulls.push({
+              id: pr.id,
+              number: pr.number,
+              title: pr.title,
+              state: pr.state,
+              draft: Boolean(pr.draft),
+              author: pr.user?.login || "unknown",
+              htmlUrl: pr.html_url,
+              headRef: pr.head?.ref || "",
+              baseRef: pr.base?.ref || "",
+              createdAt: pr.created_at,
+              updatedAt: pr.updated_at,
+            });
           }
         }
       }
@@ -184,6 +223,51 @@ export async function fetchGitHubRepoStats(
       // Dependabot optional
     }
 
+    // 6. Optional Traffic (Clones & Views) when user/PAT token has push/read permissions
+    let trafficClones: GitHubRepoStats["trafficClones"];
+    let trafficViews: GitHubRepoStats["trafficViews"];
+    if (userToken) {
+      const [clonesRes, viewsRes] = await Promise.all([
+        fetch(`https://api.github.com/repos/${owner}/${repo}/traffic/clones`, {
+          headers,
+          next: { revalidate: 900 },
+        }).catch(() => null),
+        fetch(`https://api.github.com/repos/${owner}/${repo}/traffic/views`, {
+          headers,
+          next: { revalidate: 900 },
+        }).catch(() => null),
+      ]);
+
+      if (clonesRes?.ok) {
+        const c = await clonesRes.json();
+        trafficClones = {
+          count: c.count || 0,
+          uniques: c.uniques || 0,
+          daily: Array.isArray(c.clones)
+            ? c.clones.map((d: any) => ({
+                date: String(d.timestamp || "").slice(0, 10),
+                count: d.count || 0,
+                uniques: d.uniques || 0,
+              }))
+            : [],
+        };
+      }
+      if (viewsRes?.ok) {
+        const v = await viewsRes.json();
+        trafficViews = {
+          count: v.count || 0,
+          uniques: v.uniques || 0,
+          daily: Array.isArray(v.views)
+            ? v.views.map((d: any) => ({
+                date: String(d.timestamp || "").slice(0, 10),
+                count: d.count || 0,
+                uniques: d.uniques || 0,
+              }))
+            : [],
+        };
+      }
+    }
+
     const pureOpenIssues = Math.max(0, totalOpen - openPrCount);
 
     return {
@@ -203,6 +287,9 @@ export async function fetchGitHubRepoStats(
       defaultBranch: repoData.default_branch || "main",
       license: repoData.license?.spdx_id || repoData.license?.name,
       latestRelease,
+      trafficClones,
+      trafficViews,
+      pulls,
       recentIssues,
     };
   } catch (err) {
