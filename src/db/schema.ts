@@ -211,6 +211,8 @@ export const pageviews = sqliteTable("pageviews", {
   eventName: text("event_name").default("pageview").notNull(),
   os: text("os").default("Unknown").notNull(),
   appVersion: text("app_version"),
+  /** Pseudonymous, monthly-rotating visitor id (see lib/analytics/visitor.ts). Null when unidentified. */
+  visitorId: text("visitor_id"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

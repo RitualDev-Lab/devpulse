@@ -4,6 +4,7 @@ import { projects, pageviews, dailyMetrics, metricsHourly } from "@/db/schema";
 import { eq, or, sql } from "drizzle-orm";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { scrubTelemetryText, scrubTelemetryValue } from "@/lib/security/ingest-scrub";
+import { buildVisitorId } from "@/lib/analytics/visitor";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,13 @@ export async function POST(req: NextRequest) {
     const os = detectOs(userAgent, body.os);
 
     const hitId = `pv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const visitorId = await buildVisitorId({
+      secret: process.env.ANALYTICS_HASH_SECRET || "",
+      projectId: project.id,
+      ip,
+      userAgent,
+      now: new Date(),
+    });
 
     const rawMetricName = body.metricName || body.metric_name;
     const rawMetricValue = body.metricValue ?? body.metric_value;
@@ -158,6 +166,7 @@ export async function POST(req: NextRequest) {
         eventName: finalEventName,
         os,
         appVersion,
+        visitorId,
       }),
       db
         .insert(metricsHourly)

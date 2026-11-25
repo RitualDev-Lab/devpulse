@@ -91,6 +91,7 @@ export async function initDb() {
     "ALTER TABLE pageviews ADD COLUMN event_name TEXT DEFAULT 'pageview' NOT NULL;",
     "ALTER TABLE pageviews ADD COLUMN os TEXT DEFAULT 'Unknown' NOT NULL;",
     "ALTER TABLE pageviews ADD COLUMN app_version TEXT;",
+    "ALTER TABLE pageviews ADD COLUMN visitor_id TEXT;",
     "ALTER TABLE error_events ADD COLUMN breadcrumbs_json TEXT;",
     "ALTER TABLE error_events ADD COLUMN commit_sha TEXT;",
     "ALTER TABLE projects ADD COLUMN notification_email TEXT;",

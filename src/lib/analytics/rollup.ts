@@ -2,9 +2,10 @@ import { client } from "@/db";
 
 export interface AnalyticsSummarySql {
   totalPageviews: number;
-  dau: number;
-  wau: number;
-  mau: number;
+  /** Unique visitors (pseudonymous visitor ids). null when no identified hits exist yet. */
+  dau: number | null;
+  wau: number | null;
+  mau: number | null;
   uniqueReferrers: number;
   topReferrers: Array<{ referrer: string; count: number }>;
   topCountries: Array<{ country: string; count: number }>;
@@ -57,9 +58,10 @@ export async function loadAnalyticsSummarySql(
     client.execute({
       sql: `
         SELECT
-          COUNT(DISTINCT CASE WHEN substr(created_at, 1, 10) = ? THEN country || ':' || os || ':' || browser || ':' || device || ':' || source_type END) AS dau,
-          COUNT(DISTINCT CASE WHEN substr(created_at, 1, 10) >= ? THEN country || ':' || os || ':' || browser || ':' || device || ':' || source_type END) AS wau,
-          COUNT(DISTINCT CASE WHEN substr(created_at, 1, 10) >= ? THEN country || ':' || os || ':' || browser || ':' || device || ':' || source_type END) AS mau
+          COUNT(DISTINCT CASE WHEN substr(created_at, 1, 10) = ? THEN visitor_id END) AS dau,
+          COUNT(DISTINCT CASE WHEN substr(created_at, 1, 10) >= ? THEN visitor_id END) AS wau,
+          COUNT(DISTINCT CASE WHEN substr(created_at, 1, 10) >= ? THEN visitor_id END) AS mau,
+          SUM(CASE WHEN visitor_id IS NOT NULL THEN 1 ELSE 0 END) AS identified_hits
         FROM pageviews
         WHERE project_id = ? AND created_at >= ?
       `,
@@ -139,6 +141,7 @@ export async function loadAnalyticsSummarySql(
 
   const totRow = (totalsRes.rows[0] || {}) as any;
   const dwmRow = (dauWauMauRes.rows[0] || {}) as any;
+  const hasIdentified = Number(dwmRow.identified_hits || 0) > 0;
 
   const topPages = pagesRes.rows.map((r: any) => ({
     path: String(r.label || "/"),
@@ -165,9 +168,9 @@ export async function loadAnalyticsSummarySql(
 
   return {
     totalPageviews: Number(totRow.total || 0),
-    dau: Number(dwmRow.dau || 0),
-    wau: Number(dwmRow.wau || 0),
-    mau: Number(dwmRow.mau || 0),
+    dau: hasIdentified ? Number(dwmRow.dau || 0) : null,
+    wau: hasIdentified ? Number(dwmRow.wau || 0) : null,
+    mau: hasIdentified ? Number(dwmRow.mau || 0) : null,
     uniqueReferrers: Number(totRow.unique_referrers || 0),
     topReferrers: refRes.rows.map((r: any) => ({
       referrer: String(r.label || "direct"),

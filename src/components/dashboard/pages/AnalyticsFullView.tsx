@@ -54,7 +54,7 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
               <Users className="w-3.5 h-3.5 text-emerald-400" /> DAU (Today)
             </div>
             <div className="text-2xl font-bold text-white mt-1">
-              {(summary?.dau ?? 0).toLocaleString()}
+              {summary?.dau == null ? "No data" : summary.dau.toLocaleString()}
             </div>
           </div>
           <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800">
@@ -62,7 +62,7 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
               <Users className="w-3.5 h-3.5 text-cyan-400" /> WAU (7-Day)
             </div>
             <div className="text-2xl font-bold text-white mt-1">
-              {(summary?.wau ?? 0).toLocaleString()}
+              {summary?.wau == null ? "No data" : summary.wau.toLocaleString()}
             </div>
           </div>
           <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800">
@@ -70,7 +70,7 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
               <Users className="w-3.5 h-3.5 text-indigo-400" /> MAU (30-Day)
             </div>
             <div className="text-2xl font-bold text-white mt-1">
-              {(summary?.mau ?? 0).toLocaleString()}
+              {summary?.mau == null ? "No data" : summary.mau.toLocaleString()}
             </div>
           </div>
           <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800">

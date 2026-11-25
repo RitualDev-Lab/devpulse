@@ -89,9 +89,9 @@ export interface LoadedWorkspaceReady {
       go: number;
     }>;
     analyticsSummary?: DashboardData["analyticsSummary"] & {
-      dau?: number;
-      wau?: number;
-      mau?: number;
+      dau?: number | null;
+      wau?: number | null;
+      mau?: number | null;
       dailyCohorts?: Array<{ date: string; web: number; appCli: number; total: number }>;
       topPages?: Array<{ path: string; count: number }>;
       topCustomEvents?: Array<{ event: string; count: number }>;
@@ -459,9 +459,9 @@ export async function loadDashboardWorkspace(
 
   const analyticsSummary = analyticsSummarySql || {
     totalPageviews: 0,
-    dau: 0,
-    wau: 0,
-    mau: 0,
+    dau: null,
+    wau: null,
+    mau: null,
     uniqueReferrers: 0,
     topReferrers: [],
     topCountries: [],
