@@ -2,26 +2,52 @@
 
 import React, { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { LogIn, LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, User as UserIcon, KeyRound } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+
+interface SsoUserSummary {
+  id: string;
+  githubUsername: string;
+  name: string | null;
+  email: string | null;
+}
 
 export function AuthButton() {
   const [user, setUser] = useState<User | null>(null);
+  const [ssoUser, setSsoUser] = useState<SsoUserSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setLoading(false);
+    let active = true;
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!active) return;
+      if (data.user) {
+        setUser(data.user);
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch("/api/auth/saml?action=session");
+        const s = await res.json();
+        if (active && s.authenticated && s.user) {
+          setSsoUser(s.user);
+        }
+      } catch {
+        // ignore session probe failures
+      } finally {
+        if (active) setLoading(false);
+      }
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) setSsoUser(null);
       setLoading(false);
     });
 
     return () => {
+      active = false;
       authListener.subscription.unsubscribe();
     };
   }, [supabase]);
@@ -38,12 +64,39 @@ export function AuthButton() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    if (ssoUser) {
+      await fetch("/api/auth/saml", { method: "DELETE" }).catch(() => {});
+    }
     setUser(null);
+    setSsoUser(null);
+    window.location.href = "/";
   };
 
   if (loading) {
     return (
       <div className="w-20 h-8 rounded-xl bg-zinc-900 border border-zinc-800 animate-pulse" />
+    );
+  }
+
+  if (ssoUser && !user) {
+    const label = ssoUser.name || ssoUser.email || ssoUser.githubUsername;
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-zinc-900 border border-cyan-500/40 text-xs">
+          <KeyRound className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="font-semibold text-zinc-200 max-w-[140px] truncate">{label}</span>
+          <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300">
+            SSO
+          </span>
+        </div>
+        <button
+          onClick={handleSignOut}
+          title="Sign out"
+          className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-red-400 transition"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+        </button>
+      </div>
     );
   }
 

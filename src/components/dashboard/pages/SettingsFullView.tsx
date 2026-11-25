@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
   ExternalLink,
+  KeyRound,
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
@@ -24,13 +25,14 @@ import { DomainSettingsModal } from "../DomainSettingsModal";
 import { StorageSettingsModal } from "../StorageSettingsModal";
 import { CustomCssModal } from "../CustomCssModal";
 import { IntegrationsModal } from "../IntegrationsModal";
+import { SsoScimModal } from "../SsoScimModal";
 
 export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, accessRole, isDemo } = workspace;
   const project = initialData.project;
 
   const [openModal, setOpenModal] = useState<
-    "alerts" | "security" | "domains" | "storage" | "styling" | "integrations" | null
+    "alerts" | "security" | "sso" | "domains" | "storage" | "styling" | "integrations" | null
   >(null);
   const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null);
 
@@ -58,6 +60,13 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
       desc: "SHA-256 telemetry keys, Organization Owners/Maintainers & Audit Log",
       icon: Shield,
       accent: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    },
+    {
+      id: "sso" as const,
+      title: "Enterprise SSO (SAML 2.0) & SCIM",
+      desc: "Okta, Azure AD (Entra ID), Google Workspace SAML + SCIM auto-provisioning",
+      icon: KeyRound,
+      accent: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
     },
     {
       id: "domains" as const,
@@ -250,6 +259,12 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
         projectId={project.id}
         projectName={project.name}
         accessRole={accessRole}
+        isDemo={isDemo}
+      />
+
+      <SsoScimModal
+        isOpen={openModal === "sso"}
+        onClose={() => setOpenModal(null)}
         isDemo={isDemo}
       />
 

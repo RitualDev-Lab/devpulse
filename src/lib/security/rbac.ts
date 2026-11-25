@@ -84,7 +84,7 @@ export async function resolveProjectAccess(
     )
     .limit(1);
 
-  if (!membership) return null;
+  if (!membership || membership.status === "suspended") return null;
 
   // Bind pending invitation cleanly on first access
   if (!membership.userId || membership.status === "pending") {
@@ -114,6 +114,7 @@ export async function listAccessibleProjects(user: AuthenticatedUser) {
     .select({
       organizationId: organizationMembers.organizationId,
       role: organizationMembers.role,
+      status: organizationMembers.status,
     })
     .from(organizationMembers)
     .where(
@@ -130,6 +131,7 @@ export async function listAccessibleProjects(user: AuthenticatedUser) {
 
   const orgRoleMap = new Map<string, OrgRole>();
   for (const m of memberships) {
+    if (m.status === "suspended") continue;
     orgRoleMap.set(m.organizationId, m.role as OrgRole);
   }
   for (const o of ownedOrgs) {

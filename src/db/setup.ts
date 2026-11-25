@@ -99,6 +99,7 @@ export async function initDb() {
     "ALTER TABLE projects ADD COLUMN stack_preset TEXT DEFAULT 'saas' NOT NULL;",
     "ALTER TABLE projects ADD COLUMN npm_token_encrypted TEXT;",
     "ALTER TABLE projects ADD COLUMN github_token_encrypted TEXT;",
+    "ALTER TABLE organization_members ADD COLUMN scim_external_id TEXT;",
   ];
 
   for (const query of optionalColumns) {
@@ -370,6 +371,51 @@ export async function initDb() {
       last_synced_at TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS saml_config (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL,
+      idp_entity_id TEXT NOT NULL,
+      idp_sso_url TEXT NOT NULL,
+      idp_certificate TEXT NOT NULL,
+      sp_entity_id TEXT NOT NULL,
+      attribute_email TEXT DEFAULT 'email' NOT NULL,
+      attribute_name TEXT DEFAULT 'name' NOT NULL,
+      attribute_role TEXT DEFAULT 'role' NOT NULL,
+      default_role TEXT DEFAULT 'viewer' NOT NULL,
+      allowed_domains TEXT,
+      is_active INTEGER DEFAULT 0 NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS scim_tokens (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      token_prefix TEXT NOT NULL,
+      label TEXT DEFAULT 'SCIM Token' NOT NULL,
+      status TEXT DEFAULT 'active' NOT NULL,
+      last_used_at TEXT,
+      revoked_at TEXT,
+      created_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS saml_sessions (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      redirect_to TEXT DEFAULT '/dashboard' NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
 

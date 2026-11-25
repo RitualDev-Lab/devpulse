@@ -1,7 +1,8 @@
 import { createClient } from "./supabase/server";
 import { db } from "@/db";
-import { users, projects } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { users, organizationMembers, organizations } from "@/db/schema";
+import { eq, and, sql } from "drizzle-orm";
+import { getSsoSessionFromCookies } from "@/lib/saml/sso-session";
 
 export interface AuthenticatedUser {
   id: string;
@@ -13,6 +14,8 @@ export interface AuthenticatedUser {
   subdomain: string | null;
   customDomain: string | null;
   customDomainVerified: boolean;
+  authMethod?: "github" | "saml";
+  ssoOrganizationId?: string | null;
 }
 
 /**
@@ -28,7 +31,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     } = await supabase.auth.getUser();
 
     if (error || !user) {
-      return null;
+      return await getSsoAuthenticatedUser();
     }
 
     const metadata = user.user_metadata || {};
@@ -135,9 +138,64 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       subdomain: defaultSubdomain,
       customDomain: null,
       customDomainVerified: false,
+      authMethod: "github",
     };
   } catch (err) {
     console.error("getCurrentUser error:", err);
+    return await getSsoAuthenticatedUser();
+  }
+}
+
+async function getSsoAuthenticatedUser(): Promise<AuthenticatedUser | null> {
+  try {
+    const sso = await getSsoSessionFromCookies();
+    if (!sso) return null;
+
+    const [ssoUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, sso.userId))
+      .limit(1);
+    if (!ssoUser) return null;
+
+    // Enforce real-time SCIM deprovisioning: if membership was suspended/removed, reject session
+    const [org] = await db
+      .select({ ownerUserId: organizations.ownerUserId })
+      .from(organizations)
+      .where(eq(organizations.id, sso.organizationId))
+      .limit(1);
+
+    if (org && org.ownerUserId !== ssoUser.id) {
+      const [membership] = await db
+        .select({ status: organizationMembers.status })
+        .from(organizationMembers)
+        .where(
+          and(
+            eq(organizationMembers.organizationId, sso.organizationId),
+            eq(organizationMembers.userId, ssoUser.id)
+          )
+        )
+        .limit(1);
+
+      if (!membership || membership.status === "suspended") {
+        return null;
+      }
+    }
+
+    return {
+      id: ssoUser.id,
+      githubUsername: ssoUser.githubUsername,
+      name: ssoUser.name,
+      email: ssoUser.email,
+      avatarUrl: ssoUser.avatarUrl,
+      storageTier: ssoUser.storageTier,
+      subdomain: ssoUser.subdomain,
+      customDomain: ssoUser.customDomain,
+      customDomainVerified: ssoUser.customDomainVerified,
+      authMethod: "saml",
+      ssoOrganizationId: sso.organizationId,
+    };
+  } catch {
     return null;
   }
 }

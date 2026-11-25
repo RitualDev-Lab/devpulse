@@ -241,8 +241,9 @@ export const organizationMembers = sqliteTable("organization_members", {
   userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
   githubUsername: text("github_username").notNull(),
   email: text("email"),
+  scimExternalId: text("scim_external_id"),
   role: text("role", { enum: ["owner", "maintainer", "viewer"] }).default("viewer").notNull(),
-  status: text("status", { enum: ["active", "pending"] }).default("pending").notNull(),
+  status: text("status", { enum: ["active", "pending", "suspended"] }).default("pending").notNull(),
   invitedByUserId: text("invited_by_user_id"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
@@ -382,5 +383,55 @@ export const projectConnectors = sqliteTable("project_connectors", {
   lastSyncedAt: text("last_synced_at"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * SAML 2.0 / SSO Configurations (saml_config table in Turso)
+ * One per organization — stores Okta, Azure AD (Entra ID), Google Workspace, or custom SAML IdP settings
+ */
+export const samlConfig = sqliteTable("saml_config", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull().unique(),
+  provider: text("provider").notNull(), // 'okta' | 'azure_ad' | 'google' | 'custom'
+  idpEntityId: text("idp_entity_id").notNull(),
+  idpSsoUrl: text("idp_sso_url").notNull(),
+  idpCertificate: text("idp_certificate").notNull(),
+  spEntityId: text("sp_entity_id").notNull(),
+  attributeEmail: text("attribute_email").default("email").notNull(),
+  attributeName: text("attribute_name").default("name").notNull(),
+  attributeRole: text("attribute_role").default("role").notNull(),
+  defaultRole: text("default_role", { enum: ["owner", "maintainer", "viewer"] }).default("viewer").notNull(),
+  allowedDomains: text("allowed_domains"),
+  isActive: integer("is_active", { mode: "boolean" }).default(false).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+  updatedAt: text("updated_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * SCIM 2.0 Provisioning Bearer Tokens
+ * SHA-256 hashed tokens issued to Okta / Azure AD to auto-provision & deprovision org members
+ */
+export const scimTokens = sqliteTable("scim_tokens", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  tokenPrefix: text("token_prefix").notNull(),
+  label: text("label").default("SCIM Token").notNull(),
+  status: text("status", { enum: ["active", "revoked"] }).default("active").notNull(),
+  lastUsedAt: text("last_used_at"),
+  revokedAt: text("revoked_at"),
+  createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
+/**
+ * SAML RelayState & Replay Protection Sessions
+ */
+export const samlSessions = sqliteTable("saml_sessions", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  redirectTo: text("redirect_to").default("/dashboard").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

@@ -11,6 +11,7 @@ import {
   DollarSign,
   Package,
   GitBranch,
+  KeyRound,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -26,6 +27,8 @@ function GitHubIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export function DashboardAuthGate() {
   const [loading, setLoading] = useState(false);
+  const [showSso, setShowSso] = useState(false);
+  const [ssoIdentifier, setSsoIdentifier] = useState("");
   const supabase = createClient();
 
   const handleSignIn = async () => {
@@ -37,6 +40,17 @@ export function DashboardAuthGate() {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
+  };
+
+  const handleSsoSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = ssoIdentifier.trim();
+    if (!val) return;
+    if (val.includes("@") || val.includes(".")) {
+      window.location.href = `/api/auth/saml?domain=${encodeURIComponent(val)}`;
+    } else {
+      window.location.href = `/api/auth/saml?org=${encodeURIComponent(val)}`;
+    }
   };
 
   return (
@@ -133,6 +147,41 @@ export function DashboardAuthGate() {
             <span>{loading ? "Redirecting to GitHub..." : "Continue with GitHub"}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
+
+          {!showSso ? (
+            <button
+              type="button"
+              onClick={() => setShowSso(true)}
+              className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-semibold text-xs transition"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Sign in with Enterprise SSO (SAML 2.0 — Okta / Azure AD / Google)</span>
+            </button>
+          ) : (
+            <form
+              onSubmit={handleSsoSignIn}
+              className="p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-2.5 text-left"
+            >
+              <label className="block text-[11px] font-semibold text-zinc-300">
+                Work Email, Corporate Domain, or Organization Slug
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={ssoIdentifier}
+                  onChange={(e) => setSsoIdentifier(e.target.value)}
+                  placeholder="alice@acme.com or acme-eng"
+                  className="flex-1 px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shrink-0"
+                >
+                  Continue SSO &rarr;
+                </button>
+              </div>
+            </form>
+          )}
 
           <div className="pt-2">
             <Link
