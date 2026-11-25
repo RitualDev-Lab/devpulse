@@ -208,6 +208,7 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                 <tr>
                   <th className="px-4 py-2.5">Release Tag</th>
                   <th className="px-4 py-2.5">Commit</th>
+                  <th className="px-4 py-2.5" title="Share of sessions across the 10 most recent releases shown">Session Share</th>
                   <th className="px-4 py-2.5">Sessions</th>
                   <th className="px-4 py-2.5">Crashes</th>
                   <th className="px-4 py-2.5">Crash-Free Rate</th>
@@ -217,7 +218,7 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
               <tbody className="divide-y divide-zinc-800/60">
                 {(initialData.releases || []).length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-zinc-500">
+                    <td colSpan={7} className="px-4 py-6 text-center text-zinc-500">
                       No SDK release adoption sessions recorded yet — initialize <code className="text-zinc-300">DevPulse(&#123; release: &quot;v1.0.0&quot; &#125;)</code> to track version adoption.
                     </td>
                   </tr>
@@ -226,6 +227,7 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                     <tr key={rel.id} className="hover:bg-zinc-950/50">
                       <td className="px-4 py-2.5 font-mono font-semibold text-white">{rel.version}</td>
                       <td className="px-4 py-2.5 font-mono text-zinc-400">{rel.commitSha ? rel.commitSha.slice(0, 7) : "—"}</td>
+                      <td className="px-4 py-2.5 font-mono text-zinc-300">{rel.sessionSharePct === null ? "No session data" : `${rel.sessionSharePct}%`}</td>
                       <td className="px-4 py-2.5 font-mono text-zinc-200">{rel.totalSessions.toLocaleString()}</td>
                       <td className="px-4 py-2.5 font-mono text-amber-300">{rel.crashCount}</td>
                       <td className="px-4 py-2.5 font-mono">

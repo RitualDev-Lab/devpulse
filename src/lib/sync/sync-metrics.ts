@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { projects, dailyMetrics } from "@/db/schema";
+import { refreshDailyDeltas } from "@/lib/sync/refresh-daily-deltas";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
@@ -390,6 +391,12 @@ async function syncSingleProject(
   }
 
   await Promise.allSettled(tasks);
+
+  try {
+    await refreshDailyDeltas(proj.id);
+  } catch {
+    errors.push("daily deltas: refresh failed");
+  }
 
   return {
     projectId: proj.id,

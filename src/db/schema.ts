@@ -125,6 +125,7 @@ export const dailyMetrics = sqliteTable("daily_metrics", {
   source: text("source", { enum: ["github", "npm", "pypi", "vscode", "docker", "web", "crates", "go", "mcp"] }).notNull(),
   metricType: text("metric_type", { enum: ["downloads", "stars", "views", "clones", "installs", "pageviews", "pulls", "versions"] }).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
+  delta: integer("delta"), // value minus previous recorded day in the same series; null for the first day
   value: integer("value").notNull(),
   metadataJson: text("metadata_json"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),

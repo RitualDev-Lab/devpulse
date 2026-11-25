@@ -13,6 +13,8 @@ export interface ReleaseHealthItem {
   branch?: string | null;
   source: string;
   totalSessions: number;
+  /** Share of sessions across the releases listed; null when no sessions are recorded. */
+  sessionSharePct?: number | null;
   crashCount: number;
   crashFreeRate: number | null;
   releasedAt: string;

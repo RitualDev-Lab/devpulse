@@ -39,6 +39,7 @@ import { loadAnalyticsSummarySql } from "@/lib/analytics/rollup";
 import type { ProjectSummary } from "@/components/dashboard/ProjectWorkspaceSwitcher";
 import type { DashboardData } from "@/components/dashboard/DragDropGrid";
 import { DEMO_PROJECT_ID, isPublicDemoProject } from "@/lib/security/demo-project";
+import { attachSessionShare } from "@/lib/metrics/daily-delta";
 
 export interface LoadedWorkspaceReady {
   status: "ready";
@@ -641,7 +642,7 @@ export async function loadDashboardWorkspace(
       return Array.from(map.values());
     })(),
     errors,
-    releases: (rawReleases || []).map((r) => {
+    releases: attachSessionShare(rawReleases || []).map((r) => {
       const sessions = Math.max(r.totalSessions, r.crashCount);
       const crashFreeRate =
         sessions > 0
@@ -656,6 +657,7 @@ export async function loadDashboardWorkspace(
         branch: r.branch,
         source: r.source,
         totalSessions: r.totalSessions,
+        sessionSharePct: r.sessionSharePct,
         crashCount: r.crashCount,
         crashFreeRate,
         releasedAt: r.releasedAt,
