@@ -163,7 +163,7 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
 
         <WebAnalyticsCard summary={summary || null} projectSlug={project.slug} />
         <RumWebVitalsPanel summary={summary?.webVitals || null} />
-        <EngagementAnalyticsPanel projectId={project.id} />
+        <EngagementAnalyticsPanel projectId={project.id} isDemo={isDemo} />
 
         {/* Custom Event Metrics (trackMetric("active_jobs", 42)) */}
         {(initialData.customMetrics || []).length > 0 && (

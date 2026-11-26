@@ -867,16 +867,16 @@ export function ErrorStreamCard({
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-3xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[90vh] flex flex-col"
+              className="w-full max-w-3xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-4 sm:p-6 text-left relative max-h-[90vh] overflow-hidden flex flex-col"
             >
-            <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-zinc-800">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-red-950 border border-red-800 flex items-center justify-center text-red-400">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4 pb-3 border-b border-zinc-800 shrink-0">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-red-950 border border-red-800 flex items-center justify-center text-red-400 shrink-0">
                   <ShieldAlert className="w-4 h-4" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-white text-base">{selectedGroup.errorName}</h3>
+                    <h3 className="font-bold text-white text-base break-words">{selectedGroup.errorName}</h3>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
                       {selectedGroup.count} occurrences
                     </span>
@@ -890,7 +890,7 @@ export function ErrorStreamCard({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-end gap-1.5 flex-wrap shrink-0">
                 {selectedGroup.status !== "resolved" ? (
                   <button
                     type="button"

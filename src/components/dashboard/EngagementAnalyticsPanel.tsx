@@ -10,14 +10,43 @@ interface EngagementReport {
   funnel: Array<{ event: string; users: number; conversionFromPrevious: number | null; conversionFromStart: number | null }>;
 }
 
-export function EngagementAnalyticsPanel({ projectId }: { projectId: string }) {
+const DEMO_ENGAGEMENT_REPORT: EngagementReport = {
+  totalSessions: 412,
+  sessionsByDay: [
+    { date: "2026-11-20", sessions: 44, events: 186 },
+    { date: "2026-11-21", sessions: 51, events: 214 },
+    { date: "2026-11-22", sessions: 48, events: 198 },
+    { date: "2026-11-23", sessions: 62, events: 279 },
+    { date: "2026-11-24", sessions: 68, events: 310 },
+    { date: "2026-11-25", sessions: 74, events: 342 },
+    { date: "2026-11-26", sessions: 65, events: 289 },
+  ],
+  retention7d: {
+    cohortUsers: 184,
+    retainedUsers: 76,
+    ratePercent: 41.3,
+    note: "Demo preview data — sign in and call trackEvent() with a sessionId to compute live cohort retention.",
+  },
+  funnel: [
+    { event: "signup_started", users: 184, conversionFromPrevious: null, conversionFromStart: null },
+    { event: "signup_completed", users: 112, conversionFromPrevious: 60.9, conversionFromStart: 60.9 },
+    { event: "purchase", users: 41, conversionFromPrevious: 36.6, conversionFromStart: 22.3 },
+  ],
+};
+
+export function EngagementAnalyticsPanel({ projectId, isDemo = false }: { projectId: string; isDemo?: boolean }) {
   const [days, setDays] = useState(30);
   const [funnelInput, setFunnelInput] = useState("signup_started,signup_completed,purchase");
-  const [report, setReport] = useState<EngagementReport | null>(null);
+  const [report, setReport] = useState<EngagementReport | null>(isDemo ? DEMO_ENGAGEMENT_REPORT : null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
+    if (isDemo) {
+      setReport(DEMO_ENGAGEMENT_REPORT);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -34,6 +63,11 @@ export function EngagementAnalyticsPanel({ projectId }: { projectId: string }) {
   };
 
   useEffect(() => {
+    if (isDemo) {
+      setReport(DEMO_ENGAGEMENT_REPORT);
+      setError(null);
+      return;
+    }
     let cancelled = false;
     const params = new URLSearchParams({ projectId, days: "30", funnel: "signup_started,signup_completed,purchase" });
     void fetch(`/api/v1/analytics?${params}`)
@@ -47,7 +81,7 @@ export function EngagementAnalyticsPanel({ projectId }: { projectId: string }) {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId]);
+  }, [projectId, isDemo]);
 
   const maxSessions = Math.max(1, ...(report?.sessionsByDay || []).map((day) => day.sessions));
 

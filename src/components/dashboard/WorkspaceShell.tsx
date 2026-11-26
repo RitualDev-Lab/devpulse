@@ -296,12 +296,12 @@ export function WorkspaceShell({
       {/* Main Content Column */}
       <div className="flex-1 lg:pl-60 flex flex-col min-w-0">
         {/* Clean Minimal Top Bar */}
-        <header className="h-14 border-b border-zinc-800/80 bg-zinc-950/75 backdrop-blur-xl sticky top-0 z-30 px-4 sm:px-6 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <header className="h-14 border-b border-zinc-800/80 bg-zinc-950/75 backdrop-blur-xl sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 overflow-hidden">
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
-              className="lg:hidden p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white"
+              className="lg:hidden shrink-0 p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white"
               aria-label="Open navigation menu"
             >
               <Menu className="w-4 h-4" />
@@ -314,13 +314,13 @@ export function WorkspaceShell({
             />
 
             {isDemo && (
-              <span className="hidden sm:inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <span className="hidden sm:inline-flex shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 Demo Preview
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setIsPaletteOpen(true)}
@@ -346,14 +346,14 @@ export function WorkspaceShell({
             <button
               type="button"
               onClick={() => setIsBillingOpen(true)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border whitespace-nowrap shrink-0 transition ${
                 storageTier === "free"
                   ? "bg-emerald-600/20 hover:bg-emerald-600/30 border-emerald-500/40 text-emerald-300"
                   : "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-200"
               }`}
               title="Manage DevPulse subscription plans, quotas, and upgrades"
             >
-              <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+              <CreditCard className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span>{storageTier === "free" ? "Upgrade" : `${storageTier.toUpperCase()} Plan`}</span>
             </button>
             <AuthButton />

@@ -162,9 +162,22 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
             <div className="h-48">
               {(initialData.packageHistory || []).length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={initialData.packageHistory || []}>
+                  <AreaChart
+                    data={initialData.packageHistory || []}
+                    margin={{ top: 8, right: 12, left: 8, bottom: 0 }}
+                  >
                     <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
-                    <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
+                    <YAxis
+                      tick={{ fill: "#71717a", fontSize: 10 }}
+                      width={52}
+                      tickFormatter={(v: number) =>
+                        v >= 1_000_000
+                          ? `${(v / 1_000_000).toFixed(1)}M`
+                          : v >= 1_000
+                          ? `${Math.round(v / 1_000)}k`
+                          : String(v)
+                      }
+                    />
                     <Tooltip
                       contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
                     />
