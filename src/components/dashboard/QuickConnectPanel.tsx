@@ -86,6 +86,9 @@ export function QuickConnectPanel({
       if (eco.pypiPackage) lines.push(`https://pypi.org/project/${eco.pypiPackage}/`);
       if (eco.rustCrate) lines.push(`https://crates.io/crates/${eco.rustCrate}`);
       if (eco.dockerImage) lines.push(`https://hub.docker.com/r/${eco.dockerImage}`);
+      for (const conn of data.detectedConnectors || []) {
+        if (conn?.url && !lines.includes(conn.url)) lines.push(conn.url);
+      }
       if (lines.length > 0) {
         setLinksText((prev) => `${prev.trim()}\n${lines.join("\n")}`);
       }

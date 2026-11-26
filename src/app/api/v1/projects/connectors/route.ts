@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
         success: true,
         githubRepo: scanned.githubRepo,
         detectedEcosystems: scanned.detectedEcosystems,
+        detectedConnectors: scanned.detectedConnectors || [],
         summary: scanned.summary,
       });
     }
@@ -182,6 +183,33 @@ export async function POST(req: NextRequest) {
             if (eco.mcpServerName && !updateFields.mcpServerName) {
               updateFields.mcpServerName = eco.mcpServerName;
               detectedSummary.push(`Auto-detected MCP (${eco.mcpServerName})`);
+            }
+            for (const c of scanned.detectedConnectors || []) {
+              const dup = await db
+                .select({ id: projectConnectors.id })
+                .from(projectConnectors)
+                .where(
+                  and(
+                    eq(projectConnectors.projectId, projectId),
+                    eq(projectConnectors.category, "package"),
+                    eq(projectConnectors.provider, c.provider),
+                    eq(projectConnectors.identifier, c.identifier)
+                  )
+                )
+                .limit(1);
+              if (dup.length === 0) {
+                await db.insert(projectConnectors).values({
+                  id: `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+                  projectId,
+                  category: "package",
+                  provider: c.provider,
+                  label: c.label,
+                  targetUrl: c.url,
+                  identifier: c.identifier,
+                  lastSyncedAt: new Date().toISOString(),
+                });
+                detectedSummary.push(`Auto-detected ${c.label}`);
+              }
             }
           } catch {
             // Best-effort auto-discovery

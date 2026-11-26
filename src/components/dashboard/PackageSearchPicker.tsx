@@ -150,6 +150,65 @@ export const REGISTRY_ECOSYSTEMS: Array<{
         ? `https://formulae.brew.sh/cask/${encodeURIComponent(n.slice("cask/".length))}`
         : `https://formulae.brew.sh/formula/${encodeURIComponent(n)}`,
   },
+  {
+    id: "maven",
+    label: "Maven / JVM",
+    field: null,
+    placeholder: "Search Maven Central (e.g. com.google.guava:guava, spring-boot)...",
+    buildUrl: (n) => {
+      const [g, a] = n.includes(":") ? n.split(":") : n.split("/");
+      return g && a
+        ? `https://central.sonatype.com/artifact/${encodeURIComponent(g)}/${encodeURIComponent(a)}`
+        : `https://central.sonatype.com/search?q=${encodeURIComponent(n)}`;
+    },
+  },
+  {
+    id: "cpp",
+    label: "C++ (Conan/vcpkg)",
+    field: null,
+    placeholder: "Enter C/C++ library (e.g. fmt, zlib, conan:spdlog, vcpkg:openssl)...",
+    buildUrl: (n) =>
+      n.startsWith("vcpkg:")
+        ? `https://vcpkg.io/en/package/${encodeURIComponent(n.slice("vcpkg:".length))}`
+        : `https://conan.io/center/recipes/${encodeURIComponent(n.replace(/^(conan|wrapdb?):/, ""))}`,
+  },
+  {
+    id: "swift",
+    label: "Swift / CocoaPods",
+    field: null,
+    placeholder: "Enter SPM repo (Alamofire/Alamofire) or CocoaPod (Alamofire)...",
+    buildUrl: (n) =>
+      n.includes("/") ? `https://swiftpackageindex.com/${n}` : `https://cocoapods.org/pods/${encodeURIComponent(n)}`,
+  },
+  {
+    id: "hackage",
+    label: "Hackage",
+    field: null,
+    placeholder: "Search Haskell Hackage (e.g. aeson, lens, pandoc)...",
+    buildUrl: (n) => `https://hackage.haskell.org/package/${encodeURIComponent(n)}`,
+  },
+  {
+    id: "metacpan",
+    label: "MetaCPAN",
+    field: null,
+    placeholder: "Search Perl MetaCPAN (e.g. Mojolicious, Moose, DBI)...",
+    buildUrl: (n) => `https://metacpan.org/dist/${encodeURIComponent(n.replace(/::/g, "-"))}`,
+  },
+  {
+    id: "luarocks",
+    label: "LuaRocks",
+    field: null,
+    placeholder: "Enter LuaRocks module (e.g. luasocket, mpeterv/luacheck)...",
+    buildUrl: (n) =>
+      n.includes("/") ? `https://luarocks.org/modules/${n}` : `https://luarocks.org/modules/luarocks/${encodeURIComponent(n)}`,
+  },
+  {
+    id: "julia",
+    label: "Julia",
+    field: null,
+    placeholder: "Enter Julia package (e.g. DataFrames, Plots, Flux)...",
+    buildUrl: (n) => `https://juliahub.com/ui/Packages/General/${encodeURIComponent(n)}`,
+  },
 ];
 
 interface PackageSearchPickerProps {

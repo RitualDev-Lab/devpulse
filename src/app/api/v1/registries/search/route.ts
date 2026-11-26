@@ -11,6 +11,13 @@ import { searchHexPackages } from "@/lib/integrations/hex";
 import { searchAnacondaPackages } from "@/lib/integrations/anaconda";
 import { searchCranPackages } from "@/lib/integrations/cran";
 import { searchHomebrewPackages } from "@/lib/integrations/homebrew";
+import { searchMavenArtifacts } from "@/lib/integrations/maven";
+import { searchCppPackages } from "@/lib/integrations/cpp";
+import { searchSwiftPackages } from "@/lib/integrations/swift";
+import { searchHackagePackages } from "@/lib/integrations/hackage";
+import { searchMetaCpanPackages } from "@/lib/integrations/metacpan";
+import { searchLuaRocksPackages } from "@/lib/integrations/luarocks";
+import { searchJuliaPackages } from "@/lib/integrations/julia";
 
 export type SearchableEcosystem =
   | "npm"
@@ -28,7 +35,14 @@ export type SearchableEcosystem =
   | "hex"
   | "anaconda"
   | "cran"
-  | "homebrew";
+  | "homebrew"
+  | "maven"
+  | "cpp"
+  | "swift"
+  | "hackage"
+  | "metacpan"
+  | "luarocks"
+  | "julia";
 
 export interface RegistrySearchResult {
   id: string;
@@ -57,6 +71,13 @@ const VALID_ECOSYSTEMS = new Set<SearchableEcosystem>([
   "anaconda",
   "cran",
   "homebrew",
+  "maven",
+  "cpp",
+  "swift",
+  "hackage",
+  "metacpan",
+  "luarocks",
+  "julia",
 ]);
 
 async function fetchJsonSafe<T>(url: string, headers: Record<string, string> = {}): Promise<T | null> {
@@ -359,6 +380,102 @@ export async function GET(req: NextRequest) {
           item.kind === "cask"
             ? `https://formulae.brew.sh/cask/${encodeURIComponent(item.name.replace(/^cask\//, ""))}`
             : `https://formulae.brew.sh/formula/${encodeURIComponent(item.name)}`,
+      });
+    }
+  } else if (ecosystem === "maven") {
+    const items = await searchMavenArtifacts(q);
+    for (const item of items) {
+      const [g, a] = item.coordinate.split(":");
+      results.push({
+        id: item.coordinate,
+        ecosystem: "maven",
+        name: item.coordinate,
+        version: item.latestVersion || null,
+        description: `${item.packaging} • ${item.versionCount} releases`,
+        statsLabel: item.latestVersion ? `v${item.latestVersion}` : "Maven",
+        url: g && a ? `https://central.sonatype.com/artifact/${encodeURIComponent(g)}/${encodeURIComponent(a)}` : null,
+      });
+    }
+  } else if (ecosystem === "cpp") {
+    const items = await searchCppPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.identifier,
+        ecosystem: "cpp",
+        name: item.identifier,
+        description: item.description || null,
+        statsLabel: item.registry,
+        url:
+          item.registry === "vcpkg"
+            ? `https://vcpkg.io/en/package/${encodeURIComponent(item.name)}`
+            : `https://conan.io/center/recipes/${encodeURIComponent(item.name)}`,
+      });
+    }
+  } else if (ecosystem === "swift") {
+    const items = await searchSwiftPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.identifier,
+        ecosystem: "swift",
+        name: item.identifier,
+        version: item.latestVersion || null,
+        description: item.source === "spm" ? "Swift Package Index" : "CocoaPods Trunk",
+        statsLabel: item.latestVersion || item.source,
+        url:
+          item.source === "spm"
+            ? `https://swiftpackageindex.com/${item.identifier}`
+            : `https://cocoapods.org/pods/${encodeURIComponent(item.identifier)}`,
+      });
+    }
+  } else if (ecosystem === "hackage") {
+    const items = await searchHackagePackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "hackage",
+        name: item.name,
+        description: "Haskell Hackage package",
+        statsLabel: "Hackage",
+        url: `https://hackage.haskell.org/package/${encodeURIComponent(item.name)}`,
+      });
+    }
+  } else if (ecosystem === "metacpan") {
+    const items = await searchMetaCpanPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.distribution,
+        ecosystem: "metacpan",
+        name: item.distribution,
+        version: item.version || null,
+        description: item.abstract || null,
+        statsLabel: item.version ? `v${item.version}` : "MetaCPAN",
+        url: `https://metacpan.org/dist/${encodeURIComponent(item.distribution)}`,
+      });
+    }
+  } else if (ecosystem === "luarocks") {
+    const items = await searchLuaRocksPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "luarocks",
+        name: item.name,
+        version: item.version || null,
+        description: "LuaRocks module",
+        statsLabel: item.version || "LuaRocks",
+        url: item.url,
+      });
+    }
+  } else if (ecosystem === "julia") {
+    const items = await searchJuliaPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "julia",
+        name: item.name,
+        version: item.latestVersion || null,
+        description: "Julia General Registry package",
+        statsLabel: item.latestVersion ? `v${item.latestVersion}` : "Julia",
+        url: `https://juliahub.com/ui/Packages/General/${encodeURIComponent(item.name)}`,
       });
     }
   }

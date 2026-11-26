@@ -23,6 +23,13 @@ export type DetectedConnectorKind =
   | "anaconda"
   | "cran"
   | "homebrew"
+  | "maven"
+  | "cpp"
+  | "swift"
+  | "hackage"
+  | "metacpan"
+  | "luarocks"
+  | "julia"
   | "payment"
   | "uptime"
   | "unknown";
@@ -354,6 +361,113 @@ export function parseConnectorInput(rawInput: string): ParsedConnectorLink {
       value: val,
       label: `Homebrew (${val})`,
       normalizedUrl: `https://formulae.brew.sh/${pathParts[0]}/${pathParts[1]}`,
+    };
+  }
+
+  // Maven Central (central.sonatype.com/artifact/<group>/<artifact> or mvnrepository.com/artifact/<g>/<a>)
+  if ((host === "central.sonatype.com" || host === "mvnrepository.com") && pathParts[0] === "artifact" && pathParts[1] && pathParts[2]) {
+    const coord = `${pathParts[1]}:${pathParts[2]}`;
+    return {
+      raw: rawInput,
+      kind: "maven",
+      provider: "Maven Central",
+      value: coord,
+      label: `Maven (${coord})`,
+      normalizedUrl: `https://central.sonatype.com/artifact/${pathParts[1]}/${pathParts[2]}`,
+    };
+  }
+
+  // Conan Center / vcpkg
+  if (host === "conan.io" && pathParts[0] === "center" && pathParts[1] === "recipes" && pathParts[2]) {
+    return {
+      raw: rawInput,
+      kind: "cpp",
+      provider: "Conan Center",
+      value: `conan:${pathParts[2]}`,
+      label: `Conan (${pathParts[2]})`,
+      normalizedUrl: `https://conan.io/center/recipes/${pathParts[2]}`,
+    };
+  }
+  if (host === "vcpkg.io" && pathParts[1] === "package" && pathParts[2]) {
+    return {
+      raw: rawInput,
+      kind: "cpp",
+      provider: "vcpkg",
+      value: `vcpkg:${pathParts[2]}`,
+      label: `vcpkg (${pathParts[2]})`,
+      normalizedUrl: `https://vcpkg.io/en/package/${pathParts[2]}`,
+    };
+  }
+
+  // Swift Package Index / CocoaPods
+  if (host === "swiftpackageindex.com" && pathParts[0] && pathParts[1]) {
+    const slug = `${pathParts[0]}/${pathParts[1]}`;
+    return {
+      raw: rawInput,
+      kind: "swift",
+      provider: "Swift Package Index",
+      value: slug,
+      label: `Swift (${slug})`,
+      normalizedUrl: `https://swiftpackageindex.com/${slug}`,
+    };
+  }
+  if (host === "cocoapods.org" && pathParts[0] === "pods" && pathParts[1]) {
+    return {
+      raw: rawInput,
+      kind: "swift",
+      provider: "CocoaPods",
+      value: pathParts[1],
+      label: `CocoaPods (${pathParts[1]})`,
+      normalizedUrl: `https://cocoapods.org/pods/${pathParts[1]}`,
+    };
+  }
+
+  // Hackage
+  if (host === "hackage.haskell.org" && pathParts[0] === "package" && pathParts[1]) {
+    return {
+      raw: rawInput,
+      kind: "hackage",
+      provider: "Hackage",
+      value: pathParts[1],
+      label: `Hackage (${pathParts[1]})`,
+      normalizedUrl: `https://hackage.haskell.org/package/${pathParts[1]}`,
+    };
+  }
+
+  // MetaCPAN
+  if (host === "metacpan.org" && (pathParts[0] === "dist" || pathParts[0] === "pod") && pathParts[1]) {
+    return {
+      raw: rawInput,
+      kind: "metacpan",
+      provider: "MetaCPAN",
+      value: pathParts[1],
+      label: `MetaCPAN (${pathParts[1]})`,
+      normalizedUrl: parsed.toString(),
+    };
+  }
+
+  // LuaRocks
+  if (host === "luarocks.org" && pathParts[0] === "modules" && pathParts[1] && pathParts[2]) {
+    const mod = `${pathParts[1]}/${pathParts[2]}`;
+    return {
+      raw: rawInput,
+      kind: "luarocks",
+      provider: "LuaRocks",
+      value: mod,
+      label: `LuaRocks (${mod})`,
+      normalizedUrl: `https://luarocks.org/modules/${mod}`,
+    };
+  }
+
+  // JuliaHub
+  if (host === "juliahub.com" && pathParts[0] === "ui" && pathParts[1] === "Packages" && pathParts[3]) {
+    return {
+      raw: rawInput,
+      kind: "julia",
+      provider: "Julia Registry",
+      value: pathParts[3],
+      label: `Julia (${pathParts[3]})`,
+      normalizedUrl: parsed.toString(),
     };
   }
 

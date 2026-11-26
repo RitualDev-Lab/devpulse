@@ -19,6 +19,13 @@ import { fetchHexStats } from "@/lib/integrations/hex";
 import { fetchAnacondaStats } from "@/lib/integrations/anaconda";
 import { fetchCranStats } from "@/lib/integrations/cran";
 import { fetchHomebrewStats } from "@/lib/integrations/homebrew";
+import { fetchMavenStats } from "@/lib/integrations/maven";
+import { fetchCppPackageStats } from "@/lib/integrations/cpp";
+import { fetchSwiftStats } from "@/lib/integrations/swift";
+import { fetchHackageStats } from "@/lib/integrations/hackage";
+import { fetchMetaCpanStats } from "@/lib/integrations/metacpan";
+import { fetchLuaRocksStats } from "@/lib/integrations/luarocks";
+import { fetchJuliaStats } from "@/lib/integrations/julia";
 import { normalizeRegistryProvider, REGISTRY_ADAPTERS } from "@/lib/integrations/registry-adapter";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
@@ -514,6 +521,62 @@ async function syncSingleProject(
           if (s) {
             await upsertPoint("homebrew", "installs", todayStr, s.installs30d, { installs90d: s.installs90d, installs365d: s.installs365d, version: s.version });
             syncedSources.push(`homebrew:${id}`);
+          }
+          break;
+        }
+        case "maven": {
+          const s = await fetchMavenStats(id);
+          if (s) {
+            await upsertPoint("maven", "versions", todayStr, s.versionCount, { version: s.latestVersion, packaging: s.packaging });
+            syncedSources.push(`maven:${id}`);
+          }
+          break;
+        }
+        case "cpp": {
+          const s = await fetchCppPackageStats(id);
+          if (s) {
+            await upsertPoint("cpp", "versions", todayStr, s.versionCount, { version: s.latestVersion, registry: s.registry, triplets: s.triplets });
+            syncedSources.push(`cpp:${id}`);
+          }
+          break;
+        }
+        case "swift": {
+          const s = await fetchSwiftStats(id);
+          if (s) {
+            await upsertPoint("swift", "versions", todayStr, Math.max(1, s.swiftVersions.length), { version: s.latestVersion, platforms: s.platforms });
+            syncedSources.push(`swift:${id}`);
+          }
+          break;
+        }
+        case "hackage": {
+          const s = await fetchHackageStats(id);
+          if (s) {
+            await upsertPoint("hackage", "downloads", todayStr, s.recentDownloads ?? s.normalVersions.length, { version: s.latestVersion, recentDownloads: s.recentDownloads });
+            syncedSources.push(`hackage:${id}`);
+          }
+          break;
+        }
+        case "metacpan": {
+          const s = await fetchMetaCpanStats(id);
+          if (s) {
+            await upsertPoint("metacpan", "stars", todayStr, s.favorites, { version: s.version, license: s.license });
+            syncedSources.push(`metacpan:${id}`);
+          }
+          break;
+        }
+        case "luarocks": {
+          const s = await fetchLuaRocksStats(id);
+          if (s) {
+            await upsertPoint("luarocks", "downloads", todayStr, s.downloads ?? 0, { version: s.version });
+            syncedSources.push(`luarocks:${id}`);
+          }
+          break;
+        }
+        case "julia": {
+          const s = await fetchJuliaStats(id);
+          if (s) {
+            await upsertPoint("julia", "versions", todayStr, s.versionCount, { version: s.latestVersion, uuid: s.uuid });
+            syncedSources.push(`julia:${id}`);
           }
           break;
         }

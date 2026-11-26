@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { scanGitHubRepository } from "@/lib/scanner/github-scanner";
 import { db } from "@/db";
-import { projects, dashboardWidgets } from "@/db/schema";
+import { projects, dashboardWidgets, projectConnectors } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
@@ -206,6 +206,25 @@ export async function POST(request: Request) {
           isVisible: w.isVisible,
         }))
       );
+    }
+
+    if (scanned.detectedConnectors && scanned.detectedConnectors.length > 0) {
+      const nowIso = new Date().toISOString();
+      await db
+        .insert(projectConnectors)
+        .values(
+          scanned.detectedConnectors.slice(0, 12).map((conn) => ({
+            id: `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+            projectId,
+            category: "package" as const,
+            provider: conn.provider,
+            label: conn.label,
+            targetUrl: conn.url,
+            identifier: conn.identifier,
+            lastSyncedAt: nowIso,
+          }))
+        )
+        .catch(() => {});
     }
 
     const created = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);

@@ -22,6 +22,13 @@ import { fetchHexStats } from "@/lib/integrations/hex";
 import { fetchAnacondaStats } from "@/lib/integrations/anaconda";
 import { fetchCranStats } from "@/lib/integrations/cran";
 import { fetchHomebrewStats } from "@/lib/integrations/homebrew";
+import { fetchMavenStats } from "@/lib/integrations/maven";
+import { fetchCppPackageStats } from "@/lib/integrations/cpp";
+import { fetchSwiftStats } from "@/lib/integrations/swift";
+import { fetchHackageStats } from "@/lib/integrations/hackage";
+import { fetchMetaCpanStats } from "@/lib/integrations/metacpan";
+import { fetchLuaRocksStats } from "@/lib/integrations/luarocks";
+import { fetchJuliaStats } from "@/lib/integrations/julia";
 import { fetchDepsDevSummary, type DepsDevAdvisorySummary, type DepsDevSystem } from "@/lib/integrations/deps-dev";
 import {
   REGISTRY_ADAPTERS,
@@ -492,6 +499,105 @@ export async function refreshProjectSnapshots(
                   metricValue: s?.installs30d ?? null,
                   secondaryLabel: "365d installs",
                   secondaryValue: s ? `${s.installs90d.toLocaleString()} (90d) • ${s.installs365d.toLocaleString()} (1y)` : null,
+                  url,
+                };
+              }
+              case "maven": {
+                const s = await cap(fetchMavenStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "releases",
+                  metricValue: s?.versionCount ?? null,
+                  secondaryLabel: "packaging",
+                  secondaryValue: s?.packaging || null,
+                  url,
+                };
+              }
+              case "cpp": {
+                const s = await cap(fetchCppPackageStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "versions",
+                  metricValue: s?.versionCount ?? null,
+                  secondaryLabel: s?.registry || "triplets",
+                  secondaryValue: s ? s.triplets.slice(0, 3).join(", ") : null,
+                  url,
+                };
+              }
+              case "swift": {
+                const s = await cap(fetchSwiftStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "platforms",
+                  metricValue: s ? s.platforms.length : null,
+                  secondaryLabel: s?.source === "spm" ? "Swift / SPM" : "CocoaPods",
+                  secondaryValue: s?.platforms.slice(0, 4).join(", ") || null,
+                  url,
+                };
+              }
+              case "hackage": {
+                const s = await cap(fetchHackageStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: s?.recentDownloads != null ? "recent downloads" : "versions",
+                  metricValue: s ? (s.recentDownloads ?? s.normalVersions.length) : null,
+                  url,
+                };
+              }
+              case "metacpan": {
+                const s = await cap(fetchMetaCpanStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.version || null,
+                  metricLabel: "CPAN ++",
+                  metricValue: s?.favorites ?? null,
+                  secondaryLabel: "license",
+                  secondaryValue: s?.license?.[0] || null,
+                  url,
+                };
+              }
+              case "luarocks": {
+                const s = await cap(fetchLuaRocksStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.version || null,
+                  metricLabel: "downloads",
+                  metricValue: s?.downloads ?? null,
+                  url,
+                };
+              }
+              case "julia": {
+                const s = await cap(fetchJuliaStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "releases",
+                  metricValue: s?.versionCount ?? null,
                   url,
                 };
               }

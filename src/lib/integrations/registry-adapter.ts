@@ -16,7 +16,14 @@ export type RegistryProviderId =
   | "hex"
   | "anaconda"
   | "cran"
-  | "homebrew";
+  | "homebrew"
+  | "maven"
+  | "cpp"
+  | "swift"
+  | "hackage"
+  | "metacpan"
+  | "luarocks"
+  | "julia";
 
 export type PrimaryProjectPackageField =
   | "npmPackage"
@@ -191,6 +198,83 @@ export const REGISTRY_ADAPTERS: Record<RegistryProviderId, RegistryAdapterMeta> 
         ? `https://formulae.brew.sh/cask/${encodeURIComponent(id.slice("cask/".length))}`
         : `https://formulae.brew.sh/formula/${encodeURIComponent(id)}`,
   },
+  maven: {
+    id: "maven",
+    label: "Maven Central",
+    ecosystemLabel: "Java / Kotlin / Scala",
+    projectField: null,
+    depsDevSystem: "MAVEN",
+    countsTowardDownloadBadge: false,
+    buildUrl: (id) => {
+      const [g, a] = id.includes(":") ? id.split(":") : id.split("/");
+      return g && a
+        ? `https://central.sonatype.com/artifact/${encodeURIComponent(g)}/${encodeURIComponent(a)}`
+        : `https://central.sonatype.com/search?q=${encodeURIComponent(id)}`;
+    },
+  },
+  cpp: {
+    id: "cpp",
+    label: "Conan / vcpkg",
+    ecosystemLabel: "C / C++",
+    projectField: null,
+    depsDevSystem: null,
+    countsTowardDownloadBadge: false,
+    buildUrl: (id) =>
+      id.startsWith("vcpkg:")
+        ? `https://vcpkg.io/en/package/${encodeURIComponent(id.slice("vcpkg:".length))}`
+        : `https://conan.io/center/recipes/${encodeURIComponent(id.replace(/^(conan|wrapdb?):/, ""))}`,
+  },
+  swift: {
+    id: "swift",
+    label: "Swift / CocoaPods",
+    ecosystemLabel: "Swift / Objective-C",
+    projectField: null,
+    depsDevSystem: null,
+    countsTowardDownloadBadge: false,
+    buildUrl: (id) =>
+      id.includes("/")
+        ? `https://swiftpackageindex.com/${id}`
+        : `https://cocoapods.org/pods/${encodeURIComponent(id)}`,
+  },
+  hackage: {
+    id: "hackage",
+    label: "Hackage",
+    ecosystemLabel: "Haskell",
+    projectField: null,
+    depsDevSystem: null,
+    countsTowardDownloadBadge: true,
+    buildUrl: (id) => `https://hackage.haskell.org/package/${encodeURIComponent(id)}`,
+  },
+  metacpan: {
+    id: "metacpan",
+    label: "MetaCPAN",
+    ecosystemLabel: "Perl",
+    projectField: null,
+    depsDevSystem: null,
+    countsTowardDownloadBadge: false,
+    buildUrl: (id) => `https://metacpan.org/dist/${encodeURIComponent(id.replace(/::/g, "-"))}`,
+  },
+  luarocks: {
+    id: "luarocks",
+    label: "LuaRocks",
+    ecosystemLabel: "Lua",
+    projectField: null,
+    depsDevSystem: null,
+    countsTowardDownloadBadge: true,
+    buildUrl: (id) =>
+      id.includes("/")
+        ? `https://luarocks.org/modules/${id}`
+        : `https://luarocks.org/modules/luarocks/${encodeURIComponent(id)}`,
+  },
+  julia: {
+    id: "julia",
+    label: "Julia Registry",
+    ecosystemLabel: "Julia (Pkg.jl)",
+    projectField: null,
+    depsDevSystem: null,
+    countsTowardDownloadBadge: false,
+    buildUrl: (id) => `https://juliahub.com/ui/Packages/General/${encodeURIComponent(id.replace(/\.jl$/i, ""))}`,
+  },
 };
 
 export interface ExtraPackageSnapshot {
@@ -248,6 +332,33 @@ const PROVIDER_ALIASES: Record<string, RegistryProviderId> = {
   r: "cran",
   homebrew: "homebrew",
   brew: "homebrew",
+  maven: "maven",
+  gradle: "maven",
+  sbt: "maven",
+  ivy: "maven",
+  java: "maven",
+  kotlin: "maven",
+  scala: "maven",
+  jvm: "maven",
+  cpp: "cpp",
+  "c++": "cpp",
+  conan: "cpp",
+  vcpkg: "cpp",
+  meson: "cpp",
+  wrapdb: "cpp",
+  swift: "swift",
+  spm: "swift",
+  cocoapods: "swift",
+  hackage: "hackage",
+  haskell: "hackage",
+  cabal: "hackage",
+  metacpan: "metacpan",
+  cpan: "metacpan",
+  perl: "metacpan",
+  luarocks: "luarocks",
+  lua: "luarocks",
+  julia: "julia",
+  juliahub: "julia",
 };
 
 export function normalizeRegistryProvider(raw?: string | null): RegistryProviderId | null {
