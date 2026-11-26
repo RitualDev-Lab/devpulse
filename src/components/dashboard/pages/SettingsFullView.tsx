@@ -308,6 +308,8 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
         initialDockerImage={project.dockerImage}
         initialVsCode={project.vscodeExtension}
         initialMcp={project.mcpServerName}
+        initialMcpAllowedTools={project.mcpAllowedTools}
+        canManageMcpPolicy={accessRole === "owner" || accessRole === "admin"}
       />
     </WorkspaceShell>
   );

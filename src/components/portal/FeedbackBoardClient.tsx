@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ChevronUp,
   Plus,
@@ -19,6 +20,7 @@ export interface FeatureRequestItem {
   category: "feature" | "improvement" | "integration" | "sdk";
   status: "open" | "planned" | "in_progress" | "shipped";
   targetVersion: string | null;
+  releaseUrl?: string | null;
   voteCount: number;
   authorName: string | null;
   viewerVoted: boolean;
@@ -45,7 +47,7 @@ export function FeedbackBoardClient({
   compact?: boolean;
 }) {
   const [items, setItems] = useState<FeatureRequestItem[]>([]);
-  const [releases, setReleases] = useState<string[]>([]);
+  const [releases, setReleases] = useState<Array<{ version: string; url: string | null }>>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -58,22 +60,15 @@ export function FeedbackBoardClient({
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const loadFeedback = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/v1/feedback?projectSlug=${encodeURIComponent(projectSlug)}`);
-      const data = await res.json();
-      if (res.ok) {
-        setItems(data.items || []);
-        setReleases(data.releases || []);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    void loadFeedback();
+    let cancelled = false;
+    void fetch(`/api/v1/feedback?projectSlug=${encodeURIComponent(projectSlug)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok && !cancelled) { setItems(data.items || []); setReleases(data.releases || []); }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [projectSlug]);
 
   const handleToggleVote = async (featureId: string) => {
@@ -242,7 +237,7 @@ export function FeedbackBoardClient({
             />
             <datalist id={`releases-${projectSlug}`}>
               {releases.map((rel) => (
-                <option key={rel} value={rel} />
+                <option key={rel.version} value={rel.version} />
               ))}
             </datalist>
             <input
@@ -312,6 +307,7 @@ export function FeedbackBoardClient({
                         {item.targetVersion}
                       </span>
                     )}
+                    {item.status === "shipped" && item.releaseUrl && <Link href={item.releaseUrl} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-300 hover:underline">View release</Link>}
                   </div>
                   <p className="text-xs text-zinc-400 leading-relaxed">{item.description}</p>
                   {item.authorName && (

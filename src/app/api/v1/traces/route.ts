@@ -6,19 +6,27 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { parseOtlpTracePayload } from "@/lib/traces/otlp-parser";
 import { isPublicDemoProject } from "@/lib/security/demo-project";
+import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const projectId = req.nextUrl.searchParams.get("projectId");
+    const apiKey = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    let projectId = req.nextUrl.searchParams.get("projectId")?.trim() || "";
     const traceId = req.nextUrl.searchParams.get("traceId");
 
+    if (apiKey) {
+      const verified = await verifyTelemetryApiKey(apiKey);
+      if (!verified) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+      if (projectId && projectId !== verified.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      projectId = verified.id;
+    }
     if (!projectId) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    if (!isPublicDemoProject(projectId)) {
+    if (!apiKey && !isPublicDemoProject(projectId)) {
       const user = await getCurrentUser();
       if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const access = await resolveProjectAccess(projectId, user);

@@ -36,6 +36,7 @@ export async function initDb() {
       pypi_package TEXT,
       vscode_extension TEXT,
       mcp_server_name TEXT,
+      mcp_allowed_tools_json TEXT,
       docker_image TEXT,
       telemetry_api_key TEXT UNIQUE NOT NULL,
       is_public INTEGER DEFAULT 1 NOT NULL,
@@ -63,6 +64,7 @@ export async function initDb() {
     "ALTER TABLE projects ADD COLUMN dodo_payments_environment TEXT DEFAULT 'live';",
     "ALTER TABLE projects ADD COLUMN github_sponsors_username TEXT;",
     "ALTER TABLE projects ADD COLUMN rust_crate TEXT;",
+    "ALTER TABLE projects ADD COLUMN mcp_allowed_tools_json TEXT;",
     "ALTER TABLE projects ADD COLUMN go_module TEXT;",
     "ALTER TABLE projects ADD COLUMN docker_image TEXT;",
     "ALTER TABLE projects ADD COLUMN generic_webhook_url TEXT;",
@@ -92,6 +94,8 @@ export async function initDb() {
     "ALTER TABLE pageviews ADD COLUMN os TEXT DEFAULT 'Unknown' NOT NULL;",
     "ALTER TABLE pageviews ADD COLUMN app_version TEXT;",
     "ALTER TABLE pageviews ADD COLUMN visitor_id TEXT;",
+    "ALTER TABLE pageviews ADD COLUMN session_id TEXT;",
+    "ALTER TABLE feature_requests ADD COLUMN release_url TEXT;",
     "ALTER TABLE error_events ADD COLUMN breadcrumbs_json TEXT;",
     "ALTER TABLE error_events ADD COLUMN commit_sha TEXT;",
     "ALTER TABLE projects ADD COLUMN notification_email TEXT;",
@@ -127,6 +131,7 @@ export async function initDb() {
     "ALTER TABLE error_events ADD COLUMN app_build TEXT;",
     "ALTER TABLE error_events ADD COLUMN flag_key TEXT;",
     "ALTER TABLE error_events ADD COLUMN flag_variant TEXT;",
+    "ALTER TABLE error_events ADD COLUMN flag_user_hash TEXT;",
     "ALTER TABLE error_events ADD COLUMN github_issue_number INTEGER;",
     "ALTER TABLE error_events ADD COLUMN github_issue_url TEXT;",
     "ALTER TABLE error_events ADD COLUMN github_pr_number INTEGER;",
@@ -187,6 +192,7 @@ export async function initDb() {
       payload_size_bytes INTEGER DEFAULT 0 NOT NULL,
       storage_provider TEXT DEFAULT 'turso' NOT NULL,
       reporter_email TEXT,
+      flag_user_hash TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
@@ -219,6 +225,7 @@ export async function initDb() {
       event_name TEXT DEFAULT 'pageview' NOT NULL,
       os TEXT DEFAULT 'Unknown' NOT NULL,
       app_version TEXT,
+      session_id TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
@@ -662,10 +669,17 @@ export async function initDb() {
       flag_key TEXT NOT NULL,
       variant TEXT DEFAULT 'control' NOT NULL,
       user_key TEXT NOT NULL,
+      user_hash TEXT,
       converted INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
+
+  try {
+    await client.execute("ALTER TABLE flag_exposures ADD COLUMN user_hash TEXT;");
+  } catch {
+    // Column already exists.
+  }
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS structured_logs (
@@ -678,6 +692,17 @@ export async function initDb() {
       trace_id TEXT,
       timestamp_ms INTEGER NOT NULL,
       timestamp_iso TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS mcp_tool_calls (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      tool_name TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      duration_ms INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);
@@ -704,6 +729,16 @@ export async function initDb() {
   await client.execute(`
     CREATE INDEX IF NOT EXISTS idx_pageviews_project_created
     ON pageviews(project_id, created_at);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_pageviews_project_session_created
+    ON pageviews(project_id, session_id, created_at);
+  `).catch(() => {});
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_mcp_tool_calls_project_created
+    ON mcp_tool_calls(project_id, created_at);
   `).catch(() => {});
 
   await client.execute(`
@@ -814,6 +849,7 @@ export async function initDb() {
       vote_count INTEGER DEFAULT 1 NOT NULL,
       author_name TEXT,
       author_email TEXT,
+      release_url TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
   `);

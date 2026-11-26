@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { projectReleases } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { featureRequests, projectReleases } from "@/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 import { loadPortalData } from "@/lib/domains/portal-loader";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
@@ -25,6 +25,25 @@ export interface ChangelogReleaseGroup {
   pullRequests: MergedPrItem[];
 }
 
+export interface ShippedFeedbackItem {
+  id: string;
+  title: string;
+  category: string;
+  voteCount: number;
+  targetVersion: string | null;
+  releaseUrl: string | null;
+}
+
+function safeHttpsUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadPortalChangelog(hostKey: string, requestedProjectSlug?: string) {
   const portal = await loadPortalData(hostKey, requestedProjectSlug);
   if (!portal) return null;
@@ -35,8 +54,29 @@ export async function loadPortalChangelog(hostKey: string, requestedProjectSlug?
       portal,
       releases: [] as ChangelogReleaseGroup[],
       unreleasedPrs: [] as MergedPrItem[],
+      shippedRequests: [] as ShippedFeedbackItem[],
     };
   }
+
+  // Feedback loop: feature requests marked shipped by maintainers, with the version that delivered them.
+  const shippedRows = await db
+    .select({
+      id: featureRequests.id,
+      title: featureRequests.title,
+      category: featureRequests.category,
+      voteCount: featureRequests.voteCount,
+      targetVersion: featureRequests.targetVersion,
+      releaseUrl: featureRequests.releaseUrl,
+    })
+    .from(featureRequests)
+    .where(and(eq(featureRequests.projectId, active.id), eq(featureRequests.status, "shipped")))
+    .orderBy(desc(featureRequests.voteCount), desc(featureRequests.createdAt))
+    .limit(50)
+    .catch(() => []);
+  const shippedRequests: ShippedFeedbackItem[] = shippedRows.map((row) => ({
+    ...row,
+    releaseUrl: safeHttpsUrl(row.releaseUrl),
+  }));
 
   const rawReleases = await db
     .select()
@@ -118,5 +158,6 @@ export async function loadPortalChangelog(hostKey: string, requestedProjectSlug?
     portal,
     releases: grouped,
     unreleasedPrs,
+    shippedRequests,
   };
 }

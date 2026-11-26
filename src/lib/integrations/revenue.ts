@@ -4,6 +4,9 @@
  */
 
 import { validatePublicUrl } from "@/lib/security/ssrf";
+import { isSettledPayment, minorToMajor, withinTrailingDays } from "@/lib/revenue/transaction-rules";
+import { summarizeRevenueAtRisk } from "@/lib/revenue/revenue-risk";
+import { currencyMinorUnitDigits } from "@/lib/revenue/transaction-rules";
 
 export interface TransactionItem {
   id: string;
@@ -11,7 +14,7 @@ export interface TransactionItem {
   amount: number;
   currency: string;
   provider: string;
-  status: "succeeded" | "pending";
+  status: string;
   date: string;
 }
 
@@ -36,6 +39,19 @@ export interface RevenueStats {
   isDemo: boolean;
   history: Array<{ date: string; amount: number }>;
   recentTransactions: TransactionItem[];
+  revenueAtRisk?: Array<{
+    currency: string;
+    transactionCount: number;
+    settledAmountMinor: number;
+    pendingAmountMinor: number;
+    failedAmountMinor: number;
+    refundedAmountMinor: number;
+    chargebackAmountMinor: number;
+    exposedAmountMinor: number;
+    riskScorePercent: number;
+    providers: string[];
+    sampleLimited: boolean;
+  }>;
   providerBreakdown?: ProviderBreakdownItem[];
 }
 
@@ -62,11 +78,14 @@ async function fetchStripeRevenue(apiKey: string): Promise<RevenueStats | null> 
 
     let mrr = 0;
     let activeSubs = 0;
+    const subscriptionCurrencies = new Set<string>();
     if (subsData && Array.isArray(subsData.data)) {
       activeSubs = subsData.data.length;
       for (const sub of subsData.data) {
         for (const item of sub.items?.data || []) {
-          const unitAmount = (item.price?.unit_amount || 0) / 100;
+          const currency = String(item.price?.currency || "USD").toUpperCase();
+          subscriptionCurrencies.add(currency);
+          const unitAmount = minorToMajor(Number(item.price?.unit_amount || 0), currency);
           const interval = item.price?.recurring?.interval;
           if (interval === "month") mrr += unitAmount;
           else if (interval === "year") mrr += unitAmount / 12;
@@ -81,23 +100,30 @@ async function fetchStripeRevenue(apiKey: string): Promise<RevenueStats | null> 
     const chargesData = chargesRes.ok ? await chargesRes.json() : null;
 
     let netVolume30Days = 0;
+    const chargeCurrencies = new Set<string>();
     const recentTransactions: TransactionItem[] = [];
     const dateMap: Record<string, number> = {};
 
     if (chargesData && Array.isArray(chargesData.data)) {
       for (const ch of chargesData.data) {
-        const amt = (ch.amount || 0) / 100;
-        netVolume30Days += amt;
-        const dStr = new Date((ch.created || Date.now() / 1000) * 1000).toISOString().split("T")[0];
-        dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        const currency = String(ch.currency || "USD").toUpperCase();
+        chargeCurrencies.add(currency);
+        const amt = minorToMajor(Number(ch.amount || 0), currency);
+        const createdAtMs = Number(ch.created || 0) * 1000;
+        const dStr = new Date(createdAtMs || Date.now()).toISOString().split("T")[0];
+        const settled = ch.paid === true && ch.status !== "failed" && !ch.refunded;
+        if (settled && withinTrailingDays(createdAtMs)) {
+          netVolume30Days += amt;
+          dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        }
 
         recentTransactions.push({
           id: ch.id,
           customer: ch.billing_details?.name || ch.billing_details?.email || "Customer",
           amount: amt,
-          currency: (ch.currency || "USD").toUpperCase(),
+          currency,
           provider: "stripe",
-          status: ch.paid ? "succeeded" : "pending",
+          status: settled ? "succeeded" : ch.refunded ? "refunded" : ch.status === "failed" ? "failed" : "pending",
           date: dStr,
         });
       }
@@ -107,18 +133,20 @@ async function fetchStripeRevenue(apiKey: string): Promise<RevenueStats | null> 
     const history = Object.entries(dateMap)
       .map(([date, amount]) => ({ date, amount }))
       .sort((a, b) => a.date.localeCompare(b.date));
+    const currencyCount = new Set([...chargeCurrencies, ...subscriptionCurrencies]).size;
+    const hasSingleCurrency = currencyCount <= 1;
 
     return {
-      mrr: Math.round(mrr),
-      totalRevenue: Math.round(netVolume30Days * 1.5), // estimated total
-      netVolume30Days: Math.round(netVolume30Days),
+      mrr: hasSingleCurrency ? Math.round(mrr) : 0,
+      totalRevenue: hasSingleCurrency ? Math.round(netVolume30Days * 1.5) : 0, // estimated total
+      netVolume30Days: hasSingleCurrency ? Math.round(netVolume30Days) : 0,
       payingCustomers: activeSubs,
       activeSubscriptions: activeSubs,
-      currency: "USD",
+      currency: currencyCount > 1 ? "MULTI" : Array.from(chargeCurrencies)[0] || Array.from(subscriptionCurrencies)[0] || "USD",
       provider: "stripe",
       isDemo: false,
-      history: history.length > 0 ? history : [{ date: new Date().toISOString().split("T")[0], amount: 0 }],
-      recentTransactions: recentTransactions.slice(0, 5),
+      history: hasSingleCurrency && history.length > 0 ? history : [{ date: new Date().toISOString().split("T")[0], amount: 0 }],
+      recentTransactions: recentTransactions.slice(0, 50),
     };
   } catch (err) {
     console.error("Error fetching Stripe revenue:", err);
@@ -157,20 +185,22 @@ async function fetchDodoRevenue(apiKey: string, environment: string = "live"): P
     const transactions: TransactionItem[] = [];
     const dateMap: Record<string, number> = {};
     let detectedCurrency = "USD";
+    const subscriptionCurrencies = new Set<string>();
+    const paymentCurrencies = Array.isArray(paymentsData?.items)
+      ? Array.from(new Set(paymentsData.items.map((payment: { currency?: string }) => String(payment.currency || "USD").toUpperCase())))
+      : [];
 
     if (paymentsData && Array.isArray(paymentsData.items)) {
       for (const p of paymentsData.items) {
-        const amt = (p.total_amount || 0) / 100;
         const curr = (p.currency || "USD").toUpperCase();
+        const amt = minorToMajor(Number(p.total_amount || 0), curr);
         detectedCurrency = curr;
-
-        // If succeeded, add to net volume
-        if (p.status === "succeeded") {
-          netVolume += amt;
-        }
-
         const dStr = p.created_at ? p.created_at.split("T")[0] : new Date().toISOString().split("T")[0];
-        dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        const settled = isSettledPayment(p.status);
+        if (settled && withinTrailingDays(p.created_at)) {
+          netVolume += amt;
+          dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        }
 
         transactions.push({
           id: p.payment_id || `dodo_${Math.random().toString(36).substring(7)}`,
@@ -178,7 +208,7 @@ async function fetchDodoRevenue(apiKey: string, environment: string = "live"): P
           amount: amt,
           currency: curr,
           provider: "dodo",
-          status: p.status === "succeeded" ? "succeeded" : "pending",
+          status: settled ? "succeeded" : String(p.status || "pending"),
           date: dStr,
         });
       }
@@ -191,8 +221,12 @@ async function fetchDodoRevenue(apiKey: string, environment: string = "live"): P
       for (const sub of subsData.items) {
         if (sub.status === "active") {
           activeSubs++;
-          const recurringAmt = (sub.total_amount || sub.amount || 0) / 100;
-          mrr += recurringAmt;
+          const currency = String(sub.currency || "USD").toUpperCase();
+          subscriptionCurrencies.add(currency);
+          if (paymentCurrencies.length === 0 || paymentCurrencies.includes(currency)) {
+            const recurringAmt = minorToMajor(Number(sub.total_amount || sub.amount || 0), currency);
+            mrr += recurringAmt;
+          }
         }
       }
     }
@@ -208,18 +242,20 @@ async function fetchDodoRevenue(apiKey: string, environment: string = "live"): P
     const history = Object.entries(dateMap)
       .map(([date, amount]) => ({ date, amount }))
       .sort((a, b) => a.date.localeCompare(b.date));
+    const currencyCount = new Set([...paymentCurrencies, ...subscriptionCurrencies]).size;
+    const hasSingleCurrency = currencyCount <= 1;
 
     return {
-      mrr: Math.round(mrr),
-      totalRevenue: Math.round(netVolume),
-      netVolume30Days: Math.round(netVolume),
+      mrr: hasSingleCurrency ? Math.round(mrr) : 0,
+      totalRevenue: hasSingleCurrency ? Math.round(netVolume) : 0,
+      netVolume30Days: hasSingleCurrency ? Math.round(netVolume) : 0,
       payingCustomers,
       activeSubscriptions: activeSubs,
-      currency: detectedCurrency,
+      currency: currencyCount > 1 ? "MULTI" : detectedCurrency,
       provider: "dodo",
       isDemo: false,
-      history: history.length > 0 ? history : [{ date: new Date().toISOString().split("T")[0], amount: 0 }],
-      recentTransactions: transactions.slice(0, 5),
+      history: hasSingleCurrency && history.length > 0 ? history : [{ date: new Date().toISOString().split("T")[0], amount: 0 }],
+      recentTransactions: transactions.slice(0, 50),
     };
   } catch (err) {
     console.error("Error fetching Dodo Payments revenue:", err);
@@ -257,37 +293,44 @@ async function fetchModularConnectorRevenue(
       const attr = stores?.data?.[0]?.attributes;
       const totalCents = attr?.total_revenue || 0;
       const txList: TransactionItem[] = [];
+      const currencies = new Set<string>();
       const dateMap: Record<string, number> = {};
       let net30 = 0;
       if (Array.isArray(orders?.data)) {
         for (const o of orders.data) {
           const a = o.attributes || {};
-          const amt = (a.total || 0) / 100;
-          net30 += amt;
+          const currency = String(a.currency || "USD").toUpperCase();
+          currencies.add(currency);
+          const amt = minorToMajor(Number(a.total || 0), currency);
           const dStr = a.created_at ? String(a.created_at).slice(0, 10) : today;
-          dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+          const settled = a.status === "paid" && !a.refunded;
+          if (settled && withinTrailingDays(a.created_at)) {
+            net30 += amt;
+            dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+          }
           txList.push({
             id: String(o.id),
             customer: a.user_name || a.user_email || "Lemon Squeezy Buyer",
             amount: amt,
             currency: (a.currency || "USD").toUpperCase(),
             provider: "lemonsqueezy",
-            status: a.status === "paid" ? "succeeded" : "pending",
+            status: settled ? "succeeded" : String(a.status || "pending"),
             date: dStr,
           });
         }
       }
+      const hasSingleCurrency = currencies.size <= 1;
       return {
-        mrr: Math.round(net30),
-        totalRevenue: Math.round(totalCents / 100) || Math.round(net30),
-        netVolume30Days: Math.round(net30),
+        mrr: hasSingleCurrency ? Math.round(net30) : 0,
+        totalRevenue: hasSingleCurrency ? Math.round(totalCents / 100) || Math.round(net30) : 0,
+        netVolume30Days: hasSingleCurrency ? Math.round(net30) : 0,
         payingCustomers: attr?.total_sales || txList.length,
         activeSubscriptions: attr?.total_sales || txList.length,
-        currency: (attr?.currency || "USD").toUpperCase(),
+        currency: currencies.size > 1 ? "MULTI" : (attr?.currency || txList[0]?.currency || "USD").toUpperCase(),
         provider: "hybrid",
         isDemo: false,
-        history: Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)),
-        recentTransactions: txList.slice(0, 5),
+        history: hasSingleCurrency ? Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)) : [{ date: today, amount: 0 }],
+        recentTransactions: txList.slice(0, 50),
       };
     }
     if (provider === "polar" && apiKey) {
@@ -301,32 +344,38 @@ async function fetchModularConnectorRevenue(
       const dateMap: Record<string, number> = {};
       let total = 0;
       const txList: TransactionItem[] = [];
+      const currencies: string[] = Array.from(new Set<string>(items.map((order: { currency?: string }) => String(order.currency || "USD").toUpperCase())));
       for (const o of items) {
-        const amt = (o.amount || 0) / 100;
-        total += amt;
+        const currency = String(o.currency || "USD").toUpperCase();
+        const amt = minorToMajor(Number(o.amount || 0), currency);
         const dStr = o.created_at ? String(o.created_at).slice(0, 10) : today;
-        dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        const settled = isSettledPayment(o.status);
+        if (settled && withinTrailingDays(o.created_at)) {
+          total += amt;
+          dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        }
         txList.push({
           id: String(o.id),
           customer: o.customer?.email || "Polar Backer",
           amount: amt,
-          currency: (o.currency || "USD").toUpperCase(),
+          currency,
           provider: "polar",
-          status: "succeeded",
+          status: settled ? "succeeded" : String(o.status || "pending"),
           date: dStr,
         });
       }
+      const hasSingleCurrency = currencies.length <= 1;
       return {
-        mrr: Math.round(total),
-        totalRevenue: Math.round(total),
-        netVolume30Days: Math.round(total),
+        mrr: hasSingleCurrency ? Math.round(total) : 0,
+        totalRevenue: hasSingleCurrency ? Math.round(total) : 0,
+        netVolume30Days: hasSingleCurrency ? Math.round(total) : 0,
         payingCustomers: items.length,
         activeSubscriptions: items.length,
-        currency: "USD",
+        currency: currencies.length > 1 ? "MULTI" : currencies[0] || "USD",
         provider: "hybrid",
         isDemo: false,
-        history: Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)),
-        recentTransactions: txList.slice(0, 5),
+        history: hasSingleCurrency ? Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)) : [{ date: today, amount: 0 }],
+        recentTransactions: txList.slice(0, 50),
       };
     }
     if (provider === "gumroad" && apiKey) {
@@ -340,32 +389,48 @@ async function fetchModularConnectorRevenue(
       const dateMap: Record<string, number> = {};
       let total = 0;
       const txList: TransactionItem[] = [];
+      const currencies = new Set<string>();
       for (const s of sales) {
-        const amt = (Number(s.price) || 0) / 100;
-        total += amt;
+        // Gumroad's canonical `price` is USD cents. Use buyer-presentment only when
+        // supplied, since that explicitly gives both the charged currency and its minor units.
+        const presentment = s.buyer_presentment && typeof s.buyer_presentment === "object" ? s.buyer_presentment : null;
+        const currency = String(presentment?.currency || "USD").toUpperCase();
+        currencies.add(currency);
+        const grossMinor = Number(presentment?.total_cents ?? s.price ?? 0);
+        const refundMinor = Math.min(grossMinor, Math.max(0, Number(presentment?.refunded_cents ?? s.refunded_cents ?? 0) || 0));
+        const gross = minorToMajor(grossMinor, currency);
+        const net = Math.max(0, minorToMajor(grossMinor - refundMinor, currency));
         const dStr = s.created_at ? String(s.created_at).slice(0, 10) : today;
-        dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        const isRefunded = s.refunded === true || (grossMinor > 0 && refundMinor >= grossMinor);
+        const isPartiallyRefunded = !isRefunded && (s.partially_refunded === true || refundMinor > 0);
+        const isDisputed = s.chargedback === true || s.chargebacked === true || s.disputed === true;
+        const settled = s.paid === true && !isRefunded && !isDisputed;
+        if (settled && withinTrailingDays(s.created_at)) {
+          total += net;
+          dateMap[dStr] = (dateMap[dStr] || 0) + net;
+        }
         txList.push({
           id: String(s.id),
           customer: s.email || s.full_name || "Gumroad Customer",
-          amount: amt,
-          currency: "USD",
+          amount: isPartiallyRefunded ? net : gross,
+          currency,
           provider: "gumroad",
-          status: "succeeded",
+          status: isRefunded ? "refunded" : isDisputed ? "chargebacked" : isPartiallyRefunded ? "partially_refunded" : s.paid === true ? "succeeded" : "pending",
           date: dStr,
         });
       }
+      const hasSingleCurrency = currencies.size <= 1;
       return {
-        mrr: Math.round(total),
-        totalRevenue: Math.round(total),
-        netVolume30Days: Math.round(total),
+        mrr: hasSingleCurrency ? Math.round(total) : 0,
+        totalRevenue: hasSingleCurrency ? Math.round(total) : 0,
+        netVolume30Days: hasSingleCurrency ? Math.round(total) : 0,
         payingCustomers: sales.length,
         activeSubscriptions: sales.length,
-        currency: "USD",
+        currency: currencies.size > 1 ? "MULTI" : Array.from(currencies)[0] || "USD",
         provider: "hybrid",
         isDemo: false,
-        history: Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)),
-        recentTransactions: txList.slice(0, 5),
+        history: hasSingleCurrency ? Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)) : [{ date: today, amount: 0 }],
+        recentTransactions: txList.slice(0, 50),
       };
     }
     if (provider === "paddle" && apiKey) {
@@ -379,32 +444,38 @@ async function fetchModularConnectorRevenue(
       const dateMap: Record<string, number> = {};
       let total = 0;
       const txList: TransactionItem[] = [];
+      const currencies: string[] = Array.from(new Set<string>(rows.map((row: { currency_code?: string }) => String(row.currency_code || "USD").toUpperCase())));
       for (const r of rows) {
-        const amt = Number(r.details?.totals?.total || 0) / 100;
-        total += amt;
+        const currency = String(r.currency_code || "USD").toUpperCase();
+        const amt = minorToMajor(Number(r.details?.totals?.total || 0), currency);
         const dStr = r.created_at ? String(r.created_at).slice(0, 10) : today;
-        dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        const settled = isSettledPayment(r.status);
+        if (settled && withinTrailingDays(r.created_at)) {
+          total += amt;
+          dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        }
         txList.push({
           id: String(r.id),
           customer: r.customer_id || "Paddle Customer",
           amount: amt,
-          currency: (r.currency_code || "USD").toUpperCase(),
+          currency,
           provider: "paddle",
-          status: r.status === "completed" || r.status === "billed" ? "succeeded" : "pending",
+          status: settled ? "succeeded" : String(r.status || "pending"),
           date: dStr,
         });
       }
+      const hasSingleCurrency = currencies.length <= 1;
       return {
-        mrr: Math.round(total),
-        totalRevenue: Math.round(total),
-        netVolume30Days: Math.round(total),
+        mrr: hasSingleCurrency ? Math.round(total) : 0,
+        totalRevenue: hasSingleCurrency ? Math.round(total) : 0,
+        netVolume30Days: hasSingleCurrency ? Math.round(total) : 0,
         payingCustomers: rows.length,
         activeSubscriptions: rows.length,
-        currency: "USD",
+        currency: currencies.length > 1 ? "MULTI" : currencies[0] || "USD",
         provider: "hybrid",
         isDemo: false,
-        history: Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)),
-        recentTransactions: txList.slice(0, 5),
+        history: hasSingleCurrency ? Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)) : [{ date: today, amount: 0 }],
+        recentTransactions: txList.slice(0, 50),
       };
     }
     if (provider === "razorpay" && apiKey) {
@@ -421,32 +492,38 @@ async function fetchModularConnectorRevenue(
       const dateMap: Record<string, number> = {};
       let total = 0;
       const txList: TransactionItem[] = [];
+      const currencies: string[] = Array.from(new Set<string>(items.map((payment: { currency?: string }) => String(payment.currency || "INR").toUpperCase())));
       for (const p of items) {
-        const amt = (Number(p.amount) || 0) / 100;
-        if (p.status === "captured") total += amt;
+        const currency = String(p.currency || "INR").toUpperCase();
+        const amt = minorToMajor(Number(p.amount || 0), currency);
         const dStr = p.created_at ? new Date(p.created_at * 1000).toISOString().slice(0, 10) : today;
-        dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        const settled = p.status === "captured" && !p.refund_status;
+        if (settled && withinTrailingDays(Number(p.created_at || 0))) {
+          total += amt;
+          dateMap[dStr] = (dateMap[dStr] || 0) + amt;
+        }
         txList.push({
           id: String(p.id),
           customer: p.email || p.contact || "Razorpay Customer",
           amount: amt,
-          currency: (p.currency || "INR").toUpperCase(),
+          currency,
           provider: "razorpay",
-          status: p.status === "captured" ? "succeeded" : "pending",
+          status: settled ? "succeeded" : p.refund_status ? "refunded" : String(p.status || "pending"),
           date: dStr,
         });
       }
+      const hasSingleCurrency = currencies.length <= 1;
       return {
-        mrr: Math.round(total),
-        totalRevenue: Math.round(total),
-        netVolume30Days: Math.round(total),
+        mrr: hasSingleCurrency ? Math.round(total) : 0,
+        totalRevenue: hasSingleCurrency ? Math.round(total) : 0,
+        netVolume30Days: hasSingleCurrency ? Math.round(total) : 0,
         payingCustomers: items.length,
         activeSubscriptions: items.length,
-        currency: items[0]?.currency?.toUpperCase() || "USD",
+        currency: currencies.length > 1 ? "MULTI" : currencies[0] || "INR",
         provider: "hybrid",
         isDemo: false,
-        history: Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)),
-        recentTransactions: txList.slice(0, 5),
+        history: hasSingleCurrency ? Object.entries(dateMap).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)) : [{ date: today, amount: 0 }],
+        recentTransactions: txList.slice(0, 50),
       };
     }
     if (provider === "custom" && conn.targetUrl) {
@@ -469,7 +546,7 @@ async function fetchModularConnectorRevenue(
         provider: "hybrid",
         isDemo: false,
         history: Array.isArray(json.history) ? json.history : [{ date: today, amount: Math.round(mrrVal) }],
-        recentTransactions: Array.isArray(json.recentTransactions) ? json.recentTransactions.slice(0, 5) : [],
+        recentTransactions: Array.isArray(json.recentTransactions) ? json.recentTransactions.slice(0, 25) : [],
       };
     }
     return null;
@@ -517,10 +594,25 @@ export async function fetchRevenueStats(config?: {
   const active = settled.filter((s): s is { provider: string; label: string; promise: Promise<RevenueStats | null>; res: RevenueStats } => Boolean(s.res));
   if (active.length === 0) return null;
 
+  // Providers return at most 25-50 recent transactions, so risk is a recent sample, not the full 30-day ledger.
+  // A source at or above the smallest cap (25) is treated as possibly truncated.
+  const buildRevenueRisk = (items: RevenueStats[]) => summarizeRevenueAtRisk(
+    items.flatMap((item) => item.recentTransactions.map((tx) => ({
+      amountMinor: Math.round(tx.amount * 10 ** currencyMinorUnitDigits(tx.currency)),
+      currency: tx.currency,
+      status: tx.status,
+      createdAt: tx.date,
+      provider: tx.provider,
+    }))),
+    new Date(),
+    { sampleLimited: items.some((item) => item.recentTransactions.length >= 25) },
+  );
+
   if (active.length === 1) {
     const single = active[0].res;
     return {
       ...single,
+      revenueAtRisk: buildRevenueRisk([single]),
       providerBreakdown: [
         {
           provider: active[0].provider,
@@ -570,17 +662,20 @@ export async function fetchRevenueStats(config?: {
     .map(([date, amount]) => ({ date, amount }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  const currencies = Array.from(new Set(active.map((item) => item.res.currency.toUpperCase())));
+  const hasOneCurrency = currencies.length === 1;
   return {
-    mrr: totalMrr,
-    totalRevenue: totalRev,
-    netVolume30Days: totalNet30,
+    mrr: hasOneCurrency ? totalMrr : 0,
+    totalRevenue: hasOneCurrency ? totalRev : 0,
+    netVolume30Days: hasOneCurrency ? totalNet30 : 0,
     payingCustomers: totalCust,
     activeSubscriptions: totalSubs,
-    currency: active[0].res.currency || "USD",
+    currency: hasOneCurrency ? currencies[0] : "MULTI",
     provider: "hybrid",
     isDemo: false,
-    history: history.length > 0 ? history : [{ date: new Date().toISOString().split("T")[0], amount: 0 }],
+    history: hasOneCurrency && history.length > 0 ? history : [{ date: new Date().toISOString().split("T")[0], amount: 0 }],
     recentTransactions: allTx.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10),
+    revenueAtRisk: buildRevenueRisk(active.map((item) => item.res)),
     providerBreakdown: breakdown,
   };
 }

@@ -71,6 +71,7 @@ export class DevPulseClient {
   private queue: QueuedBeacon[] = [];
   private initialized = false;
   private flushing = false;
+  private analyticsSessionId: string | null = null;
 
   constructor(config: DevPulseConfig) {
     if (!config?.apiKey) {
@@ -149,10 +150,39 @@ export class DevPulseClient {
     });
   }
 
+  private getAnalyticsSessionId(): string {
+    if (this.analyticsSessionId) return this.analyticsSessionId;
+    const storageKey = "__devpulse_session_id__";
+    if (typeof window !== "undefined") {
+      try {
+        const existing = window.sessionStorage.getItem(storageKey);
+        if (existing && /^[a-zA-Z0-9_-]{16,100}$/.test(existing)) {
+          this.analyticsSessionId = existing;
+          return existing;
+        }
+      } catch {
+        // Storage can be unavailable in privacy-restricted browser contexts.
+      }
+    }
+    const random = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().replace(/-/g, "")
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+    this.analyticsSessionId = `dps_${random}`;
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.setItem(storageKey, this.analyticsSessionId);
+      } catch {
+        // Keep the in-memory session when storage is unavailable.
+      }
+    }
+    return this.analyticsSessionId;
+  }
+
   public async trackEvent(
     eventName: string,
-    opts?: { path?: string; sourceType?: "web" | "app" | "desktop" | "cli"; os?: string }
+    opts?: { path?: string; sourceType?: "web" | "app" | "desktop" | "cli"; os?: string; sessionId?: string }
   ): Promise<boolean> {
+    const sessionId = opts?.sessionId?.trim().slice(0, 160) || (typeof window !== "undefined" ? this.getAnalyticsSessionId() : null);
     return this.sendOrQueue(`${this.config.endpoint}/api/v1/analytics`, {
       project: this.config.apiKey,
       eventName,
@@ -160,6 +190,7 @@ export class DevPulseClient {
       sourceType: opts?.sourceType || (typeof window !== "undefined" ? "web" : "app"),
       os: opts?.os || this.detectOs(),
       appVersion: this.config.release || null,
+      ...(sessionId ? { sessionId } : {}),
     });
   }
 
@@ -209,7 +240,7 @@ export class DevPulseClient {
 
   public async captureException(
     error: unknown,
-    extra?: { errorName?: string; extraMessage?: string; terminalLogs?: string }
+    extra?: { errorName?: string; extraMessage?: string; terminalLogs?: string; flagKey?: string; flagVariant?: string; flagUserId?: string }
   ): Promise<boolean> {
     const errObj = error instanceof Error ? error : null;
     const shouldScrub = this.config.scrubPii !== false;
@@ -230,6 +261,9 @@ export class DevPulseClient {
       os: this.detectOs(),
       environment: this.config.environment,
       breadcrumbs: this.getBreadcrumbs(),
+      ...(extra?.flagKey ? { flagKey: extra.flagKey } : {}),
+      ...(extra?.flagVariant ? { flagVariant: extra.flagVariant } : {}),
+      ...(extra?.flagUserId ? { flagUserId: extra.flagUserId } : {}),
     });
   }
 
@@ -519,13 +553,15 @@ export class DevPulseClient {
       const data = (await res.json()) as { flags?: Record<string, boolean>; variants?: Record<string, string> };
       const enabled = Boolean(data.flags?.[flagKey]);
       const variant = data.variants?.[flagKey] || "control";
-      void this.sendOrQueue(`${this.config.endpoint}/api/v1/flags/evaluate`, {
-        apiKey: this.config.apiKey,
-        flagKey,
-        variant,
-        userId,
-        converted: false,
-      });
+      if (enabled) {
+        void this.sendOrQueue(`${this.config.endpoint}/api/v1/flags/evaluate`, {
+          apiKey: this.config.apiKey,
+          flagKey,
+          variant,
+          userId,
+          converted: false,
+        });
+      }
       return enabled;
     } catch {
       return opts?.defaultValue ?? false;
@@ -539,8 +575,18 @@ export class DevPulseClient {
         { headers: { Authorization: `Bearer ${this.config.apiKey}` } }
       );
       if (!res.ok) return "control";
-      const data = (await res.json()) as { variants?: Record<string, string> };
-      return data.variants?.[flagKey] || "control";
+      const data = (await res.json()) as { flags?: Record<string, boolean>; variants?: Record<string, string> };
+      const variant = data.variants?.[flagKey] || "control";
+      if (data.flags?.[flagKey]) {
+        void this.sendOrQueue(`${this.config.endpoint}/api/v1/flags/evaluate`, {
+          apiKey: this.config.apiKey,
+          flagKey,
+          variant,
+          userId,
+          converted: false,
+        });
+      }
+      return variant;
     } catch {
       return "control";
     }
@@ -652,7 +698,14 @@ export function addBreadcrumb(crumb: Omit<Breadcrumb, "timestamp"> & { timestamp
 
 export function captureException(
   error: unknown,
-  extra?: { errorName?: string; extraMessage?: string; terminalLogs?: string }
+  extra?: {
+    errorName?: string;
+    extraMessage?: string;
+    terminalLogs?: string;
+    flagKey?: string;
+    flagVariant?: string;
+    flagUserId?: string;
+  }
 ): Promise<boolean> {
   if (!activeClient) return Promise.resolve(false);
   return activeClient.captureException(error, extra);

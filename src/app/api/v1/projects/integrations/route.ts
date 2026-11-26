@@ -7,6 +7,7 @@ import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 import { apiError } from "@/lib/security/api-error";
+import { DEVPULSE_MCP_TOOLS } from "@/lib/integrations/mcp-policy";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
       dockerImage,
       vscodeExtension,
       mcpServerName,
+      mcpAllowedTools,
     } = body;
 
     if (!projectId) {
@@ -56,6 +58,14 @@ export async function POST(req: NextRequest) {
       const trimmed = val.trim();
       return trimmed.length > 0 ? trimmed : null;
     };
+    if (mcpAllowedTools !== undefined && mcpAllowedTools !== null &&
+      (!Array.isArray(mcpAllowedTools) || mcpAllowedTools.some((tool: unknown) => typeof tool !== "string" || !DEVPULSE_MCP_TOOLS.includes(tool as (typeof DEVPULSE_MCP_TOOLS)[number])))) {
+      return NextResponse.json({ error: "mcpAllowedTools must be null or a list of supported MCP tools" }, { status: 400 });
+    }
+    if (mcpAllowedTools !== undefined && !access.canManageSecurity) {
+      await recordAuditEvent({ userId: user.id, actorUsername: user.githubUsername, organizationId: access.project.organizationId, projectId: access.project.id, action: "mcp.policy_update_denied", resourceType: "mcp_policy", resourceId: access.project.id, status: "denied", headers: req.headers, metadata: { role: access.role } });
+      return NextResponse.json({ error: "Forbidden: Only workspace security admins can manage MCP tool policy." }, { status: 403 });
+    }
 
     let cleanGithub = cleanStr(githubRepo);
     if (cleanGithub && cleanGithub.toLowerCase() !== (access.project.githubRepo || "").toLowerCase()) {
@@ -79,6 +89,10 @@ export async function POST(req: NextRequest) {
       cleanGithub = ownership.githubRepo;
     }
 
+    if (mcpAllowedTools !== undefined) {
+      await recordAuditEvent({ userId: user.id, actorUsername: user.githubUsername, organizationId: access.project.organizationId, workspaceId: access.project.workspaceId, projectId: access.project.id, action: "mcp.policy_updated", resourceType: "mcp_policy", resourceId: access.project.id, headers: req.headers, metadata: { allowedTools: mcpAllowedTools } });
+    }
+
     await db
       .update(projects)
       .set({
@@ -90,6 +104,9 @@ export async function POST(req: NextRequest) {
         dockerImage: cleanStr(dockerImage),
         vscodeExtension: cleanStr(vscodeExtension),
         mcpServerName: cleanStr(mcpServerName),
+        ...(mcpAllowedTools !== undefined
+          ? { mcpAllowedToolsJson: mcpAllowedTools === null ? null : JSON.stringify(Array.from(new Set(mcpAllowedTools))) }
+          : {}),
       })
       .where(eq(projects.id, projectId));
 
@@ -107,6 +124,7 @@ export async function POST(req: NextRequest) {
         npmPackage: cleanStr(npmPackage),
         pypiPackage: cleanStr(pypiPackage),
         rustCrate: cleanStr(rustCrate),
+        ...(mcpAllowedTools !== undefined ? { mcpAllowedTools: mcpAllowedTools === null ? null : [...mcpAllowedTools] } : {}),
       },
     });
 
@@ -114,7 +132,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: "Package integrations updated successfully.",
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error("Error updating project integrations:", err);
     return apiError(err, "Failed to update project integrations", 500);
   }

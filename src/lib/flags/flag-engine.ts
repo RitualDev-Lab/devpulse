@@ -1,9 +1,9 @@
 import { db } from "@/db";
 import { errorEvents, featureFlags, flagExposures, projects } from "@/db/schema";
 import { and, eq, gte } from "drizzle-orm";
+import { assessCrashRollback, summarizeFlagCrashSamples } from "@/lib/flags/rollback-statistics";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
-import { decryptSecret } from "@/lib/security/crypto";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export interface FlagVariant {
@@ -103,8 +103,8 @@ export function evaluateFlagForUser(
 }
 
 /**
- * Ties feature flag rollout % to live crash rate and auto-rolls back any active flag
- * whose correlated crash rate exceeds crashRateThresholdPercent.
+ * Auto-rolls back a feature flag only when distinct, pseudonymous users show a
+ * statistically significant treatment crash-rate increase in the last hour.
  */
 export async function checkAndAutoRollbackFlags(projectId: string) {
   const activeFlags = await db
@@ -120,35 +120,72 @@ export async function checkAndAutoRollbackFlags(projectId: string) {
 
   if (activeFlags.length === 0) return { rolledBack: [] as string[] };
 
-  const cutoffIso = new Date(Date.now() - 60 * 60_000).toISOString();
+  // No secret means no joinable identities; avoid making rollback decisions from anonymous data.
+  if (!process.env.ANALYTICS_HASH_SECRET) return { rolledBack: [] as string[] };
+
+  // SQLite CURRENT_TIMESTAMP rows use `YYYY-MM-DD HH:mm:ss`; keep lexical comparisons aligned.
+  const cutoffIso = new Date(Date.now() - 60 * 60_000)
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, "");
   const [recentErrors, recentExposures] = await Promise.all([
     db
-      .select({ id: errorEvents.id, flagKey: errorEvents.flagKey })
+      .select({ flagKey: errorEvents.flagKey, flagVariant: errorEvents.flagVariant, userHash: errorEvents.flagUserHash })
       .from(errorEvents)
       .where(and(eq(errorEvents.projectId, projectId), gte(errorEvents.createdAt, cutoffIso)))
-      .limit(500),
+      .limit(5001),
     db
-      .select({ id: flagExposures.id, flagKey: flagExposures.flagKey })
+      .select({ flagKey: flagExposures.flagKey, variant: flagExposures.variant, userHash: flagExposures.userHash })
       .from(flagExposures)
       .where(and(eq(flagExposures.projectId, projectId), gte(flagExposures.createdAt, cutoffIso)))
-      .limit(1000),
+      .limit(5001),
   ]);
+
+  // The statistical sample must be complete. Truncated query results could bias either arm.
+  if (recentErrors.length >= 5001 || recentExposures.length >= 5001) {
+    return { rolledBack: [] as string[] };
+  }
 
   const rolledBack: string[] = [];
 
   for (const flag of activeFlags) {
     if (flag.rolloutPercent <= 0) continue;
 
-    const taggedCrashes = recentErrors.filter((e) => e.flagKey === flag.key).length;
-    const exposures = Math.max(
-      1,
-      recentExposures.filter((ex) => ex.flagKey === flag.key).length
-    );
-    const crashRatePct = (taggedCrashes / exposures) * 100;
+    const variants = [...new Set(parseFlagVariants(flag.variantsJson).map((item) => item.name))];
+    // Avoid uncorrected multiple-comparison risk until multi-arm tests have adjusted bounds.
+    if (variants.length !== 2 || !variants.includes("control")) continue;
 
-    if (taggedCrashes >= 2 && crashRatePct > flag.crashRateThresholdPercent) {
+    const exposures = recentExposures.filter((ex) => ex.flagKey === flag.key);
+    const crashes = recentErrors.filter((error) => error.flagKey === flag.key);
+    let triggeredSample: ReturnType<typeof summarizeFlagCrashSamples> | null = null;
+    let triggeredDecision: ReturnType<typeof assessCrashRollback> | null = null;
+    let triggeredVariant: string | null = null;
+
+    for (const variant of variants) {
+      if (variant === "control") continue;
+      const sample = summarizeFlagCrashSamples(
+        exposures.map(({ userHash, variant: exposureVariant }) => ({ userHash, variant: exposureVariant })),
+        crashes.map(({ userHash, flagVariant }) => ({ userHash, variant: flagVariant || "control" })),
+        variant,
+      );
+      const decision = assessCrashRollback({
+        control: sample.control,
+        treatment: sample.treatment,
+        thresholdPercent: flag.crashRateThresholdPercent,
+      });
+      if (decision.shouldRollback) {
+        triggeredSample = sample;
+        triggeredDecision = decision;
+        triggeredVariant = variant;
+        break;
+      }
+    }
+
+    if (triggeredSample && triggeredDecision && triggeredVariant) {
+      const sample = triggeredSample;
+      const decision = triggeredDecision;
       const nowIso = new Date().toISOString();
-      const reason = `Auto-rolled back: ${taggedCrashes} crash(es) across ${exposures} exposure(s) (${crashRatePct.toFixed(1)}% > ${flag.crashRateThresholdPercent}% limit)`;
+      const reason = `Auto-rolled back: variant ${triggeredVariant}: ${decision.reason} (${sample.treatment.crashedUsers}/${sample.treatment.exposedUsers} treatment users; ${sample.control.crashedUsers}/${sample.control.exposedUsers} control users)`;
 
       await db
         .update(featureFlags)
@@ -175,7 +212,17 @@ export async function checkAndAutoRollbackFlags(projectId: string) {
           action: "flag.auto_rolled_back",
           resourceType: "feature_flag",
           resourceId: flag.key,
-          metadata: { taggedCrashes, exposures, crashRatePct, reason },
+          metadata: {
+            reason,
+            treatmentVariant: triggeredVariant,
+            controlExposedUsers: sample.control.exposedUsers,
+            controlCrashedUsers: sample.control.crashedUsers,
+            treatmentExposedUsers: sample.treatment.exposedUsers,
+            treatmentCrashedUsers: sample.treatment.crashedUsers,
+            treatmentCrashRatePercent: decision.treatmentRatePercent,
+            controlCrashRatePercent: decision.controlRatePercent,
+            riskDifferenceLowerBoundPercent: decision.riskDifferenceLowerBoundPercent,
+          },
         });
 
         const webhookConfig = await resolveDecryptedWebhookConfig(proj);

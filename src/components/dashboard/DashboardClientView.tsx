@@ -318,6 +318,8 @@ export function DashboardClientView({
         initialDockerImage={data.project.dockerImage}
         initialVsCode={data.project.vscodeExtension}
         initialMcp={data.project.mcpServerName}
+        initialMcpAllowedTools={data.project.mcpAllowedTools}
+        canManageMcpPolicy={accessRole === "owner" || accessRole === "admin"}
       />
     </div>
   );

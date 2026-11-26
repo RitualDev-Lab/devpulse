@@ -48,6 +48,7 @@ export interface LoadedWorkspaceReady {
   initialData: DashboardData & {
     project: DashboardData["project"] & {
       stackPreset?: string;
+      mcpAllowedTools?: string[] | null;
       hasNpmToken?: boolean;
       hasGithubToken?: boolean;
     };
@@ -494,6 +495,14 @@ export async function loadDashboardWorkspace(
       dockerImage: activeProject.dockerImage,
       vscodeExtension: activeProject.vscodeExtension,
       mcpServerName: activeProject.mcpServerName,
+      mcpAllowedTools: (() => {
+        try {
+          const tools: unknown = activeProject.mcpAllowedToolsJson ? JSON.parse(activeProject.mcpAllowedToolsJson) : null;
+          return Array.isArray(tools) ? tools.filter((tool): tool is string => typeof tool === "string") : null;
+        } catch {
+          return [];
+        }
+      })(),
       stackPreset: activeProject.stackPreset || "saas",
       hasNpmToken: canSeeWebhookStatus ? Boolean(activeProject.npmTokenEncrypted) : false,
       hasGithubToken: canSeeWebhookStatus ? Boolean(activeProject.githubTokenEncrypted) : false,

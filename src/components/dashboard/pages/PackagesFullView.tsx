@@ -268,7 +268,7 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
               <VsCodeStatsCard stats={initialData.vscodeStats} extensionId={project.vscodeExtension} />
             )}
             {project.mcpServerName && (
-              <McpStatsCard stats={initialData.mcpStats} serverName={project.mcpServerName} />
+              <McpStatsCard stats={initialData.mcpStats} serverName={project.mcpServerName} projectId={project.id} />
             )}
           </div>
         )}

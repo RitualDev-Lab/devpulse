@@ -12,17 +12,25 @@ import {
   runMonitorCheck,
 } from "@/lib/monitors/checker";
 import { isPublicDemoProject } from "@/lib/security/demo-project";
+import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const projectId = req.nextUrl.searchParams.get("projectId");
+    const apiKey = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    let projectId = req.nextUrl.searchParams.get("projectId")?.trim() || "";
+    if (apiKey) {
+      const verified = await verifyTelemetryApiKey(apiKey);
+      if (!verified) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+      if (projectId && projectId !== verified.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      projectId = verified.id;
+    }
     if (!projectId) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
     }
 
-    if (!isPublicDemoProject(projectId)) {
+    if (!apiKey && !isPublicDemoProject(projectId)) {
       const user = await getCurrentUser();
       if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const access = await resolveProjectAccess(projectId, user);
@@ -58,7 +66,7 @@ export async function GET(req: NextRequest) {
         overallUptimePercent: (overallUptimeBp / 100).toFixed(2),
       },
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error("GET /api/v1/monitors error:", err);
     return NextResponse.json({ error: "Failed to load monitors" }, { status: 500 });
   }
@@ -174,7 +182,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ error: "Unsupported monitor action" }, { status: 400 });
-  } catch (err: any) {
+  } catch (err) {
     console.error("POST /api/v1/monitors error:", err);
     return NextResponse.json({ error: "Monitor operation failed" }, { status: 500 });
   }

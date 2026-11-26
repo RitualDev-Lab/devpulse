@@ -55,6 +55,7 @@ export const projects = sqliteTable("projects", {
   goModule: text("go_module"), // e.g. "github.com/ritualdev-lab/devpulse"
   vscodeExtension: text("vscode_extension"), // e.g. "ritualdev.pulse-tools"
   mcpServerName: text("mcp_server_name"), // e.g. "ritualdev/devpulse-mcp"
+  mcpAllowedToolsJson: text("mcp_allowed_tools_json"), // null = all tools allowed; array = allowlist policy
   dockerImage: text("docker_image"), // e.g. "ritualdev/devpulse"
   
   // Telemetry & Security
@@ -172,6 +173,7 @@ export const errorEvents = sqliteTable("error_events", {
   appBuild: text("app_build"),
   flagKey: text("flag_key"),
   flagVariant: text("flag_variant"),
+  flagUserHash: text("flag_user_hash"),
   githubIssueNumber: integer("github_issue_number"),
   githubIssueUrl: text("github_issue_url"),
   githubPrNumber: integer("github_pr_number"),
@@ -213,6 +215,8 @@ export const pageviews = sqliteTable("pageviews", {
   appVersion: text("app_version"),
   /** Pseudonymous, monthly-rotating visitor id (see lib/analytics/visitor.ts). Null when unidentified. */
   visitorId: text("visitor_id"),
+  /** Optional opaque session identifier, scoped by project and rotated by the client. */
+  sessionId: text("session_id"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
@@ -687,6 +691,7 @@ export const flagExposures = sqliteTable("flag_exposures", {
   flagKey: text("flag_key").notNull(),
   variant: text("variant").default("control").notNull(),
   userKey: text("user_key").notNull(),
+  userHash: text("user_hash"),
   converted: integer("converted", { mode: "boolean" }).default(false).notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
@@ -774,6 +779,7 @@ export const featureRequests = sqliteTable("feature_requests", {
   voteCount: integer("vote_count").default(1).notNull(),
   authorName: text("author_name"),
   authorEmail: text("author_email"),
+  releaseUrl: text("release_url"),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
@@ -790,6 +796,15 @@ export const featureVotes = sqliteTable("feature_votes", {
 /**
  * Hourly Pre-Aggregated Analytics Rollups (avoids full raw pageviews table scans)
  */
+export const mcpToolCalls = sqliteTable("mcp_tool_calls", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
+  toolName: text("tool_name").notNull(),
+  outcome: text("outcome").notNull(), // 'allowed' | 'denied' | 'error'
+  durationMs: integer("duration_ms").default(0).notNull(),
+  createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
+});
+
 export const metricsHourly = sqliteTable("metrics_hourly", {
   id: text("id").primaryKey(),
   projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),

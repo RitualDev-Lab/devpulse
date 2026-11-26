@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { RevenueStats } from "@/lib/integrations/revenue";
 import { formatNumber, formatDate, formatCurrency } from "@/lib/utils/format";
+import { minorToMajor } from "@/lib/revenue/transaction-rules";
 
 interface RevenueStatsCardProps {
   stats: RevenueStats | null;
@@ -76,6 +77,10 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
   return (
     <div className="flex flex-col h-full justify-between p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg shadow-black/40 hover:border-zinc-700 transition">
       <div>
+        {data?.revenueAtRisk && data.revenueAtRisk.length > 0 && <section aria-label="Revenue at risk" className="mb-3 p-3 rounded-xl bg-amber-950/20 border border-amber-800/40">
+          <div className="flex items-center justify-between gap-2 mb-2"><span className="text-[11px] font-semibold text-amber-200">Revenue at risk · trailing 30 days</span><span className="text-[10px] text-zinc-500">pending, unpaid + chargebacks{data.revenueAtRisk.some((risk) => risk.sampleLimited) ? " · recent sample" : ""}</span></div>
+          <div className="space-y-1.5">{data.revenueAtRisk.filter((risk) => risk.exposedAmountMinor > 0).map((risk) => <div key={risk.currency} className="flex items-center justify-between text-[11px]"><span className="text-zinc-300">{risk.currency} · {risk.riskScorePercent}% exposure · {risk.transactionCount} payments</span><strong className="font-mono text-amber-300">{formatCurrency(minorToMajor(risk.exposedAmountMinor, risk.currency), risk.currency)}</strong></div>)}</div>
+        </section>}
         {/* Header */}
         <div className="flex items-center justify-between mb-3.5">
           <div className="flex items-center gap-2.5">
@@ -134,7 +139,7 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                 <span className="text-[10px] text-zinc-400 block mb-0.5">Monthly (MRR)</span>
                 <div className="flex items-center gap-1">
                   <span className="text-base font-bold text-emerald-400 font-mono">
-                    {formatCurrency(data.mrr || 0, data.currency)}
+                    {data.currency === "MULTI" ? "Multiple currencies" : formatCurrency(data.mrr || 0, data.currency)}
                   </span>
                 </div>
               </div>
@@ -143,7 +148,7 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                 <span className="text-[10px] text-zinc-400 block mb-0.5">30-Day Volume</span>
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-bold text-white font-mono">
-                    {formatCurrency(data.netVolume30Days || 0, data.currency)}
+                    {data.currency === "MULTI" ? "Multiple currencies" : formatCurrency(data.netVolume30Days || 0, data.currency)}
                   </span>
                 </div>
               </div>
@@ -175,7 +180,7 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                 <span className="flex items-center gap-1 text-zinc-300">
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> 30-Day Inflow Velocity
                 </span>
-                <span className="font-mono">Peak: {formatCurrency(maxAmount, data.currency)}</span>
+                <span className="font-mono">Peak: {data.currency === "MULTI" ? "—" : formatCurrency(maxAmount, data.currency)}</span>
               </div>
 
               <div className="w-full h-16 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2 overflow-hidden relative">
@@ -226,7 +231,7 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                     <div className="flex items-center gap-2 truncate pr-2">
                       <span
                         className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          tx.status === "succeeded" ? "bg-emerald-400" : "bg-amber-400"
+                          tx.status === "succeeded" ? "bg-emerald-400" : tx.status === "failed" || tx.status === "refunded" || tx.status === "disputed" ? "bg-red-400" : "bg-amber-400"
                         }`}
                       ></span>
                       <span className="text-zinc-200 truncate font-medium">{tx.customer}</span>
@@ -251,7 +256,9 @@ export function RevenueStatsCard({ stats, projectId }: RevenueStatsCardProps) {
                         className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
                           tx.status === "succeeded"
                             ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
-                            : "bg-amber-950 text-amber-400 border border-amber-800"
+                            : tx.status === "failed" || tx.status === "refunded" || tx.status === "disputed"
+                              ? "bg-red-950 text-red-300 border border-red-800"
+                              : "bg-amber-950 text-amber-400 border border-amber-800"
                         }`}
                       >
                         {tx.status}

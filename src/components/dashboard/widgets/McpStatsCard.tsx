@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Cpu, Wrench, Layers, Radio, CheckCircle2, CircleDashed, ExternalLink } from "lucide-react";
 import type { McpServerStats } from "@/lib/integrations/mcp";
 
@@ -7,7 +7,22 @@ interface McpStatsCardProps {
   serverName: string;
 }
 
-export function McpStatsCard({ stats, serverName }: McpStatsCardProps) {
+interface McpUsageReport {
+  totalCalls: number;
+  truncated: boolean;
+  policy: { mode: "all_allowed" | "allowlist"; allowedTools: string[] };
+  tools: Array<{ toolName: string; calls: number; denied: number; errors: number; avgDurationMs: number }>;
+}
+
+export function McpStatsCard({ stats, serverName, projectId }: McpStatsCardProps & { projectId: string }) {
+  const [usage, setUsage] = useState<McpUsageReport | null>(null);
+  useEffect(() => {
+    void fetch(`/api/v1/mcp?projectId=${encodeURIComponent(projectId)}`)
+      .then(async (response) => response.ok ? response.json() as Promise<McpUsageReport> : null)
+      .then((report) => { if (report) setUsage(report); })
+      .catch(() => {});
+  }, [projectId]);
+
   if (!stats) {
     return (
       <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-zinc-400">
@@ -132,6 +147,11 @@ export function McpStatsCard({ stats, serverName }: McpStatsCardProps) {
         )}
       </div>
 
+      {usage && <div className="mt-3 p-3 rounded-xl bg-zinc-950/70 border border-zinc-800/70 space-y-2">
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] uppercase tracking-wide text-zinc-400">MCP tool calls · 30 days</span><span className="text-xs font-bold text-teal-300">{usage.totalCalls.toLocaleString()}{usage.truncated ? "+" : ""}</span></div>
+        <div className="text-[10px] text-zinc-500">Policy: {usage.policy.mode === "all_allowed" ? "All supported tools" : `${usage.policy.allowedTools.length} allowed`}</div>
+        {usage.tools.slice(0, 4).map((tool) => <div key={tool.toolName} className="flex items-center justify-between gap-2 text-[10px]"><span className="font-mono text-zinc-300">{tool.toolName}</span><span className="text-zinc-500">{tool.calls} calls · {tool.denied} denied · {tool.errors} errors</span></div>)}
+      </div>}
       <div className="mt-3 pt-2 flex items-center justify-between text-[11px] text-zinc-500 border-t border-zinc-800/40">
         <span>MCP Registry Check</span>
         <span className={anyIndexed ? "text-teal-400 font-medium" : "text-amber-400 font-medium"}>

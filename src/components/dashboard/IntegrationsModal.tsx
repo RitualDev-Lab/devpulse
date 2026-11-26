@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Plug, CheckCircle2, Box, Package, Cpu, HelpCircle, GitBranch } from "lucide-react";
+import { X, Plug, CheckCircle2, Box, Package, Cpu, HelpCircle, GitBranch, ShieldCheck } from "lucide-react";
+import { DEVPULSE_MCP_TOOLS } from "@/lib/integrations/mcp-policy";
 
 interface IntegrationsModalProps {
   isOpen: boolean;
@@ -15,6 +16,8 @@ interface IntegrationsModalProps {
   initialDockerImage?: string | null;
   initialVsCode?: string | null;
   initialMcp?: string | null;
+  initialMcpAllowedTools?: string[] | null;
+  canManageMcpPolicy?: boolean;
 }
 
 export function IntegrationsModal({
@@ -29,6 +32,8 @@ export function IntegrationsModal({
   initialDockerImage = "",
   initialVsCode = "",
   initialMcp = "",
+  initialMcpAllowedTools = null,
+  canManageMcpPolicy = false,
 }: IntegrationsModalProps) {
   const [github, setGithub] = useState(initialGithub || "");
   const [npm, setNpm] = useState(initialNpm || "");
@@ -38,6 +43,7 @@ export function IntegrationsModal({
   const [dockerImage, setDockerImage] = useState(initialDockerImage || "");
   const [vscode, setVsCode] = useState(initialVsCode || "");
   const [mcp, setMcp] = useState(initialMcp || "");
+  const [mcpAllowedTools, setMcpAllowedTools] = useState<string[] | null>(initialMcpAllowedTools);
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -61,6 +67,7 @@ export function IntegrationsModal({
           dockerImage: dockerImage,
           vscodeExtension: vscode,
           mcpServerName: mcp,
+          ...(canManageMcpPolicy ? { mcpAllowedTools } : {}),
         }),
       });
 
@@ -230,6 +237,17 @@ export function IntegrationsModal({
               onChange={(e) => setMcp(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 font-mono text-xs"
             />
+          </div>
+
+          <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-cyan-400" /> MCP tool policy</span>
+              {canManageMcpPolicy && <button type="button" onClick={() => setMcpAllowedTools(mcpAllowedTools === null ? [] : null)} className="text-[10px] text-cyan-300 hover:text-cyan-200">
+                {mcpAllowedTools === null ? "Restrict tools" : "Allow all tools"}
+              </button>}
+            </div>
+            {mcpAllowedTools !== null && <div className="grid grid-cols-2 gap-1.5">{DEVPULSE_MCP_TOOLS.map((tool) => <label key={tool} className="flex items-center gap-2 text-[11px] text-zinc-300"><input type="checkbox" disabled={!canManageMcpPolicy} checked={mcpAllowedTools.includes(tool)} onChange={(event) => setMcpAllowedTools((current) => event.target.checked ? [...(current || []), tool] : (current || []).filter((value) => value !== tool))} />{tool}</label>)}</div>}
+            <p className="text-[10px] text-zinc-500">{canManageMcpPolicy ? "Allowlist policy is enforced by the official DevPulse MCP client and logged for audit." : "Only workspace owners and admins can change this security policy."}</p>
           </div>
 
           {/* Submit Action */}

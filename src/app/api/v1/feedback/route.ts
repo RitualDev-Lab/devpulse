@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { apiError } from "@/lib/security/api-error";
+import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 
 export const dynamic = "force-dynamic";
 
@@ -34,20 +35,32 @@ async function computeVoterHash(req: NextRequest): Promise<string> {
 export async function GET(req: NextRequest) {
   try {
     const projectSlug = req.nextUrl.searchParams.get("projectSlug")?.trim();
-    const projectIdInput = req.nextUrl.searchParams.get("projectId")?.trim();
+    let projectIdInput = req.nextUrl.searchParams.get("projectId")?.trim();
+    const apiKey = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (apiKey) {
+      const verified = await verifyTelemetryApiKey(apiKey);
+      if (!verified) return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+      projectIdInput = verified.id;
+    }
 
     if (!projectSlug && !projectIdInput) {
       return NextResponse.json({ error: "Missing projectSlug or projectId" }, { status: 400 });
     }
 
     const [project] = await db
-      .select({ id: projects.id, name: projects.name, slug: projects.slug })
+      .select({ id: projects.id, name: projects.name, slug: projects.slug, isPublic: projects.isPublic })
       .from(projects)
       .where(projectIdInput ? eq(projects.id, projectIdInput) : eq(projects.slug, projectSlug!))
       .limit(1);
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    if (!project.isPublic && !apiKey) {
+      const user = await getCurrentUser();
+      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const access = await resolveProjectAccess(project.id, user);
+      if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const voterHash = await computeVoterHash(req);
@@ -60,9 +73,9 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(featureRequests.voteCount), desc(featureRequests.createdAt))
         .limit(100),
       db
-        .select({ version: deployments.version, createdAt: deployments.deployedAt })
+        .select({ version: deployments.version, createdAt: deployments.deployedAt, url: deployments.deploymentUrl })
         .from(deployments)
-        .where(eq(deployments.projectId, project.id))
+        .where(and(eq(deployments.projectId, project.id), eq(deployments.status, "success")))
         .orderBy(desc(deployments.deployedAt))
         .limit(15),
     ]);
@@ -85,14 +98,14 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      project,
-      releases: releaseList.map((r) => r.version),
+      project: { id: project.id, name: project.name, slug: project.slug },
+      releases: releaseList.map((r) => ({ version: r.version, url: r.url })),
       items: items.map((item) => ({
         ...item,
         viewerVoted: votedIds.has(item.id),
       })),
     });
-  } catch (err: any) {
+  } catch (err) {
     return apiError(err, "Failed to load feature requests", 500);
   }
 }
@@ -117,9 +130,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: any = {};
+    let body: Record<string, unknown> = {};
     try {
-      body = await req.json();
+      const parsed: unknown = await req.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+      }
+      body = parsed as Record<string, unknown>;
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
@@ -141,6 +158,17 @@ export async function POST(req: NextRequest) {
 
       if (!feat) {
         return NextResponse.json({ error: "Feature request not found" }, { status: 404 });
+      }
+      const [featureProject] = await db
+        .select({ id: projects.id, isPublic: projects.isPublic })
+        .from(projects)
+        .where(eq(projects.id, feat.projectId))
+        .limit(1);
+      if (!featureProject?.isPublic) {
+        const user = await getCurrentUser();
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const access = await resolveProjectAccess(feat.projectId, user);
+        if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
       const [existingVote] = await db
@@ -178,7 +206,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create new feature request
-    const turnstileOk = await verifyTurnstileToken(body.turnstileToken, clientIp);
+    const turnstileOk = await verifyTurnstileToken(typeof body.turnstileToken === "string" ? body.turnstileToken : undefined, clientIp);
     if (!turnstileOk.ok) {
       return NextResponse.json(
         { error: turnstileOk.error || "CAPTCHA verification failed" },
@@ -206,13 +234,19 @@ export async function POST(req: NextRequest) {
     }
 
     const [project] = await db
-      .select({ id: projects.id, name: projects.name, slug: projects.slug })
+      .select({ id: projects.id, name: projects.name, slug: projects.slug, isPublic: projects.isPublic })
       .from(projects)
       .where(projectIdInput ? eq(projects.id, projectIdInput) : eq(projects.slug, projectSlug))
       .limit(1);
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    if (!project.isPublic) {
+      const user = await getCurrentUser();
+      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const access = await resolveProjectAccess(project.id, user);
+      if (!access?.canWrite) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const featureId = `feat_${crypto.randomUUID().replace(/-/g, "").slice(0, 14)}`;
@@ -254,7 +288,7 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (err: any) {
+  } catch (err) {
     return apiError(err, "Failed to submit feedback", 500);
   }
 }
@@ -273,6 +307,15 @@ export async function PATCH(req: NextRequest) {
     const featureId = String(body.featureId || "");
     const status = String(body.status || "");
     const targetVersion = body.targetVersion !== undefined ? String(body.targetVersion || "").trim() || null : undefined;
+    const releaseUrl = body.releaseUrl !== undefined ? String(body.releaseUrl || "").trim() || null : undefined;
+    if (releaseUrl !== undefined && releaseUrl !== null) {
+      try {
+        const url = new URL(releaseUrl);
+        if (url.protocol !== "https:" || url.username || url.password) throw new Error("invalid");
+      } catch {
+        return NextResponse.json({ error: "releaseUrl must be a valid HTTPS URL" }, { status: 400 });
+      }
+    }
 
     if (!projectId || !featureId) {
       return NextResponse.json({ error: "Missing projectId or featureId" }, { status: 400 });
@@ -289,8 +332,13 @@ export async function PATCH(req: NextRequest) {
       updates.status = status as "open" | "planned" | "in_progress" | "shipped";
     }
     if (targetVersion !== undefined) {
-      updates.targetVersion = targetVersion;
+      updates.targetVersion = targetVersion?.slice(0, 64) || null;
     }
+    if (releaseUrl !== undefined) {
+      updates.releaseUrl = releaseUrl?.slice(0, 2048) || null;
+    }
+
+    if (Object.keys(updates).length === 0) return NextResponse.json({ error: "No valid feedback updates provided" }, { status: 400 });
 
     await db
       .update(featureRequests)
@@ -311,7 +359,7 @@ export async function PATCH(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err) {
     return apiError(err, "Failed to update feature request", 500);
   }
 }

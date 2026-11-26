@@ -16,6 +16,7 @@ import { useWorkspaceData } from "../WorkspaceCacheContext";
 import { WebAnalyticsCard } from "../widgets/WebAnalyticsCard";
 import { LanguageSdkTabs } from "../LanguageSdkTabs";
 import { ExternalAnalyticsHub } from "../ExternalAnalyticsHub";
+import { EngagementAnalyticsPanel } from "../EngagementAnalyticsPanel";
 
 export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { projects, customDomain, storageTier, isDemo } = workspace;
@@ -160,6 +161,7 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
         </div>
 
         <WebAnalyticsCard summary={summary || null} projectSlug={project.slug} />
+        <EngagementAnalyticsPanel projectId={project.id} />
 
         {/* Custom Event Metrics (trackMetric("active_jobs", 42)) */}
         {(initialData.customMetrics || []).length > 0 && (

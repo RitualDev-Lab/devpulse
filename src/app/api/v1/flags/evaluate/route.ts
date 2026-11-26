@@ -3,7 +3,8 @@ import { db } from "@/db";
 import { featureFlags, flagExposures } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
-import { evaluateFlagForUser } from "@/lib/flags/flag-engine";
+import { evaluateFlagForUser, parseFlagVariants } from "@/lib/flags/flag-engine";
+import { buildFlagUserHash } from "@/lib/flags/user-hash";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
   try {
     // Keys are accepted only in headers. Query strings leak into logs and referrers.
     const apiKey = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
-    const userKey = req.nextUrl.searchParams.get("userId") || "anonymous";
+    const userKey = (req.nextUrl.searchParams.get("userId") || "anonymous").slice(0, 200);
     const singleKey = req.nextUrl.searchParams.get("key");
 
     if (!apiKey.trim()) {
@@ -83,19 +84,33 @@ export async function POST(req: NextRequest) {
 
     const flagKey = String(body.flagKey || body.key || "").trim();
     const variant = String(body.variant || "control").trim();
-    const userKey = String(body.userId || body.userKey || "anonymous").trim();
+    const rawUserKey = String(body.userId || body.userKey || "").trim().slice(0, 200);
     const converted = Boolean(body.converted);
 
     if (!flagKey) {
       return NextResponse.json({ error: "Missing flagKey" }, { status: 400 });
     }
 
+    const [flag] = await db.select().from(featureFlags).where(and(eq(featureFlags.projectId, project.id), eq(featureFlags.key, flagKey))).limit(1);
+    if (!flag) return NextResponse.json({ error: "Unknown flag" }, { status: 404 });
+    const allowedVariants = parseFlagVariants(flag.variantsJson).map((v) => v.name);
+    if (!allowedVariants.includes(variant)) return NextResponse.json({ error: "Unknown flag variant" }, { status: 400 });
+
+    // Exposure may only be recorded for a real assignment into the enabled rollout.
+    const assignment = evaluateFlagForUser(flag, rawUserKey || "anonymous");
+    if (!assignment.enabled) return NextResponse.json({ success: true, recorded: false });
+    if (assignment.variant !== variant) {
+      return NextResponse.json({ error: "Flag variant does not match assignment" }, { status: 400 });
+    }
+    const userHash = await buildFlagUserHash({ secret: process.env.ANALYTICS_HASH_SECRET || "", projectId: project.id, flagKey, userId: rawUserKey });
+
     await db.insert(flagExposures).values({
       id: `exp_${crypto.randomUUID().replace(/-/g, "").slice(0, 14)}`,
       projectId: project.id,
       flagKey,
       variant,
-      userKey,
+      userKey: userHash || "anonymous",
+      userHash,
       converted,
     });
 

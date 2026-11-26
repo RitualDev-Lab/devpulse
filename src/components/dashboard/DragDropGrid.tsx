@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -60,6 +60,7 @@ export interface DashboardData {
     dockerImage?: string | null;
     vscodeExtension?: string | null;
     mcpServerName?: string | null;
+    mcpAllowedTools?: string[] | null;
     telemetryApiKey?: string | null;
     publicWriteKey?: string | null;
     hasTelemetryApiKey?: boolean;
@@ -172,7 +173,7 @@ export function DragDropGrid({
   );
 
   // Build canonical 12-col layout merging saved DB layout with available ecosystem widgets
-  const computeInitialLayout = (): GridWidgetItem[] => {
+  const computeInitialLayout = useCallback((): GridWidgetItem[] => {
     const dbRows = data.initialLayout || [];
     // Ignore pre-Phase-4 legacy partial rows (width < 3 or single-item legacy remnants)
     const hasValid2DLayout = dbRows.length >= 2 && dbRows.every((r) => r.w >= 3);
@@ -209,12 +210,12 @@ export function DragDropGrid({
       return compactLayout(merged, 12);
     }
     return buildDefaultLayout(availableDefs);
-  };
+  }, [availableDefs, data.initialLayout]);
 
   const [desktopLayout, setDesktopLayout] = useState<GridWidgetItem[]>(computeInitialLayout);
 
   // Sync local layout if project changes or localStorage fallback exists (when no DB layout)
-  useEffect(() => {
+  const loadLocalLayout = useCallback(() => {
     const initial = computeInitialLayout();
     if (!data.initialLayout || data.initialLayout.length === 0) {
       try {
@@ -225,8 +226,7 @@ export function DragDropGrid({
             const validIds = new Set(availableDefs.map((d) => d.id));
             const filtered = parsed.filter((item) => validIds.has(item.id));
             if (filtered.length > 0) {
-              setDesktopLayout(compactLayout(filtered, 12));
-              return;
+              return compactLayout(filtered, 12);
             }
           }
         }
@@ -234,8 +234,13 @@ export function DragDropGrid({
         // fallback to default
       }
     }
-    setDesktopLayout(initial);
-  }, [data.project.id]);
+    return initial;
+  }, [availableDefs, computeInitialLayout, data.initialLayout, data.project.id]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDesktopLayout(loadLocalLayout()), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadLocalLayout]);
 
   // Responsive breakpoint listener: 12 Desktop, 8 Tablet, 4 Mobile
   useEffect(() => {
@@ -465,6 +470,7 @@ export function DragDropGrid({
           <McpStatsCard
             stats={data.mcpStats}
             serverName={data.project.mcpServerName || "MCP Server"}
+            projectId={data.project.id}
           />
         );
       case "revenue_stats":

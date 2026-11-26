@@ -26,7 +26,7 @@ export default async function PortalChangelogPage(props: {
     );
   }
 
-  const { portal, releases, unreleasedPrs } = loaded;
+  const { portal, releases, unreleasedPrs, shippedRequests } = loaded;
   const project = portal.activeProject;
   const brandName = portal.user.brandTitle || project?.name || portal.user.githubUsername;
 
@@ -56,6 +56,34 @@ export default async function PortalChangelogPage(props: {
       </header>
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
+        {shippedRequests.length > 0 && (
+          <section className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/30 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                Shipped From Your Feedback
+              </span>
+              <span className="text-xs text-zinc-400">{shippedRequests.length} request(s)</span>
+            </div>
+            <div className="space-y-2">
+              {shippedRequests.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 text-xs">
+                  <div className="min-w-0">
+                    <span className="text-zinc-100 truncate block">{item.title}</span>
+                    <span className="text-zinc-500">{item.voteCount} vote(s) · {item.category}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {item.targetVersion && (
+                      <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-300">{item.targetVersion}</span>
+                    )}
+                    {item.releaseUrl && (
+                      <a href={item.releaseUrl} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">Release notes</a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         {unreleasedPrs.length > 0 && (
           <section className="p-5 rounded-2xl bg-zinc-900/80 border border-indigo-500/30 space-y-3">
             <div className="flex items-center justify-between">
