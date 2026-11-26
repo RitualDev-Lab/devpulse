@@ -218,6 +218,22 @@ export async function POST(req: NextRequest) {
             identifier: item.provider,
           });
           detectedSummary.push(item.label);
+        } else {
+          const pkgProvider = normalizeRegistryProvider(item.kind);
+          if (pkgProvider && item.value) {
+            const connId = `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+            await db.insert(projectConnectors).values({
+              id: connId,
+              projectId,
+              category: "package",
+              provider: pkgProvider,
+              label: item.label,
+              targetUrl: item.normalizedUrl || REGISTRY_ADAPTERS[pkgProvider].buildUrl(item.value),
+              identifier: item.value,
+              lastSyncedAt: new Date().toISOString(),
+            });
+            detectedSummary.push(item.label);
+          }
         }
       }
 
@@ -304,6 +320,12 @@ export async function POST(req: NextRequest) {
           userIdForOAuth: user.id,
           changedFields,
         });
+      }
+      if (parsedItems.some((item) => !item.field && normalizeRegistryProvider(item.kind) !== null)) {
+        await refreshProjectSnapshots(
+          { ...access.project, ...updateFields },
+          { userIdForOAuth: user.id, keys: ["package_connectors", "security"] }
+        ).catch(() => {});
       }
 
       await recordAuditEvent({
@@ -482,20 +504,21 @@ export async function POST(req: NextRequest) {
         ? validatedUrl.normalized
         : meta.buildUrl(identifier);
 
-      const primaryValue = access.project[meta.projectField];
-      if (!primaryValue || !String(primaryValue).trim()) {
+      const primaryField = meta.projectField;
+      const primaryValue = primaryField ? access.project[primaryField] : null;
+      if (primaryField && (!primaryValue || !String(primaryValue).trim())) {
         const updatePayload: Record<string, unknown> = {
-          [meta.projectField]: identifier,
+          [primaryField]: identifier,
           updatedAt: new Date().toISOString(),
         };
         await db.update(projects).set(updatePayload).where(eq(projects.id, projectId));
         await syncEcosystemWidgetsAndSnapshots({
           projectId,
           userIdForOAuth: user.id,
-          changedFields: [meta.projectField],
+          changedFields: [primaryField],
         });
         await refreshProjectSnapshots(
-          { ...access.project, [meta.projectField]: identifier },
+          { ...access.project, [primaryField]: identifier },
           { userIdForOAuth: user.id, keys: ["security"] }
         ).catch(() => {});
 
@@ -519,7 +542,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      if (String(primaryValue).trim().toLowerCase() === identifier.toLowerCase()) {
+      if (primaryValue && String(primaryValue).trim().toLowerCase() === identifier.toLowerCase()) {
         return NextResponse.json({
           success: true,
           mode: "already_tracked",

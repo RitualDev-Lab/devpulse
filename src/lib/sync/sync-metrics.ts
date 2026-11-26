@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { projects, dailyMetrics } from "@/db/schema";
+import { projects, dailyMetrics, projectConnectors } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 import { refreshDailyDeltas } from "@/lib/sync/refresh-daily-deltas";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
@@ -9,6 +10,16 @@ import { fetchGoModuleStats } from "@/lib/integrations/go";
 import { fetchDockerRepoStats } from "@/lib/integrations/docker";
 import { fetchVsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats } from "@/lib/integrations/mcp";
+import { fetchNuGetStats } from "@/lib/integrations/nuget";
+import { fetchRubyGemStats } from "@/lib/integrations/rubygems";
+import { fetchPackagistStats } from "@/lib/integrations/packagist";
+import { fetchPubDevStats } from "@/lib/integrations/pubdev";
+import { fetchJsrStats } from "@/lib/integrations/jsr";
+import { fetchHexStats } from "@/lib/integrations/hex";
+import { fetchAnacondaStats } from "@/lib/integrations/anaconda";
+import { fetchCranStats } from "@/lib/integrations/cran";
+import { fetchHomebrewStats } from "@/lib/integrations/homebrew";
+import { normalizeRegistryProvider, REGISTRY_ADAPTERS } from "@/lib/integrations/registry-adapter";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { fetchDepsDevSummary, type DepsDevSystem } from "@/lib/integrations/deps-dev";
@@ -395,8 +406,131 @@ async function syncSingleProject(
 
   await Promise.allSettled(tasks);
 
+  // Sync Tier-1 & monorepo package connectors into daily_metrics
+  const extraPkgSecurityTargets: Array<{ system: DepsDevSystem; pkg: string; label: string }> = [];
+  try {
+    const pkgConns = await db
+      .select()
+      .from(projectConnectors)
+      .where(and(eq(projectConnectors.projectId, proj.id), eq(projectConnectors.category, "package")))
+      .limit(15);
+
+    const tier1Tasks = pkgConns.map(async (conn) => {
+      const provider = normalizeRegistryProvider(conn.provider);
+      const id = (conn.identifier || "").trim();
+      if (!provider || !id) return;
+
+      const sys = REGISTRY_ADAPTERS[provider].depsDevSystem;
+      if (sys) {
+        extraPkgSecurityTargets.push({ system: sys, pkg: id, label: REGISTRY_ADAPTERS[provider].label });
+      }
+
+      const upsertPoint = async (
+        source: typeof dailyMetrics.$inferInsert["source"],
+        metricType: typeof dailyMetrics.$inferInsert["metricType"],
+        date: string,
+        value: number,
+        metaObj: Record<string, unknown>
+      ) => {
+        const safeId = `met_${source}_${conn.id}_${date}`.slice(0, 128);
+        const metadataJson = JSON.stringify({ connectorId: conn.id, identifier: id, ...metaObj });
+        await db
+          .insert(dailyMetrics)
+          .values({ id: safeId, projectId: proj.id, source, metricType, date, value, metadataJson })
+          .onConflictDoUpdate({ target: dailyMetrics.id, set: { value, metadataJson } });
+      };
+
+      switch (provider) {
+        case "nuget": {
+          const s = await fetchNuGetStats(id);
+          if (s) {
+            await upsertPoint("nuget", "downloads", todayStr, s.totalDownloads, { version: s.version, verified: s.verified });
+            syncedSources.push(`nuget:${id}`);
+          }
+          break;
+        }
+        case "rubygems": {
+          const s = await fetchRubyGemStats(id);
+          if (s) {
+            await upsertPoint("rubygems", "downloads", todayStr, s.totalDownloads, { version: s.version, revDeps: s.reverseDependencies });
+            syncedSources.push(`rubygems:${id}`);
+          }
+          break;
+        }
+        case "packagist": {
+          const s = await fetchPackagistStats(id);
+          if (s) {
+            await upsertPoint("packagist", "downloads", todayStr, s.dailyDownloads || s.monthlyDownloads, { total: s.totalDownloads, monthly: s.monthlyDownloads, version: s.latestVersion });
+            syncedSources.push(`packagist:${id}`);
+          }
+          break;
+        }
+        case "pubdev": {
+          const s = await fetchPubDevStats(id);
+          if (s) {
+            await upsertPoint("pubdev", "downloads", todayStr, s.downloadCount30Days, { points: s.grantedPoints, likes: s.likeCount, version: s.latestVersion });
+            syncedSources.push(`pubdev:${id}`);
+          }
+          break;
+        }
+        case "jsr": {
+          const s = await fetchJsrStats(id);
+          if (s) {
+            await upsertPoint("jsr", "versions", todayStr, s.versionCount, { score: s.score, version: s.latestVersion });
+            syncedSources.push(`jsr:${id}`);
+          }
+          break;
+        }
+        case "hex": {
+          const s = await fetchHexStats(id);
+          if (s) {
+            await upsertPoint("hex", "downloads", todayStr, s.dayDownloads || s.recentDownloads, { all: s.allDownloads, version: s.latestVersion });
+            syncedSources.push(`hex:${id}`);
+          }
+          break;
+        }
+        case "anaconda": {
+          const s = await fetchAnacondaStats(id);
+          if (s) {
+            await upsertPoint("anaconda", "downloads", todayStr, s.totalDownloads, { version: s.latestVersion, channel: s.channel });
+            syncedSources.push(`anaconda:${id}`);
+          }
+          break;
+        }
+        case "cran": {
+          const s = await fetchCranStats(id);
+          if (s) {
+            await Promise.all(
+              (s.dailyHistory.length > 0 ? s.dailyHistory : [{ date: todayStr, downloads: s.downloadsLastMonth }]).map((pt) =>
+                upsertPoint("cran", "downloads", pt.date, pt.downloads, { version: s.version, downloadsLastMonth: s.downloadsLastMonth })
+              )
+            );
+            syncedSources.push(`cran:${id}`);
+          }
+          break;
+        }
+        case "homebrew": {
+          const s = await fetchHomebrewStats(id);
+          if (s) {
+            await upsertPoint("homebrew", "installs", todayStr, s.installs30d, { installs90d: s.installs90d, installs365d: s.installs365d, version: s.version });
+            syncedSources.push(`homebrew:${id}`);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    });
+
+    await Promise.allSettled(tier1Tasks);
+  } catch (err: any) {
+    errors.push(`tier1 connectors: ${err?.message || "Sync failed"}`);
+  }
+
   // Check deps.dev for newly discovered security advisories across linked packages
-  const securityChecks: Array<{ system: DepsDevSystem; pkg: string; label: string }> = [];
+  const securityChecks: Array<{ system: DepsDevSystem; pkg: string; label: string }> = [
+    ...extraPkgSecurityTargets,
+  ];
   if (proj.npmPackage) securityChecks.push({ system: "NPM", pkg: proj.npmPackage, label: "npm" });
   if (proj.pypiPackage) securityChecks.push({ system: "PYPI", pkg: proj.pypiPackage, label: "PyPI" });
   if (proj.rustCrate) securityChecks.push({ system: "CARGO", pkg: proj.rustCrate, label: "Crates.io" });

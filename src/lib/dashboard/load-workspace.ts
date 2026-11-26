@@ -90,6 +90,14 @@ export interface LoadedWorkspaceReady {
       crates: number;
       docker: number;
       go: number;
+      nuget?: number;
+      rubygems?: number;
+      packagist?: number;
+      pubdev?: number;
+      hex?: number;
+      anaconda?: number;
+      cran?: number;
+      homebrew?: number;
     }>;
     analyticsSummary?: DashboardData["analyticsSummary"] & {
       dau?: number | null;
@@ -604,7 +612,23 @@ export async function loadDashboardWorkspace(
       };
     })(),
     packageHistory: (() => {
-      const dayMap: Record<string, { date: string; npm: number; pypi: number; crates: number; docker: number; go: number }> = {};
+      type PackageHistoryRow = {
+        date: string;
+        npm: number;
+        pypi: number;
+        crates: number;
+        docker: number;
+        go: number;
+        nuget?: number;
+        rubygems?: number;
+        packagist?: number;
+        pubdev?: number;
+        hex?: number;
+        anaconda?: number;
+        cran?: number;
+        homebrew?: number;
+      };
+      const dayMap: Record<string, PackageHistoryRow> = {};
       const ensure = (d: string) => {
         if (!dayMap[d]) dayMap[d] = { date: d, npm: 0, pypi: 0, crates: 0, docker: 0, go: 0 };
         return dayMap[d];
@@ -618,12 +642,37 @@ export async function loadDashboardWorkspace(
       for (const h of rustStats?.dailyHistory || []) {
         ensure(h.date).crates = h.downloads;
       }
+      for (const extra of extraPackages || []) {
+        if (extra.provider === "cran" && Array.isArray(extra.dailyHistory)) {
+          for (const h of extra.dailyHistory) {
+            if (h.date) {
+              const row = ensure(h.date);
+              row.cran = (row.cran || 0) + h.downloads;
+            }
+          }
+        }
+      }
+      const tier1Keys = new Set([
+        "nuget",
+        "rubygems",
+        "packagist",
+        "pubdev",
+        "hex",
+        "anaconda",
+        "cran",
+        "homebrew",
+      ] as const);
       for (const m of rawDailyMetrics || []) {
         if (m.source === "npm" && !ensure(m.date).npm) ensure(m.date).npm = m.value;
         if (m.source === "pypi" && !ensure(m.date).pypi) ensure(m.date).pypi = m.value;
         if (m.source === "crates" && !ensure(m.date).crates) ensure(m.date).crates = m.value;
         if (m.source === "docker") ensure(m.date).docker = m.value;
         if (m.source === "go") ensure(m.date).go = m.value;
+        if (tier1Keys.has(m.source as any)) {
+          const k = m.source as "nuget" | "rubygems" | "packagist" | "pubdev" | "hex" | "anaconda" | "cran" | "homebrew";
+          const row = ensure(m.date);
+          if (!row[k]) row[k] = m.value;
+        }
       }
       return Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date)).slice(-30);
     })(),

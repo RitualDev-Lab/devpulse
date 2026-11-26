@@ -508,6 +508,7 @@ export function ImportRepositoryModal({
                 </span>
                 <PackageSearchPicker
                   compact
+                  onlyPrimaryFields
                   actionLabel="Select"
                   selectedValues={{
                     pypiPackage,

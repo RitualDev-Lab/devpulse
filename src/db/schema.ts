@@ -123,7 +123,28 @@ export const dashboardWidgets = sqliteTable("dashboard_widgets", {
 export const dailyMetrics = sqliteTable("daily_metrics", {
   id: text("id").primaryKey(),
   projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
-  source: text("source", { enum: ["github", "npm", "pypi", "vscode", "docker", "web", "crates", "go", "mcp"] }).notNull(),
+  source: text("source", {
+    enum: [
+      "github",
+      "npm",
+      "pypi",
+      "vscode",
+      "docker",
+      "web",
+      "crates",
+      "go",
+      "mcp",
+      "nuget",
+      "rubygems",
+      "packagist",
+      "pubdev",
+      "jsr",
+      "hex",
+      "anaconda",
+      "cran",
+      "homebrew",
+    ],
+  }).notNull(),
   metricType: text("metric_type", { enum: ["downloads", "stars", "views", "clones", "installs", "pageviews", "pulls", "versions"] }).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
   delta: integer("delta"), // value minus previous recorded day in the same series; null for the first day

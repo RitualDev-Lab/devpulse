@@ -14,6 +14,15 @@ export type DetectedConnectorKind =
   | "docker"
   | "vscode"
   | "mcp"
+  | "nuget"
+  | "rubygems"
+  | "packagist"
+  | "pubdev"
+  | "jsr"
+  | "hex"
+  | "anaconda"
+  | "cran"
+  | "homebrew"
   | "payment"
   | "uptime"
   | "unknown";
@@ -227,6 +236,124 @@ export function parseConnectorInput(rawInput: string): ParsedConnectorLink {
       value: serverSlug,
       label: `MCP (${serverSlug})`,
       normalizedUrl: parsed.toString(),
+    };
+  }
+
+  // NuGet (nuget.org/packages/<id>)
+  if (host === "nuget.org" && pathParts[0] === "packages" && pathParts[1]) {
+    return {
+      raw: rawInput,
+      kind: "nuget",
+      provider: "NuGet",
+      value: pathParts[1],
+      label: `NuGet (${pathParts[1]})`,
+      normalizedUrl: `https://www.nuget.org/packages/${pathParts[1]}`,
+    };
+  }
+
+  // RubyGems (rubygems.org/gems/<name>)
+  if (host === "rubygems.org" && pathParts[0] === "gems" && pathParts[1]) {
+    return {
+      raw: rawInput,
+      kind: "rubygems",
+      provider: "RubyGems",
+      value: pathParts[1],
+      label: `RubyGems (${pathParts[1]})`,
+      normalizedUrl: `https://rubygems.org/gems/${pathParts[1]}`,
+    };
+  }
+
+  // Packagist (packagist.org/packages/<vendor>/<name>)
+  if (host === "packagist.org" && pathParts[0] === "packages" && pathParts[1] && pathParts[2]) {
+    const pkgSlug = `${pathParts[1]}/${pathParts[2]}`;
+    return {
+      raw: rawInput,
+      kind: "packagist",
+      provider: "Packagist",
+      value: pkgSlug,
+      label: `Packagist (${pkgSlug})`,
+      normalizedUrl: `https://packagist.org/packages/${pkgSlug}`,
+    };
+  }
+
+  // pub.dev (pub.dev/packages/<name>)
+  if (host === "pub.dev" && pathParts[0] === "packages" && pathParts[1]) {
+    return {
+      raw: rawInput,
+      kind: "pubdev",
+      provider: "pub.dev",
+      value: pathParts[1],
+      label: `pub.dev (${pathParts[1]})`,
+      normalizedUrl: `https://pub.dev/packages/${pathParts[1]}`,
+    };
+  }
+
+  // JSR (jsr.io/@scope/name)
+  if (host === "jsr.io" && pathParts[0]?.startsWith("@") && pathParts[1]) {
+    const pkgSlug = `${pathParts[0]}/${pathParts[1]}`;
+    return {
+      raw: rawInput,
+      kind: "jsr",
+      provider: "JSR",
+      value: pkgSlug,
+      label: `JSR (${pkgSlug})`,
+      normalizedUrl: `https://jsr.io/${pkgSlug}`,
+    };
+  }
+
+  // Hex.pm (hex.pm/packages/<name>)
+  if (host === "hex.pm" && pathParts[0] === "packages" && pathParts[1]) {
+    return {
+      raw: rawInput,
+      kind: "hex",
+      provider: "Hex.pm",
+      value: pathParts[1],
+      label: `Hex.pm (${pathParts[1]})`,
+      normalizedUrl: `https://hex.pm/packages/${pathParts[1]}`,
+    };
+  }
+
+  // Anaconda (anaconda.org/<channel>/<name>)
+  if (host === "anaconda.org" && pathParts[0] && pathParts[1]) {
+    const pkgSlug = `${pathParts[0]}/${pathParts[1]}`;
+    return {
+      raw: rawInput,
+      kind: "anaconda",
+      provider: "Anaconda",
+      value: pkgSlug,
+      label: `Anaconda (${pkgSlug})`,
+      normalizedUrl: `https://anaconda.org/${pkgSlug}`,
+    };
+  }
+
+  // CRAN (cran.r-project.org/package=<name> or /web/packages/<name>)
+  if (host === "cran.r-project.org") {
+    const queryPkg = parsed.searchParams.get("package");
+    const webPkg = pathParts[0] === "web" && pathParts[1] === "packages" ? pathParts[2] : null;
+    const eqMatch = pathParts[0]?.startsWith("package=") ? pathParts[0].slice("package=".length) : null;
+    const pkgName = queryPkg || webPkg || eqMatch;
+    if (pkgName) {
+      return {
+        raw: rawInput,
+        kind: "cran",
+        provider: "CRAN",
+        value: pkgName,
+        label: `CRAN (${pkgName})`,
+        normalizedUrl: `https://cran.r-project.org/package=${pkgName}`,
+      };
+    }
+  }
+
+  // Homebrew (formulae.brew.sh/formula/<name> or /cask/<name>)
+  if (host === "formulae.brew.sh" && (pathParts[0] === "formula" || pathParts[0] === "cask") && pathParts[1]) {
+    const val = pathParts[0] === "cask" ? `cask/${pathParts[1]}` : pathParts[1];
+    return {
+      raw: rawInput,
+      kind: "homebrew",
+      provider: "Homebrew",
+      value: val,
+      label: `Homebrew (${val})`,
+      normalizedUrl: `https://formulae.brew.sh/${pathParts[0]}/${pathParts[1]}`,
     };
   }
 

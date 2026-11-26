@@ -424,9 +424,12 @@ export function WorkspaceShell({
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    action: "quick_connect",
+                    action: "add_package_connector",
                     projectId: currentProject.id,
-                    linksText: item.url,
+                    provider: item.ecosystem,
+                    identifier: item.name,
+                    label: `${item.ecosystem}: ${item.name}`,
+                    targetUrl: item.url,
                   }),
                 });
                 if (res.ok) {

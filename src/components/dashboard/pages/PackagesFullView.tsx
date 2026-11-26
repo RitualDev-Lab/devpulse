@@ -172,6 +172,27 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                     <Area type="monotone" dataKey="crates" name="Crates.io" stroke="#f97316" fill="#f9731620" />
                     <Area type="monotone" dataKey="docker" name="Docker" stroke="#06b6d4" fill="#06b6d420" />
                     <Area type="monotone" dataKey="go" name="Go" stroke="#14b8a6" fill="#14b8a620" />
+                    {(initialData.packageHistory || []).some((d) => (d.cran || 0) > 0) && (
+                      <Area type="monotone" dataKey="cran" name="CRAN (R)" stroke="#60a5fa" fill="#60a5fa20" />
+                    )}
+                    {(initialData.packageHistory || []).some((d) => (d.nuget || 0) > 0) && (
+                      <Area type="monotone" dataKey="nuget" name="NuGet" stroke="#a855f7" fill="#a855f720" />
+                    )}
+                    {(initialData.packageHistory || []).some((d) => (d.packagist || 0) > 0) && (
+                      <Area type="monotone" dataKey="packagist" name="Packagist" stroke="#f59e0b" fill="#f59e0b20" />
+                    )}
+                    {(initialData.packageHistory || []).some((d) => (d.rubygems || 0) > 0) && (
+                      <Area type="monotone" dataKey="rubygems" name="RubyGems" stroke="#ef4444" fill="#ef444420" />
+                    )}
+                    {(initialData.packageHistory || []).some((d) => (d.pubdev || 0) > 0) && (
+                      <Area type="monotone" dataKey="pubdev" name="pub.dev" stroke="#38bdf8" fill="#38bdf820" />
+                    )}
+                    {(initialData.packageHistory || []).some((d) => (d.hex || 0) > 0) && (
+                      <Area type="monotone" dataKey="hex" name="Hex.pm" stroke="#c084fc" fill="#c084fc20" />
+                    )}
+                    {(initialData.packageHistory || []).some((d) => (d.homebrew || 0) > 0) && (
+                      <Area type="monotone" dataKey="homebrew" name="Homebrew" stroke="#fbbf24" fill="#fbbf2420" />
+                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
@@ -359,6 +380,14 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                         {pkg.metricValue !== null ? pkg.metricValue.toLocaleString() : "—"}
                       </span>
                     </div>
+                    {pkg.secondaryLabel && pkg.secondaryValue && (
+                      <div className="mt-1 flex items-baseline justify-between text-[11px]">
+                        <span className="text-zinc-500">{pkg.secondaryLabel}</span>
+                        <span className="font-mono text-zinc-300 truncate max-w-[170px]" title={pkg.secondaryValue}>
+                          {pkg.secondaryValue}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {pkg.security && (
                     <div className="pt-2 border-t border-zinc-800/70">

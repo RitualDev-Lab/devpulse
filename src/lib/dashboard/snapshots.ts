@@ -13,6 +13,15 @@ import { fetchDockerRepoStats, type DockerRepoStats } from "@/lib/integrations/d
 import { fetchVsCodeStats, type VsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats, type McpServerStats } from "@/lib/integrations/mcp";
 import { fetchRevenueStats, type RevenueStats } from "@/lib/integrations/revenue";
+import { fetchNuGetStats } from "@/lib/integrations/nuget";
+import { fetchRubyGemStats } from "@/lib/integrations/rubygems";
+import { fetchPackagistStats } from "@/lib/integrations/packagist";
+import { fetchPubDevStats } from "@/lib/integrations/pubdev";
+import { fetchJsrStats } from "@/lib/integrations/jsr";
+import { fetchHexStats } from "@/lib/integrations/hex";
+import { fetchAnacondaStats } from "@/lib/integrations/anaconda";
+import { fetchCranStats } from "@/lib/integrations/cran";
+import { fetchHomebrewStats } from "@/lib/integrations/homebrew";
 import { fetchDepsDevSummary, type DepsDevAdvisorySummary, type DepsDevSystem } from "@/lib/integrations/deps-dev";
 import {
   REGISTRY_ADAPTERS,
@@ -316,95 +325,177 @@ export async function refreshProjectSnapshots(
       ? Promise.all(
           pkgConnectors.slice(0, 12).map(async ({ row, provider, identifier }): Promise<ExtraPackageSnapshot | null> => {
             const meta = REGISTRY_ADAPTERS[provider];
-            if (provider === "npm") {
-              const s = await cap(fetchNpmStats(identifier, decryptedNpmToken));
-              return {
-                connectorId: row.id,
-                provider,
-                label: row.label,
-                identifier,
-                latestVersion: s?.latestVersion || null,
-                metricLabel: "30d downloads",
-                metricValue: s?.downloadsLastMonth ?? null,
-                url: row.targetUrl || meta.buildUrl(identifier),
-              };
+            const url = row.targetUrl || meta.buildUrl(identifier);
+            switch (provider) {
+              case "npm": {
+                const s = await cap(fetchNpmStats(identifier, decryptedNpmToken));
+                return { connectorId: row.id, provider, label: row.label, identifier, latestVersion: s?.latestVersion || null, metricLabel: "30d downloads", metricValue: s?.downloadsLastMonth ?? null, url };
+              }
+              case "pypi": {
+                const s = await cap(fetchPyPiStats(identifier));
+                return { connectorId: row.id, provider, label: row.label, identifier, latestVersion: s?.latestVersion || null, metricLabel: "30d downloads", metricValue: s?.downloadsLastMonth ?? null, url };
+              }
+              case "crates": {
+                const s = await cap(fetchRustCrateStats(identifier));
+                return { connectorId: row.id, provider, label: row.label, identifier, latestVersion: s?.maxVersion || null, metricLabel: "total downloads", metricValue: s?.totalDownloads ?? null, secondaryLabel: "rev deps", secondaryValue: s ? String(s.reverseDependencies) : null, url };
+              }
+              case "go": {
+                const s = await cap(fetchGoModuleStats(identifier));
+                return { connectorId: row.id, provider, label: row.label, identifier, latestVersion: s?.latestVersion || null, metricLabel: "versions", metricValue: s?.versionCount ?? null, url };
+              }
+              case "docker": {
+                const s = await cap(fetchDockerRepoStats(identifier, decryptedDockerToken));
+                return { connectorId: row.id, provider, label: row.label, identifier, latestVersion: s?.tags?.[0]?.name || null, metricLabel: "pulls", metricValue: s?.pullCount ?? null, url };
+              }
+              case "vscode": {
+                const s = await cap(fetchVsCodeStats(identifier));
+                return { connectorId: row.id, provider, label: row.label, identifier, latestVersion: s?.version || null, metricLabel: "installs", metricValue: s?.installs ?? null, url };
+              }
+              case "mcp": {
+                const s = await cap(fetchMcpStats(identifier, projectRow.githubRepo));
+                return { connectorId: row.id, provider, label: row.label, identifier, latestVersion: s?.protocolVersion || null, metricLabel: "tools", metricValue: s?.toolsCount ?? null, url };
+              }
+              case "nuget": {
+                const s = await cap(fetchNuGetStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.version || null,
+                  metricLabel: "total downloads",
+                  metricValue: s?.totalDownloads ?? null,
+                  secondaryLabel: s?.verified ? "verified" : "versions",
+                  secondaryValue: s ? (s.verified ? "NuGet Verified" : `${s.versionCount} ver`) : null,
+                  url,
+                };
+              }
+              case "rubygems": {
+                const s = await cap(fetchRubyGemStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.version || null,
+                  metricLabel: "total downloads",
+                  metricValue: s?.totalDownloads ?? null,
+                  secondaryLabel: "rev deps",
+                  secondaryValue: s ? `${s.reverseDependencies} gems` : null,
+                  url,
+                };
+              }
+              case "packagist": {
+                const s = await cap(fetchPackagistStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "monthly installs",
+                  metricValue: s?.monthlyDownloads ?? null,
+                  secondaryLabel: "total",
+                  secondaryValue: s ? `${s.totalDownloads.toLocaleString()} (${s.dependents} deps)` : null,
+                  url,
+                };
+              }
+              case "pubdev": {
+                const s = await cap(fetchPubDevStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "30d downloads",
+                  metricValue: s?.downloadCount30Days ?? null,
+                  secondaryLabel: "pub score",
+                  secondaryValue: s ? `${s.grantedPoints}/${s.maxPoints} pts • ${s.likeCount} likes` : null,
+                  url,
+                };
+              }
+              case "jsr": {
+                const s = await cap(fetchJsrStats(identifier));
+                const runtimes = s
+                  ? Object.entries(s.runtimeCompat)
+                      .filter(([, ok]) => Boolean(ok))
+                      .map(([rt]) => rt)
+                      .slice(0, 4)
+                  : [];
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "JSR score %",
+                  metricValue: s?.score ?? null,
+                  secondaryLabel: "runtimes",
+                  secondaryValue: runtimes.length > 0 ? runtimes.join(", ") : null,
+                  url,
+                };
+              }
+              case "hex": {
+                const s = await cap(fetchHexStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "recent downloads",
+                  metricValue: s?.recentDownloads ?? null,
+                  secondaryLabel: "all-time",
+                  secondaryValue: s ? s.allDownloads.toLocaleString() : null,
+                  url,
+                };
+              }
+              case "anaconda": {
+                const s = await cap(fetchAnacondaStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.latestVersion || null,
+                  metricLabel: "total downloads",
+                  metricValue: s?.totalDownloads ?? null,
+                  secondaryLabel: "platforms",
+                  secondaryValue: s?.platforms.slice(0, 3).join(", ") || null,
+                  url,
+                };
+              }
+              case "cran": {
+                const s = await cap(fetchCranStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.version || null,
+                  metricLabel: "30d downloads",
+                  metricValue: s?.downloadsLastMonth ?? null,
+                  dailyHistory: s?.dailyHistory,
+                  url,
+                };
+              }
+              case "homebrew": {
+                const s = await cap(fetchHomebrewStats(identifier));
+                return {
+                  connectorId: row.id,
+                  provider,
+                  label: row.label,
+                  identifier,
+                  latestVersion: s?.version || null,
+                  metricLabel: "30d installs",
+                  metricValue: s?.installs30d ?? null,
+                  secondaryLabel: "365d installs",
+                  secondaryValue: s ? `${s.installs90d.toLocaleString()} (90d) • ${s.installs365d.toLocaleString()} (1y)` : null,
+                  url,
+                };
+              }
             }
-            if (provider === "pypi") {
-              const s = await cap(fetchPyPiStats(identifier));
-              return {
-                connectorId: row.id,
-                provider,
-                label: row.label,
-                identifier,
-                latestVersion: s?.latestVersion || null,
-                metricLabel: "30d downloads",
-                metricValue: s?.downloadsLastMonth ?? null,
-                url: row.targetUrl || meta.buildUrl(identifier),
-              };
-            }
-            if (provider === "crates") {
-              const s = await cap(fetchRustCrateStats(identifier));
-              return {
-                connectorId: row.id,
-                provider,
-                label: row.label,
-                identifier,
-                latestVersion: s?.maxVersion || null,
-                metricLabel: "total downloads",
-                metricValue: s?.totalDownloads ?? null,
-                url: row.targetUrl || meta.buildUrl(identifier),
-              };
-            }
-            if (provider === "go") {
-              const s = await cap(fetchGoModuleStats(identifier));
-              return {
-                connectorId: row.id,
-                provider,
-                label: row.label,
-                identifier,
-                latestVersion: s?.latestVersion || null,
-                metricLabel: "versions",
-                metricValue: s?.versionCount ?? null,
-                url: row.targetUrl || meta.buildUrl(identifier),
-              };
-            }
-            if (provider === "docker") {
-              const s = await cap(fetchDockerRepoStats(identifier, decryptedDockerToken));
-              return {
-                connectorId: row.id,
-                provider,
-                label: row.label,
-                identifier,
-                latestVersion: s?.tags?.[0]?.name || null,
-                metricLabel: "pulls",
-                metricValue: s?.pullCount ?? null,
-                url: row.targetUrl || meta.buildUrl(identifier),
-              };
-            }
-            if (provider === "vscode") {
-              const s = await cap(fetchVsCodeStats(identifier));
-              return {
-                connectorId: row.id,
-                provider,
-                label: row.label,
-                identifier,
-                latestVersion: s?.version || null,
-                metricLabel: "installs",
-                metricValue: s?.installs ?? null,
-                url: row.targetUrl || meta.buildUrl(identifier),
-              };
-            }
-            const s = await cap(fetchMcpStats(identifier, projectRow.githubRepo));
-            return {
-              connectorId: row.id,
-              provider,
-              label: row.label,
-              identifier,
-              latestVersion: s?.protocolVersion || null,
-              metricLabel: "tools",
-              metricValue: s?.toolsCount ?? null,
-              url: row.targetUrl || meta.buildUrl(identifier),
-            };
           })
         )
       : Promise.resolve(null),

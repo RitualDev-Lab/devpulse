@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 import { escapeGoModulePath } from "@/lib/integrations/go";
+import { searchNuGetPackages } from "@/lib/integrations/nuget";
+import { searchRubyGems } from "@/lib/integrations/rubygems";
+import { searchPackagistPackages } from "@/lib/integrations/packagist";
+import { searchPubDevPackages } from "@/lib/integrations/pubdev";
+import { searchJsrPackages } from "@/lib/integrations/jsr";
+import { searchHexPackages } from "@/lib/integrations/hex";
+import { searchAnacondaPackages } from "@/lib/integrations/anaconda";
+import { searchCranPackages } from "@/lib/integrations/cran";
+import { searchHomebrewPackages } from "@/lib/integrations/homebrew";
 
 export type SearchableEcosystem =
   | "npm"
@@ -10,7 +19,16 @@ export type SearchableEcosystem =
   | "docker"
   | "vscode"
   | "mcp"
-  | "go";
+  | "go"
+  | "nuget"
+  | "rubygems"
+  | "packagist"
+  | "pubdev"
+  | "jsr"
+  | "hex"
+  | "anaconda"
+  | "cran"
+  | "homebrew";
 
 export interface RegistrySearchResult {
   id: string;
@@ -30,6 +48,15 @@ const VALID_ECOSYSTEMS = new Set<SearchableEcosystem>([
   "vscode",
   "mcp",
   "go",
+  "nuget",
+  "rubygems",
+  "packagist",
+  "pubdev",
+  "jsr",
+  "hex",
+  "anaconda",
+  "cran",
+  "homebrew",
 ]);
 
 async function fetchJsonSafe<T>(url: string, headers: Record<string, string> = {}): Promise<T | null> {
@@ -212,6 +239,126 @@ export async function GET(req: NextRequest) {
         description: "Verified Go module on proxy.golang.org",
         statsLabel: data.Version,
         url: `https://pkg.go.dev/${cleanMod}`,
+      });
+    }
+  } else if (ecosystem === "nuget") {
+    const items = await searchNuGetPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.id,
+        ecosystem: "nuget",
+        name: item.id,
+        version: item.version || null,
+        description: item.description || null,
+        statsLabel: `${item.totalDownloads.toLocaleString()} dl`,
+        url: `https://www.nuget.org/packages/${encodeURIComponent(item.id)}`,
+      });
+    }
+  } else if (ecosystem === "rubygems") {
+    const items = await searchRubyGems(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "rubygems",
+        name: item.name,
+        version: item.version || null,
+        description: item.info || null,
+        statsLabel: `${item.downloads.toLocaleString()} dl`,
+        url: `https://rubygems.org/gems/${encodeURIComponent(item.name)}`,
+      });
+    }
+  } else if (ecosystem === "packagist") {
+    const items = await searchPackagistPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "packagist",
+        name: item.name,
+        description: item.description || null,
+        statsLabel: `${item.downloads.toLocaleString()} dl`,
+        url: item.url || `https://packagist.org/packages/${item.name}`,
+      });
+    }
+  } else if (ecosystem === "pubdev") {
+    const items = await searchPubDevPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "pubdev",
+        name: item.name,
+        description: "Flutter / Dart package on pub.dev",
+        statsLabel: "pub.dev",
+        url: `https://pub.dev/packages/${encodeURIComponent(item.name)}`,
+      });
+    }
+  } else if (ecosystem === "jsr") {
+    const items = await searchJsrPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "jsr",
+        name: item.name,
+        version: item.latestVersion || null,
+        description: item.description || null,
+        statsLabel: typeof item.score === "number" ? `score ${item.score}%` : "JSR",
+        url: `https://jsr.io/${item.name}`,
+      });
+    }
+  } else if (ecosystem === "hex") {
+    const items = await searchHexPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "hex",
+        name: item.name,
+        version: item.latestVersion || null,
+        description: item.description || null,
+        statsLabel: `${item.allDownloads.toLocaleString()} dl`,
+        url: `https://hex.pm/packages/${encodeURIComponent(item.name)}`,
+      });
+    }
+  } else if (ecosystem === "anaconda") {
+    const items = await searchAnacondaPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.identifier,
+        ecosystem: "anaconda",
+        name: item.identifier,
+        description: item.summary || null,
+        statsLabel: item.versionsCount ? `${item.versionsCount} builds` : "Anaconda",
+        url: `https://anaconda.org/${item.identifier}`,
+      });
+    }
+  } else if (ecosystem === "cran") {
+    const items = await searchCranPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "cran",
+        name: item.name,
+        version: item.version || null,
+        description: item.title || null,
+        statsLabel: item.version ? `v${item.version}` : "CRAN",
+        url: `https://cran.r-project.org/package=${encodeURIComponent(item.name)}`,
+      });
+    }
+  } else if (ecosystem === "homebrew") {
+    const items = await searchHomebrewPackages(q);
+    for (const item of items) {
+      results.push({
+        id: item.name,
+        ecosystem: "homebrew",
+        name: item.name,
+        version: item.version || null,
+        description: item.description || null,
+        statsLabel:
+          typeof item.installs30d === "number"
+            ? `${item.installs30d.toLocaleString()}/30d`
+            : "Homebrew",
+        url:
+          item.kind === "cask"
+            ? `https://formulae.brew.sh/cask/${encodeURIComponent(item.name.replace(/^cask\//, ""))}`
+            : `https://formulae.brew.sh/formula/${encodeURIComponent(item.name)}`,
       });
     }
   }

@@ -11,17 +11,19 @@ import {
 } from "lucide-react";
 import type { RegistrySearchResult, SearchableEcosystem } from "@/app/api/v1/registries/search/route";
 
+export type PrimarySearchField =
+  | "pypiPackage"
+  | "npmPackage"
+  | "rustCrate"
+  | "dockerImage"
+  | "vscodeExtension"
+  | "mcpServerName"
+  | "goModule";
+
 export const REGISTRY_ECOSYSTEMS: Array<{
   id: SearchableEcosystem;
   label: string;
-  field:
-    | "pypiPackage"
-    | "npmPackage"
-    | "rustCrate"
-    | "dockerImage"
-    | "vscodeExtension"
-    | "mcpServerName"
-    | "goModule";
+  field: PrimarySearchField | null;
   placeholder: string;
   buildUrl: (name: string) => string;
 }> = [
@@ -82,18 +84,85 @@ export const REGISTRY_ECOSYSTEMS: Array<{
     placeholder: "Enter Go module path (e.g. github.com/gin-gonic/gin)...",
     buildUrl: (n) => `https://pkg.go.dev/${n}`,
   },
+  {
+    id: "nuget",
+    label: "NuGet (.NET)",
+    field: null,
+    placeholder: "Search NuGet packages (e.g. Newtonsoft.Json, Serilog)...",
+    buildUrl: (n) => `https://www.nuget.org/packages/${encodeURIComponent(n)}`,
+  },
+  {
+    id: "rubygems",
+    label: "RubyGems",
+    field: null,
+    placeholder: "Search Ruby gems (e.g. rails, sidekiq, puma)...",
+    buildUrl: (n) => `https://rubygems.org/gems/${encodeURIComponent(n)}`,
+  },
+  {
+    id: "packagist",
+    label: "Packagist (PHP)",
+    field: null,
+    placeholder: "Search Composer packages (e.g. laravel/framework, symfony/http-kernel)...",
+    buildUrl: (n) => `https://packagist.org/packages/${n}`,
+  },
+  {
+    id: "pubdev",
+    label: "pub.dev (Flutter)",
+    field: null,
+    placeholder: "Search Dart & Flutter packages (e.g. riverpod, dio, go_router)...",
+    buildUrl: (n) => `https://pub.dev/packages/${encodeURIComponent(n)}`,
+  },
+  {
+    id: "jsr",
+    label: "JSR (Deno/TS)",
+    field: null,
+    placeholder: "Search JSR packages (e.g. @std/path, @hono/hono)...",
+    buildUrl: (n) => `https://jsr.io/${n.startsWith("@") ? n : `@${n}`}`,
+  },
+  {
+    id: "hex",
+    label: "Hex.pm (Elixir)",
+    field: null,
+    placeholder: "Search Hex packages (e.g. phoenix, ecto, req)...",
+    buildUrl: (n) => `https://hex.pm/packages/${encodeURIComponent(n)}`,
+  },
+  {
+    id: "anaconda",
+    label: "Anaconda",
+    field: null,
+    placeholder: "Search Conda packages (e.g. numpy, pytorch, conda-forge/polars)...",
+    buildUrl: (n) => (n.includes("/") ? `https://anaconda.org/${n}` : `https://anaconda.org/conda-forge/${n}`),
+  },
+  {
+    id: "cran",
+    label: "CRAN (R)",
+    field: null,
+    placeholder: "Search CRAN packages (e.g. ggplot2, dplyr, shiny)...",
+    buildUrl: (n) => `https://cran.r-project.org/package=${encodeURIComponent(n)}`,
+  },
+  {
+    id: "homebrew",
+    label: "Homebrew",
+    field: null,
+    placeholder: "Enter Homebrew formula or cask (e.g. ripgrep, jq, gh)...",
+    buildUrl: (n) =>
+      n.startsWith("cask/")
+        ? `https://formulae.brew.sh/cask/${encodeURIComponent(n.slice("cask/".length))}`
+        : `https://formulae.brew.sh/formula/${encodeURIComponent(n)}`,
+  },
 ];
 
 interface PackageSearchPickerProps {
   onSelectItem: (item: {
     ecosystem: SearchableEcosystem;
-    field: (typeof REGISTRY_ECOSYSTEMS)[number]["field"];
+    field: PrimarySearchField | null;
     name: string;
     url: string;
   }) => Promise<void> | void;
   actionLabel?: string;
-  selectedValues?: Partial<Record<(typeof REGISTRY_ECOSYSTEMS)[number]["field"], string | null | undefined>>;
+  selectedValues?: Partial<Record<PrimarySearchField, string | null | undefined>>;
   compact?: boolean;
+  onlyPrimaryFields?: boolean;
 }
 
 export function PackageSearchPicker({
@@ -101,6 +170,7 @@ export function PackageSearchPicker({
   actionLabel = "Add",
   selectedValues = {},
   compact = false,
+  onlyPrimaryFields = false,
 }: PackageSearchPickerProps) {
   const [ecosystem, setEcosystem] = useState<SearchableEcosystem>("npm");
   const [query, setQuery] = useState("");
@@ -108,8 +178,12 @@ export function PackageSearchPicker({
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const meta = REGISTRY_ECOSYSTEMS.find((e) => e.id === ecosystem) || REGISTRY_ECOSYSTEMS[0];
-  const currentAssigned = selectedValues[meta.field] || null;
+  const visibleEcosystems = onlyPrimaryFields
+    ? REGISTRY_ECOSYSTEMS.filter((e) => e.field !== null)
+    : REGISTRY_ECOSYSTEMS;
+
+  const meta = visibleEcosystems.find((e) => e.id === ecosystem) || visibleEcosystems[0];
+  const currentAssigned = meta.field ? selectedValues[meta.field] || null : null;
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -163,7 +237,7 @@ export function PackageSearchPicker({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-1.5">
-        {REGISTRY_ECOSYSTEMS.map((eco) => (
+        {visibleEcosystems.map((eco) => (
           <button
             key={eco.id}
             type="button"

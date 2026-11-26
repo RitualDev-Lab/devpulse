@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { projects, errorEvents } from "@/db/schema";
 import { eq, count, and } from "drizzle-orm";
 import { readProjectSnapshots, refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
+import { REGISTRY_ADAPTERS } from "@/lib/integrations/registry-adapter";
 
 interface BadgeRouteParams {
   params: Promise<{
@@ -104,19 +105,44 @@ export async function GET(_req: NextRequest, { params }: BadgeRouteParams) {
         let snap = await readProjectSnapshots(project.id);
         if (snap.presentKeys.size === 0) {
           snap = await refreshProjectSnapshots(project, {
-            keys: ["npm", "pypi", "crates", "docker", "vscode"],
+            keys: ["npm", "pypi", "crates", "docker", "vscode", "package_connectors"],
           }).catch(() => snap);
         }
+
+        const extraDownloads = (snap.extraPackages || []).reduce((acc, pkg) => {
+          const adapter = REGISTRY_ADAPTERS[pkg.provider];
+          if (!adapter?.countsTowardDownloadBadge) return acc;
+          return acc + (typeof pkg.metricValue === "number" ? pkg.metricValue : 0);
+        }, 0);
 
         const total =
           Number(snap.npmStats?.downloadsLastMonth || 0) +
           Number(snap.pypiStats?.downloadsLastMonth || 0) +
           Number(snap.rustStats?.totalDownloads || 0) +
           Number(snap.dockerStats?.pullCount || 0) +
-          Number(snap.vscodeStats?.installs || 0);
+          Number(snap.vscodeStats?.installs || 0) +
+          extraDownloads;
 
         value = total > 0 ? formatNumber(total) : "active";
         color = "#10b981";
+      } else if (badgeType === "security") {
+        label = "security";
+        let snap = await readProjectSnapshots(project.id);
+        if (snap.presentKeys.size === 0) {
+          snap = await refreshProjectSnapshots(project, { keys: ["security"] }).catch(() => snap);
+        }
+        const summaries = Object.values(snap.packageSecurity || {});
+        const totalCves = summaries.reduce((acc, s) => acc + Number(s.advisoryCount || 0), 0);
+        if (summaries.length === 0) {
+          value = "unchecked";
+          color = "#71717a";
+        } else if (totalCves === 0) {
+          value = "0 CVEs";
+          color = "#10b981";
+        } else {
+          value = `${totalCves} CVE${totalCves === 1 ? "" : "s"}`;
+          color = "#ef4444";
+        }
       } else if (badgeType === "health") {
         label = "health";
         const [unresolved] = await db
