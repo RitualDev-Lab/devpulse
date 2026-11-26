@@ -61,7 +61,7 @@ const WorkspaceShellContext = createContext<WorkspaceShellContextValue>({
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid, exact: true },
-  { href: "/dashboard/github", label: "GitHub & PRs", icon: GitBranch },
+  { href: "/dashboard/github", label: "Git & PRs", icon: GitBranch },
   { href: "/dashboard/packages", label: "Packages", icon: Package },
   { href: "/dashboard/analytics", label: "Daily Users", icon: BarChart3 },
   { href: "/dashboard/crashes", label: "Crashes & Maps", icon: Bug },

@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { refreshDailyDeltas } from "@/lib/sync/refresh-daily-deltas";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
-import { fetchGitHubRepoStats } from "@/lib/integrations/github";
+import { fetchGitRepoStats, resolveProjectGitConfig } from "@/lib/integrations/git-provider";
 import { fetchRustCrateStats } from "@/lib/integrations/crates";
 import { fetchGoModuleStats } from "@/lib/integrations/go";
 import { fetchDockerRepoStats } from "@/lib/integrations/docker";
@@ -208,89 +208,110 @@ async function syncSingleProject(
     );
   }
 
-  // 5. GitHub
-  if (proj.githubRepo) {
-    tasks.push(
-      (async () => {
-        try {
-          const projGhToken = await decryptSecret(proj.githubTokenEncrypted).catch(() => null);
-          const userGhToken =
-            projGhToken || (await getUserGitHubAccessToken(proj.userId).catch(() => null));
-          const ghStats = await fetchGitHubRepoStats(proj.githubRepo!, userGhToken || undefined);
-          if (!ghStats) return;
+  // 5. Git Host (GitHub, GitLab, Bitbucket, Codeberg/Gitea)
+  tasks.push(
+    (async () => {
+      try {
+        const gitConns = await db
+          .select()
+          .from(projectConnectors)
+          .where(and(eq(projectConnectors.projectId, proj.id), eq(projectConnectors.category, "git")))
+          .limit(2)
+          .catch(() => []);
+        const primaryGitConn = gitConns[0];
+        const decryptedGitToken = primaryGitConn?.credentialsEncrypted
+          ? await decryptSecret(primaryGitConn.credentialsEncrypted).catch(() => null)
+          : null;
+        const projGhToken = proj.githubRepo
+          ? await decryptSecret(proj.githubTokenEncrypted).catch(() => null)
+          : null;
+        const userGhToken =
+          projGhToken || (proj.githubRepo ? await getUserGitHubAccessToken(proj.userId).catch(() => null) : null);
 
-          const starMetricId = `met_gh_stars_${proj.id}_${todayStr}`;
-          const meta = JSON.stringify({
-            stars: ghStats.stars,
-            forks: ghStats.forks,
-            openIssues: ghStats.openIssuesCount,
-            openPrs: ghStats.openPrCount,
-            prReviewVelocityHours: ghStats.prReviewVelocityHours,
-            staleIssues: ghStats.staleIssuesCount,
-            freshIssues: ghStats.freshIssuesCount,
-            dependabotAlerts: ghStats.dependabotAlertsCount,
-            latestRelease: ghStats.latestRelease?.tagName,
+        const gitCfg = resolveProjectGitConfig({
+          githubRepo: proj.githubRepo,
+          githubToken: userGhToken,
+          connectors: gitConns,
+          gitConnectorToken: decryptedGitToken,
+        });
+        if (!gitCfg) return;
+
+        const ghStats = await fetchGitRepoStats(gitCfg);
+        if (!ghStats) return;
+
+        const starMetricId = `met_gh_stars_${proj.id}_${todayStr}`;
+        const meta = JSON.stringify({
+          provider: ghStats.provider,
+          stars: ghStats.stars,
+          forks: ghStats.forks,
+          openIssues: ghStats.openIssuesCount,
+          openPrs: ghStats.openPrCount,
+          prReviewVelocityHours: ghStats.prReviewVelocityHours,
+          staleIssues: ghStats.staleIssuesCount,
+          freshIssues: ghStats.freshIssuesCount,
+          dependabotAlerts: ghStats.dependabotAlertsCount,
+          pipelineStatus: ghStats.pipelineStatus?.status || null,
+          latestRelease: ghStats.latestRelease?.tagName,
+        });
+        await db
+          .insert(dailyMetrics)
+          .values({
+            id: starMetricId,
+            projectId: proj.id,
+            source: "github",
+            metricType: "stars",
+            date: todayStr,
+            value: ghStats.stars,
+            metadataJson: meta,
+          })
+          .onConflictDoUpdate({
+            target: dailyMetrics.id,
+            set: { value: ghStats.stars, metadataJson: meta },
           });
-          await db
-            .insert(dailyMetrics)
-            .values({
-              id: starMetricId,
-              projectId: proj.id,
-              source: "github",
-              metricType: "stars",
-              date: todayStr,
-              value: ghStats.stars,
-              metadataJson: meta,
-            })
-            .onConflictDoUpdate({
-              target: dailyMetrics.id,
-              set: { value: ghStats.stars, metadataJson: meta },
-            });
 
-          await Promise.all([
-            ...(ghStats.trafficClones?.daily || []).map((cDay) =>
-              db
-                .insert(dailyMetrics)
-                .values({
-                  id: `met_gh_clones_${proj.id}_${cDay.date}`,
-                  projectId: proj.id,
-                  source: "github",
-                  metricType: "clones",
-                  date: cDay.date,
-                  value: cDay.count,
-                  metadataJson: JSON.stringify({ uniques: cDay.uniques }),
-                })
-                .onConflictDoUpdate({
-                  target: dailyMetrics.id,
-                  set: { value: cDay.count, metadataJson: JSON.stringify({ uniques: cDay.uniques }) },
-                })
-            ),
-            ...(ghStats.trafficViews?.daily || []).map((vDay) =>
-              db
-                .insert(dailyMetrics)
-                .values({
-                  id: `met_gh_views_${proj.id}_${vDay.date}`,
-                  projectId: proj.id,
-                  source: "github",
-                  metricType: "views",
-                  date: vDay.date,
-                  value: vDay.count,
-                  metadataJson: JSON.stringify({ uniques: vDay.uniques }),
-                })
-                .onConflictDoUpdate({
-                  target: dailyMetrics.id,
-                  set: { value: vDay.count, metadataJson: JSON.stringify({ uniques: vDay.uniques }) },
-                })
-            ),
-          ]);
+        await Promise.all([
+          ...(ghStats.trafficClones?.daily || []).map((cDay) =>
+            db
+              .insert(dailyMetrics)
+              .values({
+                id: `met_gh_clones_${proj.id}_${cDay.date}`,
+                projectId: proj.id,
+                source: "github",
+                metricType: "clones",
+                date: cDay.date,
+                value: cDay.count,
+                metadataJson: JSON.stringify({ uniques: cDay.uniques }),
+              })
+              .onConflictDoUpdate({
+                target: dailyMetrics.id,
+                set: { value: cDay.count, metadataJson: JSON.stringify({ uniques: cDay.uniques }) },
+              })
+          ),
+          ...(ghStats.trafficViews?.daily || []).map((vDay) =>
+            db
+              .insert(dailyMetrics)
+              .values({
+                id: `met_gh_views_${proj.id}_${vDay.date}`,
+                projectId: proj.id,
+                source: "github",
+                metricType: "views",
+                date: vDay.date,
+                value: vDay.count,
+                metadataJson: JSON.stringify({ uniques: vDay.uniques }),
+              })
+              .onConflictDoUpdate({
+                target: dailyMetrics.id,
+                set: { value: vDay.count, metadataJson: JSON.stringify({ uniques: vDay.uniques }) },
+              })
+          ),
+        ]);
 
-          syncedSources.push("github");
-        } catch (err: any) {
-          errors.push(`github: ${err?.message || "Failed to fetch GitHub stats"}`);
-        }
-      })()
-    );
-  }
+        syncedSources.push(gitCfg.provider);
+      } catch (err: any) {
+        errors.push(`git: ${err?.message || "Failed to fetch Git host stats"}`);
+      }
+    })()
+  );
 
   // 6. Go Module
   if (proj.goModule) {

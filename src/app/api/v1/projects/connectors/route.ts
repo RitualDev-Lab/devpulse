@@ -15,7 +15,13 @@ import { normalizeRegistryProvider, REGISTRY_ADAPTERS } from "@/lib/integrations
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { isValidPublicMonitorUrl, runMonitorCheck } from "@/lib/monitors/checker";
 import { fetchNpmOrgPackages } from "@/lib/integrations/npm";
-import { scanGitHubRepository } from "@/lib/scanner/github-scanner";
+import { scanGitHubRepository, scanGitProviderManifests } from "@/lib/scanner/manifest-scanner";
+import {
+  defaultGitBaseUrl,
+  fetchGitRepoStats,
+  gitProviderLabel,
+  normalizeGitProvider,
+} from "@/lib/integrations/git-provider";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { decryptSecret } from "@/lib/security/crypto";
 import { validatePublicUrl } from "@/lib/security/ssrf";
@@ -247,6 +253,24 @@ export async function POST(req: NextRequest) {
           });
           detectedSummary.push(item.label);
         } else {
+          const gitProv = normalizeGitProvider(item.kind);
+          if (gitProv && item.value && gitProv !== "github") {
+            const baseOrigin = item.normalizedUrl ? new URL(item.normalizedUrl).origin : defaultGitBaseUrl(gitProv);
+            await db.delete(projectConnectors).where(and(eq(projectConnectors.projectId, projectId), eq(projectConnectors.category, "git")));
+            await db.insert(projectConnectors).values({
+              id: `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+              projectId,
+              category: "git",
+              provider: gitProv,
+              label: item.label,
+              targetUrl: baseOrigin,
+              identifier: item.value,
+              metadataJson: JSON.stringify({ gitProvider: gitProv, gitBaseUrl: baseOrigin, repoSlug: item.value }),
+              lastSyncedAt: new Date().toISOString(),
+            });
+            detectedSummary.push(item.label);
+            continue;
+          }
           const pkgProvider = normalizeRegistryProvider(item.kind);
           if (pkgProvider && item.value) {
             const connId = `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
@@ -353,6 +377,12 @@ export async function POST(req: NextRequest) {
         await refreshProjectSnapshots(
           { ...access.project, ...updateFields },
           { userIdForOAuth: user.id, keys: ["package_connectors", "security"] }
+        ).catch(() => {});
+      }
+      if (parsedItems.some((item) => normalizeGitProvider(item.kind) !== null && item.kind !== "github")) {
+        await refreshProjectSnapshots(
+          { ...access.project, ...updateFields },
+          { userIdForOAuth: user.id, keys: ["github"] }
         ).catch(() => {});
       }
 
@@ -512,6 +542,121 @@ export async function POST(req: NextRequest) {
       });
 
       return NextResponse.json({ success: true, connectorId: id, metadata }, { status: 201 });
+    }
+
+    if (action === "connect_git_provider") {
+      if (!access.canWrite) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      const providerId = normalizeGitProvider(String(body.provider || ""));
+      const repoSlug = String(body.repoSlug || "").trim().replace(/^https?:\/\/[^/]+\//i, "").replace(/\.git$/i, "").replace(/^\/+|\/+$/g, "");
+      if (!providerId || !repoSlug || !repoSlug.includes("/")) {
+        return NextResponse.json({ error: "Valid provider and repository slug (owner/repo) required" }, { status: 400 });
+      }
+
+      const rawBaseUrl = String(body.baseUrl || "").trim();
+      let baseUrl = defaultGitBaseUrl(providerId);
+      if (rawBaseUrl) {
+        const checked = validatePublicUrl(rawBaseUrl);
+        if (!checked.valid || !checked.normalized) {
+          return NextResponse.json({ error: checked.reason || "Invalid self-hosted Git URL" }, { status: 400 });
+        }
+        baseUrl = new URL(checked.normalized).origin;
+      }
+
+      const rawToken = typeof body.token === "string" && body.token.trim() && !body.token.trim().startsWith("••")
+        ? body.token.trim()
+        : null;
+
+      if (providerId === "github") {
+        const ownership = await verifyGitHubRepoOwnership(user, repoSlug, rawToken || undefined);
+        if (!ownership.allowed) {
+          return NextResponse.json({ error: ownership.reason || "You can only connect GitHub repositories you own" }, { status: 403 });
+        }
+        await db.delete(projectConnectors).where(and(eq(projectConnectors.projectId, projectId), eq(projectConnectors.category, "git")));
+        await db.update(projects).set({ githubRepo: ownership.githubRepo, updatedAt: new Date().toISOString() }).where(eq(projects.id, projectId));
+        await syncEcosystemWidgetsAndSnapshots({ projectId, userIdForOAuth: user.id, changedFields: ["githubRepo"] });
+        return NextResponse.json({ success: true, provider: "github", repoSlug: ownership.githubRepo });
+      }
+
+      const verifiedStats = await fetchGitRepoStats({ provider: providerId, baseUrl, repoSlug, token: rawToken });
+      if (!verifiedStats) {
+        return NextResponse.json({ error: `Could not reach ${repoSlug} on ${gitProviderLabel(providerId, baseUrl)} — check the repo path or add an access token.` }, { status: 404 });
+      }
+
+      const encryptedToken = rawToken ? await encryptSecret(rawToken) : null;
+      await db.delete(projectConnectors).where(and(eq(projectConnectors.projectId, projectId), eq(projectConnectors.category, "git")));
+      const connId = `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+      await db.insert(projectConnectors).values({
+        id: connId,
+        projectId,
+        category: "git",
+        provider: providerId,
+        label: `${gitProviderLabel(providerId, baseUrl)} (${verifiedStats.fullName})`,
+        targetUrl: baseUrl,
+        identifier: verifiedStats.fullName,
+        credentialsEncrypted: encryptedToken,
+        metadataJson: JSON.stringify({ gitProvider: providerId, gitBaseUrl: baseUrl, repoSlug: verifiedStats.fullName }),
+        lastSyncedAt: new Date().toISOString(),
+      });
+
+      await db
+        .insert(dashboardWidgets)
+        .values({
+          id: `w_${projectId}_github_stats`.slice(0, 128),
+          projectId,
+          widgetType: "github_stats",
+          title: `${gitProviderLabel(providerId, baseUrl)} Stats`,
+          positionX: 0,
+          positionY: 0,
+          width: 4,
+          height: 1,
+          isVisible: true,
+        })
+        .onConflictDoNothing()
+        .catch(() => {});
+
+      const scanned = await scanGitProviderManifests({ provider: providerId, baseUrl, repoSlug: verifiedStats.fullName, token: rawToken }).catch(() => null);
+      if (scanned?.detectedConnectors?.length) {
+        for (const c of scanned.detectedConnectors.slice(0, 8)) {
+          await db.insert(projectConnectors).values({
+            id: `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+            projectId,
+            category: "package",
+            provider: c.provider,
+            label: c.label,
+            targetUrl: c.url,
+            identifier: c.identifier,
+            lastSyncedAt: new Date().toISOString(),
+          }).onConflictDoNothing().catch(() => {});
+        }
+      }
+
+      await refreshProjectSnapshots(access.project, {
+        userIdForOAuth: user.id,
+        keys: ["github", "package_connectors", "security"],
+      }).catch(() => {});
+
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        organizationId: access.project.organizationId,
+        projectId,
+        action: "project.git_provider_connected",
+        resourceType: "project_connector",
+        resourceId: connId,
+        headers: req.headers,
+        metadata: { provider: providerId, baseUrl, repoSlug: verifiedStats.fullName },
+      });
+
+      return NextResponse.json({
+        success: true,
+        connectorId: connId,
+        provider: providerId,
+        baseUrl,
+        repoSlug: verifiedStats.fullName,
+        summary: scanned?.summary || [],
+      });
     }
 
     if (action === "add_package_connector") {

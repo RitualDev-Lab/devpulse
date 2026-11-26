@@ -105,6 +105,42 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
   const [loadingThread, setLoadingThread] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const [isPatOpen, setIsPatOpen] = useState(false);
+  const [showMultiGitForm, setShowMultiGitForm] = useState(false);
+  const [gitProv, setGitProv] = useState<"gitlab" | "bitbucket" | "gitea" | "github">(
+    (project.gitProvider as any) || "gitlab"
+  );
+  const [gitSlug, setGitSlug] = useState(project.gitRepo || "");
+  const [gitBase, setGitBase] = useState(project.gitBaseUrl || "");
+  const [gitTok, setGitTok] = useState("");
+  const [savingGit, setSavingGit] = useState(false);
+
+  const handleSaveMultiGit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isDemo || !gitSlug.trim()) return;
+    setSavingGit(true);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/v1/projects/connectors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "connect_git_provider",
+          projectId: project.id,
+          provider: gitProv,
+          repoSlug: gitSlug.trim(),
+          baseUrl: gitBase.trim() || undefined,
+          token: gitTok.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to connect repository");
+      window.location.reload();
+    } catch (err: any) {
+      setFeedback({ ok: false, msg: err?.message || "Failed to connect Git host" });
+    } finally {
+      setSavingGit(false);
+    }
+  };
 
   const inspectThread = async (itemNumber: number, fallback: { title: string; author: string; state: string; htmlUrl: string }) => {
     setLoadingThread(true);
@@ -264,15 +300,34 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold text-white flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <GitBranch className="w-6 h-6 text-indigo-400" />
-              <span>GitHub Command Center</span>
-            </h1>
+              <h1 className="text-2xl font-extrabold text-white">Git &amp; PRs Command Center</h1>
+              <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                {gh?.provider === "gitlab"
+                  ? "GitLab"
+                  : gh?.provider === "bitbucket"
+                    ? "Bitbucket"
+                    : gh?.provider === "gitea"
+                      ? "Codeberg / Gitea"
+                      : "GitHub"}
+              </span>
+            </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              {project.githubRepo || "No repository connected"} &bull; Manage PRs, Issues, Daily Clones &amp; Repo Views
+              {project.gitRepo || project.githubRepo || "No repository connected"} &bull; Manage PRs / MRs, Issues, CI Pipelines &amp; Clones across GitHub, GitLab, Bitbucket &amp; Codeberg
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {!isDemo && (
+              <button
+                type="button"
+                onClick={() => setShowMultiGitForm((v) => !v)}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-xs font-semibold text-indigo-200 transition"
+              >
+                <GitBranch className="w-3.5 h-3.5" />
+                <span>Connect GitLab / Bitbucket / Codeberg</span>
+              </button>
+            )}
             {!isDemo && (
               <button
                 type="button"
@@ -283,21 +338,74 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
                 <span>{project.hasGithubToken ? "Update GitHub PAT & Guide" : "Add GitHub PAT + Guide"}</span>
               </button>
             )}
-            {project.githubRepo && (
+            {(gh?.webUrl || project.githubRepo) && (
               <a
-                href={`https://github.com/${project.githubRepo}`}
+                href={gh?.webUrl || `https://github.com/${project.githubRepo}`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-white transition"
               >
-                <span>Open {project.githubRepo} on GitHub</span>
+                <span>Open Repository</span>
                 <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
               </a>
             )}
           </div>
         </div>
 
-        {!project.githubRepo && (
+        {showMultiGitForm && !isDemo && (
+          <form onSubmit={handleSaveMultiGit} className="p-4 rounded-2xl bg-zinc-900/90 border border-indigo-500/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-white">Connect Multi-Git Repository (GitLab, Bitbucket, Codeberg / Gitea, Self-Hosted)</div>
+              <button type="button" onClick={() => setShowMultiGitForm(false)} className="text-zinc-500 hover:text-white text-xs">Close</button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <select
+                value={gitProv}
+                onChange={(e) => setGitProv(e.target.value as any)}
+                className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white"
+              >
+                <option value="gitlab">GitLab (SaaS / Self-Hosted)</option>
+                <option value="bitbucket">Bitbucket Cloud</option>
+                <option value="gitea">Codeberg / Gitea / Forgejo</option>
+                <option value="github">GitHub</option>
+              </select>
+              <input
+                type="text"
+                required
+                value={gitSlug}
+                onChange={(e) => setGitSlug(e.target.value)}
+                placeholder="owner/repo or group/project"
+                className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
+              />
+              <input
+                type="url"
+                value={gitBase}
+                onChange={(e) => setGitBase(e.target.value)}
+                placeholder="Base URL (e.g. https://codeberg.org or self-hosted)"
+                className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
+              />
+              <input
+                type="password"
+                value={gitTok}
+                onChange={(e) => setGitTok(e.target.value)}
+                placeholder="Access Token (optional for public)"
+                className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={savingGit}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold disabled:opacity-50"
+              >
+                {savingGit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitBranch className="w-3.5 h-3.5" />}
+                <span>Verify, Scan Manifests &amp; Save</span>
+              </button>
+            </div>
+          </form>
+        )}
+
+        {!project.githubRepo && !project.gitRepo && (
           <div className="p-4 rounded-2xl bg-indigo-950/35 border border-indigo-500/30 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="space-y-0.5">
               <div className="font-bold text-white">

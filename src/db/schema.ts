@@ -457,7 +457,7 @@ export const uptimeChecks = sqliteTable("uptime_checks", {
 export const projectConnectors = sqliteTable("project_connectors", {
   id: text("id").primaryKey(),
   projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }).notNull(),
-  category: text("category", { enum: ["payment", "package", "analytics", "telemetry", "custom"] }).notNull(),
+  category: text("category", { enum: ["payment", "package", "analytics", "telemetry", "git", "custom"] }).notNull(),
   provider: text("provider").notNull(), // e.g. 'lemonsqueezy', 'polar', 'paddle', 'gumroad', 'stripe', 'dodo', 'npm', 'custom'
   label: text("label").notNull(),
   targetUrl: text("target_url"),

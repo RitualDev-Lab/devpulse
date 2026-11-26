@@ -1,5 +1,13 @@
 import { escapeGoModulePath } from "@/lib/integrations/go";
 import { REGISTRY_ADAPTERS, type RegistryProviderId } from "@/lib/integrations/registry-adapter";
+import {
+  defaultGitBaseUrl,
+  fetchGitRepoRawFile,
+  fetchGitRepoStats,
+  listGitRepoRootFiles,
+  type GitProviderConfig,
+  type GitProviderId,
+} from "@/lib/integrations/git-provider";
 import { fetchNuGetStats } from "@/lib/integrations/nuget";
 import { fetchMavenStats } from "@/lib/integrations/maven";
 import { fetchCppPackageStats } from "@/lib/integrations/cpp";
@@ -86,6 +94,37 @@ function getAuthHeader(userToken?: string): Record<string, string> {
   return headers;
 }
 
+export async function scanGitProviderManifests(config: GitProviderConfig): Promise<ScannedRepoResult> {
+  if (config.provider === "github") {
+    return await scanRepositoryManifests(config.repoSlug, config.token || undefined);
+  }
+
+  const baseUrl = defaultGitBaseUrl(config.provider, config.baseUrl);
+  const normalizedCfg: GitProviderConfig = { ...config, baseUrl };
+  const [repoStats, rootFiles] = await Promise.all([
+    fetchGitRepoStats(normalizedCfg),
+    listGitRepoRootFiles(normalizedCfg),
+  ]);
+
+  if (!repoStats) {
+    throw new Error(`Repository "${config.repoSlug}" on ${config.provider} was not found or requires an access token.`);
+  }
+
+  return await scanManifestFiles({
+    owner: repoStats.owner,
+    repo: repoStats.repo,
+    repoFullName: repoStats.fullName,
+    repoName: repoStats.repo,
+    description: repoStats.description,
+    stars: repoStats.stars,
+    forks: repoStats.forks,
+    language: repoStats.provider.toUpperCase(),
+    defaultBranch: repoStats.defaultBranch,
+    rootFileNames: rootFiles,
+    fetchFileText: (fileName) => fetchGitRepoRawFile(normalizedCfg, fileName, repoStats.defaultBranch),
+  });
+}
+
 export async function scanRepositoryManifests(
   repoFullName: string,
   userToken?: string
@@ -122,15 +161,59 @@ export async function scanRepositoryManifests(
     ? await contentsRes.json()
     : [];
 
+  const rootFileNames = Array.isArray(rootItems) ? rootItems.map((i) => i?.name).filter(Boolean) as string[] : [];
+
+  async function fetchFileText(fileName: string): Promise<string | null> {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${fileName}`, {
+        headers,
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.content && data.encoding === "base64") {
+        return Buffer.from(data.content, "base64").toString("utf-8");
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  return await scanManifestFiles({
+    owner,
+    repo,
+    repoFullName: `${owner}/${repo}`,
+    repoName: repoData.name || repo,
+    description: repoData.description || "",
+    stars: repoData.stargazers_count || 0,
+    forks: repoData.forks_count || 0,
+    language: repoData.language || "Unknown",
+    defaultBranch: repoData.default_branch || "main",
+    rootFileNames,
+    fetchFileText,
+  });
+}
+
+async function scanManifestFiles(ctx: {
+  owner: string;
+  repo: string;
+  repoFullName: string;
+  repoName: string;
+  description: string;
+  stars: number;
+  forks: number;
+  language: string;
+  defaultBranch: string;
+  rootFileNames: string[];
+  fetchFileText: (fileName: string) => Promise<string | null>;
+}): Promise<ScannedRepoResult> {
+  const { owner, repo, fetchFileText } = ctx;
   const fileMap = new Map<string, string>();
   const fileNames: string[] = [];
-  if (Array.isArray(rootItems)) {
-    for (const item of rootItems) {
-      if (item?.name) {
-        fileMap.set(item.name.toLowerCase(), item.name);
-        fileNames.push(item.name);
-      }
-    }
+  for (const name of ctx.rootFileNames) {
+    fileMap.set(name.toLowerCase(), name);
+    fileNames.push(name);
   }
 
   const detected: ScannedRepoResult["detectedEcosystems"] = {};
@@ -158,23 +241,6 @@ export async function scanRepositoryManifests(
     });
     summary.push(`Detected ${meta.label} package: "${identifier}" (from ${sourceFile})`);
   };
-
-  async function fetchFileText(fileName: string): Promise<string | null> {
-    try {
-      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${fileName}`, {
-        headers,
-        cache: "no-store",
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data.content && data.encoding === "base64") {
-        return Buffer.from(data.content, "base64").toString("utf-8");
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
 
   // 1. package.json (npm + VS Code)
   if (fileMap.has("package.json")) {
@@ -487,13 +553,13 @@ export async function scanRepositoryManifests(
   }
 
   return {
-    githubRepo: `${owner}/${repo}`,
-    name: repoData.name || repo,
-    description: repoData.description || "",
-    stars: repoData.stargazers_count || 0,
-    forks: repoData.forks_count || 0,
-    language: repoData.language || "Unknown",
-    defaultBranch: repoData.default_branch || "main",
+    githubRepo: ctx.repoFullName,
+    name: ctx.repoName,
+    description: ctx.description,
+    stars: ctx.stars,
+    forks: ctx.forks,
+    language: ctx.language,
+    defaultBranch: ctx.defaultBranch,
     detectedEcosystems: detected,
     detectedConnectors,
     summary,

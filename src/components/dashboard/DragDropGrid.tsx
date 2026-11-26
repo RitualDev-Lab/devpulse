@@ -39,6 +39,7 @@ import {
   type GridWidgetItem,
 } from "@/lib/layout/grid-engine";
 import type { GitHubRepoStats } from "@/lib/integrations/github";
+import type { GitProviderId, GitRepoStats } from "@/lib/integrations/git-provider";
 import type { NpmStats } from "@/lib/integrations/npm";
 import type { PyPiStats } from "@/lib/integrations/pypi";
 import type { RustCrateStats } from "@/lib/integrations/crates";
@@ -56,6 +57,9 @@ export interface DashboardData {
     name: string;
     slug: string;
     githubRepo?: string | null;
+    gitProvider?: GitProviderId | null;
+    gitBaseUrl?: string | null;
+    gitRepo?: string | null;
     npmPackage?: string | null;
     pypiPackage?: string | null;
     rustCrate?: string | null;
@@ -91,7 +95,7 @@ export interface DashboardData {
     theme?: string | null;
     customCss?: string | null;
   };
-  githubStats: GitHubRepoStats | null;
+  githubStats: (GitHubRepoStats & Partial<Pick<GitRepoStats, "provider" | "baseUrl" | "webUrl" | "pipelineStatus">>) | null;
   npmStats: NpmStats | null;
   pypiStats: PyPiStats | null;
   rustStats: RustCrateStats | null;
@@ -138,8 +142,8 @@ export function DragDropGrid({
   // Determine available widgets based on active project ecosystems
   const availableDefs = useMemo(
     () => [
-      ...(data.project.githubRepo
-        ? [{ id: "github_stats", title: "GitHub Stats", defaultW: 4, defaultH: 1 }]
+      ...(data.project.githubRepo || data.project.gitRepo || data.githubStats
+        ? [{ id: "github_stats", title: "Git & PRs", defaultW: 4, defaultH: 1 }]
         : []),
       ...(data.project.npmPackage
         ? [{ id: "npm_downloads", title: "npm Downloads", defaultW: 4, defaultH: 1 }]
@@ -435,7 +439,8 @@ export function DragDropGrid({
         return (
           <GitHubStatsCard
             stats={data.githubStats}
-            repoName={data.project.githubRepo || "Repository"}
+            repoName={data.project.gitRepo || data.project.githubRepo || "Repository"}
+            provider={data.project.gitProvider || undefined}
           />
         );
       case "npm_downloads":

@@ -7,6 +7,9 @@
 
 export type DetectedConnectorKind =
   | "github"
+  | "gitlab"
+  | "bitbucket"
+  | "gitea"
   | "npm"
   | "pypi"
   | "crates"
@@ -105,6 +108,47 @@ export function parseConnectorInput(rawInput: string): ParsedConnectorLink {
       value: repoSlug,
       label: `GitHub (${repoSlug})`,
       normalizedUrl: `https://github.com/${repoSlug}`,
+    };
+  }
+
+  // GitLab (gitlab.com/group/.../repo)
+  if ((host === "gitlab.com" || host.startsWith("gitlab.")) && pathParts.length >= 2) {
+    const dashIdx = pathParts.indexOf("-");
+    const cleanParts = dashIdx >= 2 ? pathParts.slice(0, dashIdx) : pathParts;
+    const repoSlug = cleanParts.join("/").replace(/\.git$/i, "");
+    return {
+      raw: rawInput,
+      kind: "gitlab",
+      provider: host === "gitlab.com" ? "GitLab" : "GitLab Self-Hosted",
+      value: repoSlug,
+      label: `GitLab (${repoSlug})`,
+      normalizedUrl: `${parsed.origin}/${repoSlug}`,
+    };
+  }
+
+  // Bitbucket (bitbucket.org/workspace/repo)
+  if (host === "bitbucket.org" && pathParts.length >= 2) {
+    const repoSlug = `${pathParts[0]}/${pathParts[1].replace(/\.git$/i, "")}`;
+    return {
+      raw: rawInput,
+      kind: "bitbucket",
+      provider: "Bitbucket",
+      value: repoSlug,
+      label: `Bitbucket (${repoSlug})`,
+      normalizedUrl: `https://bitbucket.org/${repoSlug}`,
+    };
+  }
+
+  // Codeberg / Gitea / Forgejo
+  if ((host === "codeberg.org" || host.includes("gitea") || host.includes("forgejo")) && pathParts.length >= 2) {
+    const repoSlug = `${pathParts[0]}/${pathParts[1].replace(/\.git$/i, "")}`;
+    return {
+      raw: rawInput,
+      kind: "gitea",
+      provider: host === "codeberg.org" ? "Codeberg" : "Gitea / Forgejo",
+      value: repoSlug,
+      label: `${host === "codeberg.org" ? "Codeberg" : "Gitea"} (${repoSlug})`,
+      normalizedUrl: `${parsed.origin}/${repoSlug}`,
     };
   }
 

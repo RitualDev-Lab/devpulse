@@ -4,7 +4,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { ECOSYSTEM_WIDGET_DEFS } from "@/lib/dashboard/ecosystem-widgets";
-import { fetchGitHubRepoStats, type GitHubRepoStats } from "@/lib/integrations/github";
+import { fetchGitRepoStats, resolveProjectGitConfig, type GitRepoStats } from "@/lib/integrations/git-provider";
+import type { GitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats, type NpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats, type PyPiStats } from "@/lib/integrations/pypi";
 import { fetchRustCrateStats, type RustCrateStats } from "@/lib/integrations/crates";
@@ -53,7 +54,7 @@ export type SnapshotKey =
   | "package_connectors";
 
 export interface ProjectSnapshotBundle {
-  githubStats: GitHubRepoStats | null;
+  githubStats: (GitHubRepoStats & Partial<Pick<GitRepoStats, "provider" | "baseUrl" | "webUrl" | "pipelineStatus">>) | null;
   npmStats: NpmStats | null;
   pypiStats: PyPiStats | null;
   rustStats: RustCrateStats | null;
@@ -187,7 +188,7 @@ export async function refreshProjectSnapshots(
     want("npm") ? decryptSecret(projectRow.npmTokenEncrypted).catch(() => null) : Promise.resolve(null),
     want("revenue") ? decryptSecret(projectRow.stripeApiKey).catch(() => null) : Promise.resolve(null),
     want("revenue") ? decryptSecret(projectRow.dodoPaymentsApiKey).catch(() => null) : Promise.resolve(null),
-    want("revenue") || want("docker") || want("package_connectors")
+    want("revenue") || want("docker") || want("package_connectors") || want("github")
       ? db
           .select()
           .from(projectConnectors)
@@ -200,7 +201,7 @@ export async function refreshProjectSnapshots(
 
   const effectiveGhToken = projectGhToken || userGhToken;
 
-  const [decryptedPaymentConnectors, decryptedDockerToken] = await Promise.all([
+  const [decryptedPaymentConnectors, decryptedDockerToken, decryptedGitConnectorToken] = await Promise.all([
     want("revenue")
       ? Promise.all(
           rawConnectors
@@ -223,7 +224,23 @@ export async function refreshProjectSnapshots(
         ? decryptSecret(dConn.credentialsEncrypted).catch(() => null)
         : Promise.resolve(null);
     })(),
+    (() => {
+      if (!want("github")) return Promise.resolve(null);
+      const gitConn = rawConnectors.find((c) => c.category === "git" && c.credentialsEncrypted);
+      return gitConn
+        ? decryptSecret(gitConn.credentialsEncrypted).catch(() => null)
+        : Promise.resolve(null);
+    })(),
   ]);
+
+  const resolvedGitConfig = want("github")
+    ? resolveProjectGitConfig({
+        githubRepo: projectRow.githubRepo,
+        githubToken: effectiveGhToken,
+        connectors: rawConnectors,
+        gitConnectorToken: decryptedGitConnectorToken,
+      })
+    : null;
 
   const cap = <T>(p: Promise<T | null>, ms = 4500): Promise<T | null> =>
     Promise.race([
@@ -242,8 +259,8 @@ export async function refreshProjectSnapshots(
     mcpStats,
     revenueStats,
   ] = await Promise.all([
-    want("github") && projectRow.githubRepo
-      ? cap(fetchGitHubRepoStats(projectRow.githubRepo, effectiveGhToken || undefined))
+    want("github") && resolvedGitConfig
+      ? cap(fetchGitRepoStats(resolvedGitConfig))
       : Promise.resolve(null),
     want("npm") && projectRow.npmPackage
       ? cap(fetchNpmStats(projectRow.npmPackage, decryptedNpmToken))

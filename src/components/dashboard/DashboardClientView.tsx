@@ -200,7 +200,7 @@ export function DashboardClientView({
                 href={isDemo ? "/dashboard/github?demo=1" : `/dashboard/github?project=${encodeURIComponent(data.project.slug)}`}
                 className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-medium transition"
               >
-                GitHub PRs &amp; Clones &rarr;
+                Git &amp; PRs &rarr;
               </Link>
               <Link
                 href={isDemo ? "/dashboard/revenue?demo=1" : `/dashboard/revenue?project=${encodeURIComponent(data.project.slug)}`}

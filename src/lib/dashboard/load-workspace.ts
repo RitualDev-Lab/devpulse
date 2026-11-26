@@ -25,6 +25,7 @@ import {
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
 import { decryptSecret } from "@/lib/security/crypto";
 import { fetchGitHubRepoStats } from "@/lib/integrations/github";
+import { resolveProjectGitConfig } from "@/lib/integrations/git-provider";
 import { fetchNpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats } from "@/lib/integrations/pypi";
 import { fetchRustCrateStats } from "@/lib/integrations/crates";
@@ -298,7 +299,7 @@ export async function loadDashboardWorkspace(
   const needUptime = needAll || scope === "uptime";
   const needRevenue = needAll || scope === "revenue";
   const needSettings = needAll || scope === "settings";
-  const needConnectors = needRevenue || needPackages || needSettings;
+  const needConnectors = needRevenue || needPackages || needSettings || needGithub;
   const needDailyMetrics = needGithub || needPackages || needRevenue;
   const needExternal = needGithub || needPackages || needRevenue;
 
@@ -494,12 +495,20 @@ export async function loadDashboardWorkspace(
   const canManageSecrets = !isDemoView && roleAllowsSecurityAdmin(effectiveRole);
   const canSeeWebhookStatus = !isDemoView && roleAllowsWrite(effectiveRole);
 
+  const resolvedGit = resolveProjectGitConfig({
+    githubRepo: activeProject.githubRepo,
+    connectors: rawConnectors,
+  });
+
   const initialData = {
     project: {
       id: activeProject.id,
       name: activeProject.name,
       slug: activeProject.slug,
       githubRepo: activeProject.githubRepo,
+      gitProvider: resolvedGit?.provider || null,
+      gitBaseUrl: resolvedGit?.baseUrl || null,
+      gitRepo: resolvedGit?.repoSlug || activeProject.githubRepo || null,
       npmPackage: activeProject.npmPackage,
       pypiPackage: activeProject.pypiPackage,
       rustCrate: activeProject.rustCrate,
