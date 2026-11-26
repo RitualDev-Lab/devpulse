@@ -16,6 +16,7 @@ import { refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { isValidPublicMonitorUrl } from "@/lib/monitors/checker";
 import { apiError } from "@/lib/security/api-error";
+import { resolveProjectAccess } from "@/lib/security/rbac";
 
 export async function GET() {
   try {
@@ -246,5 +247,65 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, project: created[0] });
   } catch (error: any) {
     return apiError(error, "Internal Server Error", 500);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const projectId = searchParams.get("projectId")?.trim();
+    if (!projectId) {
+      return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+    }
+
+    const access = await resolveProjectAccess(projectId, user);
+    if (!access) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    if (access.role !== "owner") {
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        organizationId: access.project.organizationId,
+        projectId,
+        action: "project.delete_denied",
+        resourceType: "project",
+        resourceId: projectId,
+        status: "denied",
+        headers: request.headers,
+        metadata: { role: access.role },
+      });
+      return NextResponse.json(
+        { error: "Only the project owner can remove this workspace." },
+        { status: 403 }
+      );
+    }
+
+    await recordAuditEvent({
+      userId: user.id,
+      actorUsername: user.githubUsername,
+      organizationId: access.project.organizationId,
+      projectId,
+      action: "project.deleted",
+      resourceType: "project",
+      resourceId: projectId,
+      headers: request.headers,
+      metadata: {
+        name: access.project.name,
+        slug: access.project.slug,
+        githubRepo: access.project.githubRepo,
+      },
+    });
+
+    await db.delete(projects).where(eq(projects.id, projectId));
+
+    return NextResponse.json({ success: true, deletedId: projectId });
+  } catch (error: any) {
+    return apiError(error, "Failed to delete project", 500);
   }
 }

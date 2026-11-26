@@ -25,10 +25,10 @@ interface GridCardProps {
   children: React.ReactNode;
 }
 
-const SNAP_WIDTHS = [3, 6, 9, 12];
+const SNAP_WIDTHS = [4, 6, 8, 12];
 
 function snapWidth(rawCols: number, maxCols: number): number {
-  const clamped = Math.min(Math.max(2, rawCols), maxCols);
+  const clamped = Math.min(Math.max(3, rawCols), maxCols);
   if (maxCols <= 4) return 4;
   if (maxCols <= 8) return clamped <= 5 ? 4 : 8;
   let best = SNAP_WIDTHS[0];
@@ -42,6 +42,14 @@ function snapWidth(rawCols: number, maxCols: number): number {
   }
   return best;
 }
+
+const COMPACT_WIDTH_OPTIONS: Array<{ w: number; h: number; label: string }> = [
+  { w: 4, h: 1, label: "1/3" },
+  { w: 6, h: 1, label: "1/2" },
+  { w: 8, h: 1, label: "2/3" },
+  { w: 12, h: 1, label: "Full" },
+  { w: 12, h: 2, label: "Tall" },
+];
 
 export function SortableCard({
   id,
@@ -145,101 +153,99 @@ export function SortableCard({
       style={style}
       data-widget-id={id}
       data-grid-rect={`${x},${y},${w},${h}`}
-      className={`devpulse-card relative group h-full min-h-[340px] ${
+      className={`devpulse-card relative group h-full min-h-[340px] flex flex-col ${
         !isDragging && !isResizing
           ? "transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           : "scale-[1.015] shadow-2xl shadow-indigo-500/25"
       } ${
         isCustomizing
-          ? "ring-2 ring-indigo-500/60 rounded-2xl shadow-xl shadow-indigo-500/10"
+          ? "ring-2 ring-indigo-500/60 rounded-2xl shadow-xl shadow-indigo-500/10 bg-zinc-950/60"
           : ""
       } ${isResizing ? "ring-cyan-400 ring-2 select-none" : ""}`}
     >
-      {/* Customization Toolbar & Size Presets */}
+      {/* Dedicated Customization Bar ABOVE card body (never overlaps card headers/buttons) */}
       {isCustomizing && (
-        <div className="absolute top-2 right-2 z-30 flex items-center gap-1 bg-zinc-950/95 border border-zinc-700/80 px-2 py-1 rounded-xl shadow-xl backdrop-blur-md text-xs">
-          {/* 2D Preset Sizes: 1x1, 2x1, 2x2, 3x2, 4x2 */}
-          {onResize && activeCols >= 8 && (
-            <div className="hidden sm:flex items-center gap-0.5 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 mr-1">
-              {(Object.keys(SIZE_PRESETS) as SizePresetKey[]).map((key) => {
-                const preset = SIZE_PRESETS[key];
-                const isSelected = activePreset === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => onResize(id, preset.w, preset.h, true)}
-                    title={`Resize to ${preset.label}`}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition ${
-                      isSelected
-                        ? "bg-indigo-600 text-white"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    {key}
-                  </button>
-                );
-              })}
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-t-2xl bg-zinc-900/95 border-b border-indigo-500/30 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {/* Drag Handle */}
+            <div
+              {...attributes}
+              {...listeners}
+              className="hidden md:flex cursor-grab active:cursor-grabbing text-indigo-300 hover:text-white p-1 rounded hover:bg-zinc-800 transition touch-none"
+              title="Drag card anywhere on 2D grid"
+            >
+              <GripVertical className="w-4 h-4" />
             </div>
-          )}
-
-          {/* Single-pointer accessible reorder controls (WCAG 2.2 SC 2.5.7 / F108) */}
-          {onMoveStep && (
-            <div className="flex items-center gap-0.5 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
-              <button
-                type="button"
-                onClick={() => onMoveStep(id, -1)}
-                aria-label="Move card earlier"
-                title="Move card earlier"
-                className="p-1 rounded text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onMoveStep(id, 1)}
-                aria-label="Move card later"
-                title="Move card later"
-                className="p-1 rounded text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
-              >
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* Drag Handle (hidden below md breakpoint so touch scrolling isn't hijacked) */}
-          <div
-            {...attributes}
-            {...listeners}
-            className="hidden md:flex cursor-grab active:cursor-grabbing text-zinc-300 hover:text-white p-1 rounded hover:bg-zinc-800 transition touch-none"
-            title="Drag card anywhere on 2D grid"
-          >
-            <GripVertical className="w-4 h-4" />
+            <span className="text-[10px] font-mono text-zinc-400">
+              {w}c &times; {h}r
+            </span>
           </div>
 
-          {/* Hide Card */}
-          {onHide && (
-            <button
-              type="button"
-              onClick={() => onHide(id)}
-              className="text-zinc-400 hover:text-red-400 p-1 rounded hover:bg-zinc-800 transition"
-              title="Hide this widget"
-            >
-              <EyeOff className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {onResize && activeCols >= 8 && (
+              <div className="hidden sm:flex items-center gap-0.5 bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 mr-0.5">
+                {COMPACT_WIDTH_OPTIONS.map((opt) => {
+                  const isSelected = w === opt.w && h === opt.h;
+                  return (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => onResize(id, opt.w, opt.h, true)}
+                      title={`Resize card to ${opt.w} cols × ${opt.h} row(s)`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition ${
+                        isSelected
+                          ? "bg-indigo-600 text-white"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {onMoveStep && (
+              <div className="flex items-center gap-0.5 bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => onMoveStep(id, -1)}
+                  aria-label="Move card earlier"
+                  title="Move card earlier"
+                  className="p-1 rounded text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMoveStep(id, 1)}
+                  aria-label="Move card later"
+                  title="Move card later"
+                  className="p-1 rounded text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {onHide && (
+              <button
+                type="button"
+                onClick={() => onHide(id)}
+                className="text-zinc-400 hover:text-red-400 p-1 rounded hover:bg-zinc-800 transition"
+                title="Hide this widget"
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Live Dimension Badge during resize/customize */}
-      {isCustomizing && (
-        <div className="absolute bottom-2 left-3 z-20 px-2 py-0.5 rounded-md bg-zinc-950/90 border border-zinc-800 text-[10px] font-mono text-zinc-400 pointer-events-none">
-          {w}c &times; {h}r {activePreset ? `(${activePreset})` : ""}
-        </div>
-      )}
-
-      {/* Card Body (stretches to fill 2D cell height cleanly) */}
-      <div className="h-full [&>*]:h-full">{children}</div>
+      {/* Card Body (stretches cleanly inside remaining cell height) */}
+      <div className={`flex-1 min-h-0 [&>*]:h-full ${isCustomizing ? "[&>*]:rounded-t-none" : ""}`}>
+        {children}
+      </div>
 
       {/* Live Corner Resize Handle (Bottom-Right) */}
       {isCustomizing && onResize && (

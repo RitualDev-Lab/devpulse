@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Palette, X, Check, ShieldCheck, Sparkles, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Palette, X, Check, ShieldCheck, Sparkles, Loader2, AlertCircle } from "lucide-react";
 import { PRESET_THEMES, normalizeThemeId, scopeCustomCss } from "@/lib/layout/css-scoper";
 
 interface CustomCssModalProps {
@@ -40,14 +41,17 @@ export function CustomCssModal({
   onSaveCustomCss,
   isDemo = false,
 }: CustomCssModalProps) {
+  const router = useRouter();
   const [cssCode, setCssCode] = useState(customCss);
   const [selectedTheme, setSelectedTheme] = useState(normalizeThemeId(currentTheme));
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setCssCode(customCss);
       setSelectedTheme(normalizeThemeId(currentTheme));
+      setErrorMsg(null);
     }
   }, [isOpen, customCss, currentTheme]);
 
@@ -55,6 +59,7 @@ export function CustomCssModal({
 
   const handleSelectTheme = (themeId: string) => {
     setSelectedTheme(themeId);
+    setErrorMsg(null);
     try {
       document.cookie = `dp_theme=${encodeURIComponent(themeId)}; path=/; max-age=31536000; SameSite=Lax`;
       document.documentElement.setAttribute("data-theme", themeId);
@@ -66,10 +71,12 @@ export function CustomCssModal({
 
   const handleCssChange = (val: string) => {
     setCssCode(val);
+    setErrorMsg(null);
     onSaveCustomCss(val); // Live scoped CSS preview immediately
   };
 
   const handleSave = async () => {
+    setErrorMsg(null);
     onApplyTheme(selectedTheme);
     onSaveCustomCss(cssCode);
 
@@ -86,7 +93,7 @@ export function CustomCssModal({
 
     setSaving(true);
     try {
-      await fetch("/api/v1/projects/styling", {
+      const res = await fetch("/api/v1/projects/styling", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -95,11 +102,17 @@ export function CustomCssModal({
           customCss: cssCode,
         }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorMsg(data.error || "Failed to save styling preferences.");
+        return;
+      }
+      router.refresh();
+      onClose();
     } catch {
-      // keep local state even if network glitches
+      setErrorMsg("Network error saving styling preferences.");
     } finally {
       setSaving(false);
-      onClose();
     }
   };
 
@@ -213,8 +226,15 @@ export function CustomCssModal({
           </div>
         </div>
 
+        {errorMsg && (
+          <div className="mt-4 p-3 rounded-xl bg-red-950/40 border border-red-500/30 text-red-200 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         {/* Footer */}
-        <div className="mt-5 pt-3 border-t border-zinc-800 flex justify-between items-center gap-2">
+        <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-between items-center gap-2">
           <button
             type="button"
             onClick={() => {

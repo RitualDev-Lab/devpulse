@@ -2,6 +2,7 @@
 
 import { PORTAL_DOMAIN } from "@/lib/config/app-url";
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Settings,
   Bell,
@@ -16,6 +17,8 @@ import {
   Check,
   ExternalLink,
   KeyRound,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
@@ -30,6 +33,7 @@ import { SsoScimModal } from "../SsoScimModal";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
+  const router = useRouter();
   const { initialData, projects, customDomain, storageTier, accessRole, isDemo } = workspace;
   const project = initialData.project;
 
@@ -37,6 +41,31 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
     "alerts" | "security" | "sso" | "domains" | "storage" | "styling" | "integrations" | null
   >(null);
   const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteProject = async () => {
+    if (isDemo) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/v1/projects?projectId=${encodeURIComponent(project.id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error || "Failed to remove workspace.");
+        return;
+      }
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setDeleteError("Network error while deleting workspace.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const iframeSnippet = `<iframe src="${PUBLIC_APP_URL}/embed/${project.slug}" width="100%" height="220" frameborder="0" style="border-radius:16px;"></iframe>`;
   const healthBadgeMd = `![DevPulse Health](${PUBLIC_APP_URL}/api/badge/health/${project.slug}.svg)`;
@@ -237,6 +266,53 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
             );
           })}
         </div>
+
+        {/* Danger Zone: Remove Project / Repository */}
+        {accessRole === "owner" && (
+          <div className="p-5 rounded-2xl bg-red-950/20 border border-red-500/30 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-bold text-red-200 flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-red-400" />
+                <span>Remove Workspace / Repository ({project.name})</span>
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Permanently deletes this workspace ({project.githubRepo || project.slug}), its widgets, API keys, and telemetry history.
+              </p>
+              {deleteError && <p className="text-xs text-red-300 mt-1.5">{deleteError}</p>}
+            </div>
+
+            {!confirmDelete ? (
+              <button
+                type="button"
+                disabled={isDemo}
+                onClick={() => setConfirmDelete(true)}
+                className="px-4 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/35 border border-red-500/40 text-red-200 text-xs font-semibold disabled:opacity-50 transition"
+              >
+                Remove Repo / Project
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting || isDemo}
+                  onClick={handleDeleteProject}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  <span>{deleting ? "Removing..." : "Confirm Delete"}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <AlertSettingsModal

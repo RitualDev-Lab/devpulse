@@ -217,45 +217,59 @@ export function adaptLayoutForColumns(
 }
 
 /**
+ * Packs visible widgets left-to-right and top-to-bottom into the earliest non-overlapping
+ * 2D slot so removing or hiding a card never leaves empty horizontal/vertical holes.
+ */
+export function packDenseLayout(items: GridWidgetItem[], cols = 12): GridWidgetItem[] {
+  const visible = items
+    .filter((it) => it.isVisible)
+    .map((it) => {
+      const clampedW = Math.min(Math.max(1, it.w), cols);
+      return {
+        ...it,
+        w: clampedW,
+        h: Math.max(1, it.h),
+        x: Math.min(Math.max(0, it.x), cols - clampedW),
+        y: Math.max(0, it.y),
+      };
+    })
+    .sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x));
+
+  const placed: GridWidgetItem[] = [];
+
+  for (const item of visible) {
+    let found = false;
+    for (let cy = 0; !found; cy++) {
+      for (let cx = 0; cx <= cols - item.w; cx++) {
+        const candidate = { ...item, x: cx, y: cy };
+        if (!placed.some((p) => rectsCollide(candidate, p))) {
+          placed.push(candidate);
+          found = true;
+          break;
+        }
+      }
+    }
+  }
+
+  const hidden = items.filter((it) => !it.isVisible);
+  return [...placed, ...hidden];
+}
+
+/**
  * Generates clean initial 12-column coordinates when a project has no saved layout yet.
  */
 export function buildDefaultLayout(
   widgetDefs: Array<{ id: string; title: string; defaultW?: number; defaultH?: number }>
 ): GridWidgetItem[] {
-  let cursorX = 0;
-  let cursorY = 0;
-  let rowMaxH = 1;
-  const result: GridWidgetItem[] = [];
+  const raw: GridWidgetItem[] = widgetDefs.map((def, idx) => ({
+    id: def.id,
+    title: def.title,
+    x: 0,
+    y: idx,
+    w: Math.min(12, Math.max(3, def.defaultW ?? 4)),
+    h: Math.max(1, def.defaultH ?? 1),
+    isVisible: true,
+  }));
 
-  for (const def of widgetDefs) {
-    const w = Math.min(12, Math.max(3, def.defaultW ?? 4));
-    const h = Math.max(1, def.defaultH ?? 1);
-
-    if (cursorX + w > 12) {
-      cursorX = 0;
-      cursorY += rowMaxH;
-      rowMaxH = h;
-    } else {
-      rowMaxH = Math.max(rowMaxH, h);
-    }
-
-    result.push({
-      id: def.id,
-      title: def.title,
-      x: cursorX,
-      y: cursorY,
-      w,
-      h,
-      isVisible: true,
-    });
-
-    cursorX += w;
-    if (cursorX >= 12) {
-      cursorX = 0;
-      cursorY += rowMaxH;
-      rowMaxH = 1;
-    }
-  }
-
-  return compactLayout(result, 12);
+  return packDenseLayout(raw, 12);
 }

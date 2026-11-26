@@ -14,6 +14,7 @@ import {
   Cpu,
   Eye,
   EyeOff,
+  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { displaySnippetKey } from "@/lib/security/mask-key";
@@ -46,6 +47,8 @@ export function ProjectWorkspaceSwitcher({
   const [isOpen, setIsOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const [revealKey, setRevealKey] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on click outside
@@ -65,6 +68,32 @@ export function ProjectWorkspaceSwitcher({
       navigator.clipboard.writeText(currentProject.telemetryApiKey);
       setCopiedKey(true);
       setTimeout(() => setCopiedKey(false), 2000);
+    }
+  };
+
+  const handleDeleteProject = async (e: React.MouseEvent, projectId: string, slug: string) => {
+    e.stopPropagation();
+    if (confirmDeleteId !== projectId) {
+      setConfirmDeleteId(projectId);
+      return;
+    }
+    setDeletingId(projectId);
+    try {
+      const res = await fetch(`/api/v1/projects?projectId=${encodeURIComponent(projectId)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setIsOpen(false);
+        setConfirmDeleteId(null);
+        if (slug === currentProject.slug || projectId === currentProject.id) {
+          window.location.href = "/dashboard";
+        } else {
+          router.refresh();
+          window.location.reload();
+        }
+      }
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -161,17 +190,23 @@ export function ProjectWorkspaceSwitcher({
             </span>
             {projects.map((p) => {
               const isActive = p.id === currentProject.id || p.slug === currentProject.slug;
+              const isConfirming = confirmDeleteId === p.id;
               return (
-                <button
+                <div
                   key={p.id}
                   onClick={() => handleSelectProject(p.slug)}
-                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition ${
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") handleSelectProject(p.slug);
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition cursor-pointer ${
                     isActive
                       ? "bg-indigo-600/15 border border-indigo-500/30 text-white"
                       : "hover:bg-zinc-800/70 text-zinc-300 hover:text-white border border-transparent"
                   }`}
                 >
-                  <div className="min-w-0 pr-2">
+                  <div className="min-w-0 pr-2 flex-1">
                     <div className="font-medium truncate text-white">{p.name}</div>
                     <div className="text-[10px] text-zinc-400 truncate font-mono">
                       {p.githubRepo || p.slug}
@@ -200,8 +235,31 @@ export function ProjectWorkspaceSwitcher({
                       )}
                     </div>
                   </div>
-                  {isActive && <Check className="w-4 h-4 text-indigo-400 shrink-0" />}
-                </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isActive && <Check className="w-4 h-4 text-indigo-400" />}
+                    {p.id !== "prj_ritual_core" && (
+                      <button
+                        type="button"
+                        disabled={deletingId === p.id}
+                        onClick={(e) => handleDeleteProject(e, p.id, p.slug)}
+                        title={isConfirming ? "Click again to confirm deletion" : "Remove workspace / repo"}
+                        className={`p-1 rounded-lg transition ${
+                          isConfirming
+                            ? "bg-red-600 text-white text-[10px] px-1.5 font-semibold"
+                            : "text-zinc-500 hover:text-red-400 hover:bg-zinc-900"
+                        }`}
+                      >
+                        {deletingId === p.id ? (
+                          <span className="text-[10px]">...</span>
+                        ) : isConfirming ? (
+                          "Delete?"
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>

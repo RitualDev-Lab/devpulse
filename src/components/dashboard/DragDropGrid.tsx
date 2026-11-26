@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   PointerSensor,
@@ -34,7 +35,7 @@ import {
   buildDefaultLayout,
   resolveCollisionAndReflow,
   adaptLayoutForColumns,
-  compactLayout,
+  packDenseLayout,
   type GridWidgetItem,
 } from "@/lib/layout/grid-engine";
 import type { GitHubRepoStats } from "@/lib/integrations/github";
@@ -117,9 +118,10 @@ export function DragDropGrid({
   isDemo = false,
   isPublicPortal = false,
 }: DragDropGridProps) {
+  const router = useRouter();
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
   const [activeCols, setActiveCols] = useState<12 | 8 | 4>(12);
-  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropPreview, setDropPreview] = useState<{
     x: number;
@@ -172,6 +174,15 @@ export function DragDropGrid({
     [data, isPublicPortal]
   );
 
+  const layoutSourceSignature = useMemo(() => {
+    const dbPart = (data.initialLayout || [])
+      .map((r) => `${r.id}:${r.x},${r.y},${r.w},${r.h},${r.isVisible ? 1 : 0}`)
+      .sort()
+      .join("|");
+    const availPart = availableDefs.map((d) => d.id).join(",");
+    return `${data.project.id}::${dbPart}::${availPart}`;
+  }, [data.project.id, data.initialLayout, availableDefs]);
+
   // Build canonical 12-col layout merging saved DB layout with available ecosystem widgets
   const computeInitialLayout = useCallback((): GridWidgetItem[] => {
     const dbRows = data.initialLayout || [];
@@ -207,15 +218,19 @@ export function DragDropGrid({
           });
         }
       }
-      return compactLayout(merged, 12);
+      return packDenseLayout(merged, 12);
     }
     return buildDefaultLayout(availableDefs);
   }, [availableDefs, data.initialLayout]);
 
   const [desktopLayout, setDesktopLayout] = useState<GridWidgetItem[]>(computeInitialLayout);
+  const lastAppliedSigRef = useRef<string>(layoutSourceSignature);
 
-  // Sync local layout if project changes or localStorage fallback exists (when no DB layout)
-  const loadLocalLayout = useCallback(() => {
+  // Sync local layout ONLY when project or server-persisted widget list actually changes
+  useEffect(() => {
+    if (lastAppliedSigRef.current === layoutSourceSignature) return;
+    lastAppliedSigRef.current = layoutSourceSignature;
+
     const initial = computeInitialLayout();
     if (!data.initialLayout || data.initialLayout.length === 0) {
       try {
@@ -226,7 +241,8 @@ export function DragDropGrid({
             const validIds = new Set(availableDefs.map((d) => d.id));
             const filtered = parsed.filter((item) => validIds.has(item.id));
             if (filtered.length > 0) {
-              return compactLayout(filtered, 12);
+              setDesktopLayout(packDenseLayout(filtered, 12));
+              return;
             }
           }
         }
@@ -234,13 +250,8 @@ export function DragDropGrid({
         // fallback to default
       }
     }
-    return initial;
-  }, [availableDefs, computeInitialLayout, data.initialLayout, data.project.id]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDesktopLayout(loadLocalLayout()), 0);
-    return () => window.clearTimeout(timer);
-  }, [loadLocalLayout]);
+    setDesktopLayout(initial);
+  }, [layoutSourceSignature, computeInitialLayout, data.initialLayout, data.project.id, availableDefs]);
 
   // Responsive breakpoint listener: 12 Desktop, 8 Tablet, 4 Mobile
   useEffect(() => {
@@ -276,12 +287,13 @@ export function DragDropGrid({
       });
       if (res.ok) {
         setSyncStatus("saved");
+        router.refresh();
         setTimeout(() => setSyncStatus("idle"), 2000);
       } else {
-        setSyncStatus("idle");
+        setSyncStatus("error");
       }
     } catch {
-      setSyncStatus("idle");
+      setSyncStatus("error");
     }
   };
 
@@ -370,7 +382,7 @@ export function DragDropGrid({
       if (item.id === target.id) return { ...item, x: current.x, y: current.y };
       return item;
     });
-    const packed = compactLayout(swapped, 12);
+    const packed = packDenseLayout(swapped, 12);
     setDesktopLayout(packed);
     persistLayout(packed);
     setA11yAnnouncement(`Moved ${current.title} ${direction < 0 ? "earlier" : "later"} in workspace grid.`);
@@ -392,7 +404,7 @@ export function DragDropGrid({
   };
 
   const hideWidget = (id: string) => {
-    const updated = compactLayout(
+    const updated = packDenseLayout(
       desktopLayout.map((w) => (w.id === id ? { ...w, isVisible: false } : w)),
       12
     );
@@ -402,12 +414,10 @@ export function DragDropGrid({
 
   const restoreWidget = (id: string) => {
     const def = availableDefs.find((d) => d.id === id);
-    const updated = resolveCollisionAndReflow(
+    const updated = packDenseLayout(
       desktopLayout.map((w) =>
         w.id === id ? { ...w, isVisible: true, w: w.w || def?.defaultW || 4, h: w.h || 1 } : w
       ),
-      id,
-      { y: 99 },
       12
     );
     setDesktopLayout(updated);
@@ -537,7 +547,7 @@ export function DragDropGrid({
             <button
               type="button"
               onClick={() => {
-                const packed = compactLayout(desktopLayout, 12);
+                const packed = packDenseLayout(desktopLayout, 12);
                 setDesktopLayout(packed);
                 persistLayout(packed);
               }}
@@ -548,11 +558,13 @@ export function DragDropGrid({
             </button>
             {!isDemo && (
               <span className="flex items-center gap-1 text-[11px] text-zinc-400">
-                <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                <Cloud className={`w-3.5 h-3.5 ${syncStatus === "error" ? "text-red-400" : "text-emerald-400"}`} />
                 {syncStatus === "saving"
                   ? "Syncing layout to Turso..."
                   : syncStatus === "saved"
                   ? "Layout synced across devices"
+                  : syncStatus === "error"
+                  ? "Layout sync failed — check permissions"
                   : "Auto-syncs to Turso DB"}
               </span>
             )}
