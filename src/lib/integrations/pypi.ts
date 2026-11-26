@@ -61,6 +61,10 @@ export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | n
       }).catch(() => null),
     ]);
 
+    if ((!metaRes || !metaRes.ok) && (!recentRes || !recentRes.ok) && (!overallRes || !overallRes.ok)) {
+      return null;
+    }
+
     let downloadsLastDay = 0;
     let downloadsLastWeek = 0;
     let downloadsLastMonth = 0;

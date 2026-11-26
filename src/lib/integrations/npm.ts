@@ -118,18 +118,30 @@ export async function fetchNpmStats(
     // 3. Fetch package metadata (latest version, license, release cadence, dependencies)
     let latestVersion = "";
     let description = "";
-    let license = "MIT";
+    let license = "";
     let totalReleases = 0;
     let latestReleaseDate = "";
     let daysSinceLastRelease = 0;
     let dependenciesCount = 0;
+
+    const hasDownloadData = Boolean(
+      (rangeRes && rangeRes.ok) || (weekRes && weekRes.ok) || (dayRes && dayRes.ok)
+    );
+    if ((!metaRes || !metaRes.ok) && !hasDownloadData) {
+      return null;
+    }
 
     if (metaRes && metaRes.ok) {
       try {
         const meta = await metaRes.json();
         latestVersion = meta["dist-tags"]?.latest || "";
         description = meta.description || "";
-        license = meta.license || (typeof meta.license === "object" ? meta.license.type : "MIT");
+        license =
+          typeof meta.license === "string"
+            ? meta.license
+            : typeof meta.license === "object" && meta.license?.type
+              ? String(meta.license.type)
+              : "";
 
         // Release cadence calculation
         const times = Object.entries(meta.time || {}).filter(

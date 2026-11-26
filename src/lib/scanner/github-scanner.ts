@@ -1,13 +1,39 @@
+import { escapeGoModulePath } from "@/lib/integrations/go";
+
 /**
  * 1-Click "Import from GitHub" Scanner
- * Auto-inspects repository root files to discover and link:
- * - npm packages (package.json)
+ * Auto-inspects repository root files and verifies package registries before linking:
+ * - npm packages (package.json, skipping private: true and unpublished packages)
  * - PyPI packages (pyproject.toml, setup.py)
- * - Rust crates (Cargo.toml)
+ * - Rust crates (Cargo.toml, skipping publish = false and unpublished crates)
  * - Go modules (go.mod)
  * - MCP servers (mcp.json)
  * - VS Code extensions (package.json engines.vscode)
+ * - Docker containers (verified against Docker Hub)
  */
+
+async function registryResourceExists(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "DevPulse-Scanner/1.0",
+      },
+      signal: AbortSignal.timeout(2500),
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function encodeNpmPackagePath(packageName: string): string {
+  const clean = packageName.trim();
+  return clean.startsWith("@")
+    ? `@${encodeURIComponent(clean.slice(1)).replace(/%2F/i, "/")}`
+    : encodeURIComponent(clean);
+}
 
 export interface ScannedRepoResult {
   githubRepo: string;
@@ -118,20 +144,32 @@ export async function scanGitHubRepository(
     }
   }
 
-  // 3. Inspect package.json (npm + VS Code)
+  // 3. Inspect package.json (npm + VS Code), skipping private apps & unpublished packages
   if (fileMap.has("package.json")) {
     const exactName = fileMap.get("package.json")!;
     const rawJson = await fetchFileText(exactName);
     if (rawJson) {
       try {
         const pkg = JSON.parse(rawJson);
-        if (pkg.name) {
-          detected.npmPackage = pkg.name;
-          summary.push(`Detected npm package: "${pkg.name}"`);
-        }
-        if (pkg.engines && pkg.engines.vscode && pkg.publisher && pkg.name) {
-          detected.vscodeExtension = `${pkg.publisher}.${pkg.name}`;
+        const pkgName = typeof pkg.name === "string" ? pkg.name.trim() : "";
+        if (pkg.engines && pkg.engines.vscode && pkg.publisher && pkgName && pkg.private !== true) {
+          detected.vscodeExtension = `${pkg.publisher}.${pkgName}`;
           summary.push(`Detected VS Code extension: "${detected.vscodeExtension}"`);
+        }
+        if (pkgName) {
+          if (pkg.private === true) {
+            summary.push(`Skipped private package.json ("${pkgName}")`);
+          } else {
+            const existsOnNpm = await registryResourceExists(
+              `https://registry.npmjs.org/${encodeNpmPackagePath(pkgName)}`
+            );
+            if (existsOnNpm) {
+              detected.npmPackage = pkgName;
+              summary.push(`Detected npm package: "${pkgName}"`);
+            } else {
+              summary.push(`Skipped unpublished package.json ("${pkgName}" not found on npm)`);
+            }
+          }
         }
       } catch {
         // invalid JSON, ignore
@@ -140,30 +178,37 @@ export async function scanGitHubRepository(
   }
 
   // 4. Inspect pyproject.toml or setup.py (PyPI)
+  let candidatePypi: string | null = null;
+  let pypiPrivate = false;
   if (fileMap.has("pyproject.toml")) {
     const rawPyproject = await fetchFileText(fileMap.get("pyproject.toml")!);
     if (rawPyproject) {
-      // Look for name = "..." under [project] or [tool.poetry]
+      if (/Private\s*::\s*Do Not Upload/i.test(rawPyproject)) pypiPrivate = true;
       const nameMatch = rawPyproject.match(/^\s*name\s*=\s*["']([^"']+)["']/m);
-      if (nameMatch && nameMatch[1]) {
-        detected.pypiPackage = nameMatch[1].trim();
-        summary.push(`Detected PyPI package: "${detected.pypiPackage}" (from pyproject.toml)`);
-      }
+      if (nameMatch && nameMatch[1]) candidatePypi = nameMatch[1].trim();
     }
   } else if (fileMap.has("setup.py")) {
     const rawSetup = await fetchFileText(fileMap.get("setup.py")!);
     if (rawSetup) {
+      if (/Private\s*::\s*Do Not Upload/i.test(rawSetup)) pypiPrivate = true;
       const nameMatch = rawSetup.match(/name\s*=\s*["']([^"']+)["']/);
-      if (nameMatch && nameMatch[1]) {
-        detected.pypiPackage = nameMatch[1].trim();
-        summary.push(`Detected PyPI package: "${detected.pypiPackage}" (from setup.py)`);
-      }
+      if (nameMatch && nameMatch[1]) candidatePypi = nameMatch[1].trim();
+    }
+  }
+  if (candidatePypi && !pypiPrivate) {
+    const existsOnPyPi = await registryResourceExists(
+      `https://pypi.org/pypi/${encodeURIComponent(candidatePypi.toLowerCase())}/json`
+    );
+    if (existsOnPyPi) {
+      detected.pypiPackage = candidatePypi;
+      summary.push(`Detected PyPI package: "${candidatePypi}"`);
     }
   }
 
   // 5. Inspect Cargo.toml (Rust crates.io)
   if (fileMap.has("cargo.toml")) {
     const rawCargo = await fetchFileText(fileMap.get("cargo.toml")!);
+    const publishDisabled = rawCargo ? /^\s*publish\s*=\s*false\b/m.test(rawCargo) : false;
     let crateName = repo;
     if (rawCargo) {
       const nameMatch = rawCargo.match(/^\s*name\s*=\s*["']([^"']+)["']/m);
@@ -171,8 +216,15 @@ export async function scanGitHubRepository(
         crateName = nameMatch[1].trim();
       }
     }
-    detected.rustCrate = crateName;
-    summary.push(`Detected Rust crate: "${crateName}" (from Cargo.toml)`);
+    if (!publishDisabled && crateName) {
+      const existsOnCrates = await registryResourceExists(
+        `https://crates.io/api/v1/crates/${encodeURIComponent(crateName.toLowerCase())}`
+      );
+      if (existsOnCrates) {
+        detected.rustCrate = crateName;
+        summary.push(`Detected Rust crate: "${crateName}" (from Cargo.toml)`);
+      }
+    }
   }
 
   // 6. Inspect go.mod (Go Module)
@@ -185,8 +237,13 @@ export async function scanGitHubRepository(
         modName = modMatch[1].trim();
       }
     }
-    detected.goModule = modName;
-    summary.push(`Detected Go module: "${modName}" (from go.mod)`);
+    const existsOnGoProxy = modName.includes(".")
+      ? await registryResourceExists(`https://proxy.golang.org/${escapeGoModulePath(modName)}/@latest`)
+      : false;
+    if (existsOnGoProxy) {
+      detected.goModule = modName;
+      summary.push(`Detected Go module: "${modName}" (from go.mod)`);
+    }
   }
 
   // 7. Inspect mcp.json (Model Context Protocol Server)
@@ -208,8 +265,13 @@ export async function scanGitHubRepository(
   // 8. Inspect Dockerfile or docker-compose.yml (Docker Hub Container)
   if (fileMap.has("dockerfile") || fileMap.has("docker-compose.yml") || fileMap.has("docker-compose.yaml")) {
     const defaultDockerImage = `${owner.toLowerCase()}/${repo.toLowerCase()}`;
-    detected.dockerImage = defaultDockerImage;
-    summary.push(`Detected Docker container: "${defaultDockerImage}" (from Dockerfile)`);
+    const existsOnDockerHub = await registryResourceExists(
+      `https://hub.docker.com/v2/repositories/${defaultDockerImage}`
+    );
+    if (existsOnDockerHub) {
+      detected.dockerImage = defaultDockerImage;
+      summary.push(`Detected Docker container: "${defaultDockerImage}" (from Dockerfile)`);
+    }
   }
 
   if (summary.length === 0) {
