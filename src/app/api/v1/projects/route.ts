@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
-import { dashboardWidgets, projects, uptimeMonitors } from "@/db/schema";
+import { dashboardWidgets, projectConnectors, projects, uptimeMonitors } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { normalizeRegistryProvider, REGISTRY_ADAPTERS } from "@/lib/integrations/registry-adapter";
 import crypto from "crypto";
 import { getEffectiveEntitlements } from "@/lib/billing/plans";
 import { listAccessibleProjects } from "@/lib/security/rbac";
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
       mcpServerName,
       stackPreset: rawPreset,
       websiteUrl,
+      initialConnectors,
     } = body;
 
     if (!name || typeof name !== "string" || !name.trim()) {
@@ -218,6 +220,34 @@ export async function POST(request: Request) {
           intervalMinutes: 5,
           isActive: true,
         }).catch(() => {});
+      }
+    }
+
+    // Optional Tier-1 / Tier-2 package connectors attached during No-Git workspace setup
+    if (Array.isArray(initialConnectors) && initialConnectors.length > 0) {
+      const nowIso = new Date().toISOString();
+      const validConns = initialConnectors
+        .slice(0, 12)
+        .map((c: any) => {
+          const prov = normalizeRegistryProvider(String(c?.provider || ""));
+          const identifier = typeof c?.identifier === "string" ? c.identifier.trim().slice(0, 200) : "";
+          if (!prov || !identifier) return null;
+          const meta = REGISTRY_ADAPTERS[prov];
+          return {
+            id: `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+            projectId,
+            category: "package" as const,
+            provider: prov,
+            label: `${meta.label}: ${identifier}`,
+            targetUrl: meta.buildUrl(identifier),
+            identifier,
+            lastSyncedAt: nowIso,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => Boolean(x));
+
+      if (validConns.length > 0) {
+        await db.insert(projectConnectors).values(validConns).catch(() => {});
       }
     }
 

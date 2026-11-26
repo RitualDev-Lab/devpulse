@@ -103,6 +103,7 @@ export function LanguageSdkTabs({
   const [metricName, setMetricName] = useState("active_jobs");
   const [metricValue, setMetricValue] = useState("42");
   const [sending, setSending] = useState(false);
+  const [testingCrashPing, setTestingCrashPing] = useState(false);
   const [sentNotice, setSentNotice] = useState<string | null>(null);
 
   const tabMeta = LANG_TABS.find((t) => t.id === activeTab) || LANG_TABS[0];
@@ -142,6 +143,36 @@ export function LanguageSdkTabs({
       }
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleTestSdkPing = async () => {
+    setTestingCrashPing(true);
+    setSentNotice(null);
+    try {
+      if (isDemo || !apiKey) {
+        setSentNotice(`Demo ping simulated for ${tabMeta.label} runtime! Sign in to send live telemetry.`);
+        return;
+      }
+      const res = await fetch("/api/v1/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          apiKey,
+          errorName: "SdkVerificationPing",
+          message: `Test telemetry event verified from ${tabMeta.label} SDK tab`,
+          runtime: activeTab,
+          version: "verification-ping",
+          breadcrumbs: [{ category: "custom", level: "info", message: `Verified ${tabMeta.label}` }],
+        }),
+      });
+      if (res.ok) {
+        setSentNotice(`Verified ${tabMeta.label} SDK ingestion via POST /api/v1/event!`);
+      } else {
+        setSentNotice(`Ping returned HTTP ${res.status} — check workspace telemetry key.`);
+      }
+    } finally {
+      setTestingCrashPing(false);
     }
   };
 
@@ -237,6 +268,15 @@ export function LanguageSdkTabs({
           >
             {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
             <span>Send Metric</span>
+          </button>
+          <button
+            type="button"
+            disabled={testingCrashPing}
+            onClick={handleTestSdkPing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-200 text-xs font-semibold disabled:opacity-50"
+          >
+            {testingCrashPing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+            <span>Test {tabMeta.label} Ping</span>
           </button>
         </div>
       </div>

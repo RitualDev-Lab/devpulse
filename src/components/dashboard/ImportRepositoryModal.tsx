@@ -76,6 +76,7 @@ export function ImportRepositoryModal({
   const [vscodeExtension, setVsCodeExtension] = useState("");
   const [mcpServerName, setMcpServerName] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [extraConnectors, setExtraConnectors] = useState<Array<{ provider: string; identifier: string; url: string }>>([]);
 
   const [isScanning, setIsScanning] = useState(false);
   const [scanStep, setScanStep] = useState<string>("");
@@ -179,6 +180,7 @@ export function ImportRepositoryModal({
           vscodeExtension: vscodeExtension.trim() || null,
           mcpServerName: mcpServerName.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
+          initialConnectors: extraConnectors,
         }),
       });
       const data = await res.json();
@@ -198,6 +200,7 @@ export function ImportRepositoryModal({
           ...(dockerImage.trim() ? [`Docker: ${dockerImage.trim()}`] : []),
           ...(vscodeExtension.trim() ? [`VS Code: ${vscodeExtension.trim()}`] : []),
           ...(mcpServerName.trim() ? [`MCP: ${mcpServerName.trim()}`] : []),
+          ...extraConnectors.map((c) => `${c.provider}: ${c.identifier}`),
           ...(websiteUrl.trim() ? [`Health Probe: ${websiteUrl.trim()}`] : []),
         ],
       });
@@ -499,16 +502,15 @@ export function ImportRepositoryModal({
                 <span>Create Standalone App / Package / OCI Server Workspace</span>
               </div>
               <p className="text-[11px] text-zinc-400">
-                No GitHub repo required. Search and attach any PyPI, npm, Crates.io, Docker, VS Code, MCP, or Go package below, or enter names manually.
+                No GitHub repo required. Search and attach any PyPI, npm, Crates.io, NuGet, Packagist, RubyGems, pub.dev, Maven, CRAN, Homebrew, Docker, VS Code, MCP, or Go package below.
               </p>
 
               <div className="p-3 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-2">
                 <span className="text-[11px] font-semibold text-zinc-300 block">
-                  Search &amp; Select Package / Extension / Container
+                  Search &amp; Select Package / Extension / Container (All 23+ Registries)
                 </span>
                 <PackageSearchPicker
                   compact
-                  onlyPrimaryFields
                   actionLabel="Select"
                   selectedValues={{
                     pypiPackage,
@@ -527,11 +529,43 @@ export function ImportRepositoryModal({
                     else if (item.field === "vscodeExtension") setVsCodeExtension(item.name);
                     else if (item.field === "mcpServerName") setMcpServerName(item.name);
                     else if (item.field === "goModule") setGoModule(item.name);
+                    else {
+                      setExtraConnectors((prev) =>
+                        prev.some((x) => x.provider === item.ecosystem && x.identifier.toLowerCase() === item.name.toLowerCase())
+                          ? prev
+                          : [...prev, { provider: item.ecosystem, identifier: item.name, url: item.url }]
+                      );
+                    }
                     if (!standaloneName.trim()) {
                       setStandaloneName(item.name.split("/").pop() || item.name);
                     }
                   }}
                 />
+                {extraConnectors.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {extraConnectors.map((c) => (
+                      <span
+                        key={`${c.provider}:${c.identifier}`}
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-mono text-emerald-200"
+                      >
+                        <span className="uppercase text-[9px] text-emerald-400">{c.provider}</span>
+                        <span>{c.identifier}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExtraConnectors((prev) =>
+                              prev.filter((x) => !(x.provider === c.provider && x.identifier === c.identifier))
+                            )
+                          }
+                          className="text-emerald-300 hover:text-white"
+                          aria-label={`Remove ${c.identifier}`}
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2.5">
