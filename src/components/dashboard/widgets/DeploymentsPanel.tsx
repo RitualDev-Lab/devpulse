@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Loader2,
 } from "lucide-react";
+import { maskApiKey } from "@/lib/security/mask-key";
 
 interface DeploymentRow {
   id: string;
@@ -71,7 +72,7 @@ export function DeploymentsPanel({
 
   const webhookEndpoint = `${typeof window !== "undefined" ? window.location.origin : ""}/api/v1/webhooks/deploy`;
   // The key travels in a header, not the URL, so the copied snippet sends it that way.
-  const webhookCurl = `curl -X POST "${webhookEndpoint}" -H "Authorization: Bearer ${telemetryApiKey || "YOUR_API_KEY"}"`;
+  const webhookCurl = `curl -X POST "${webhookEndpoint}" -H "Authorization: Bearer ${maskApiKey(telemetryApiKey, "YOUR_API_KEY")}"`;
 
   const handleRecordDeploy = async (e: React.FormEvent) => {
     e.preventDefault();

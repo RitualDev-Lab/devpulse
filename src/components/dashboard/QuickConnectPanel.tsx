@@ -18,6 +18,7 @@ import { GitHubPatModal } from "./GitHubPatModal";
 import { parseMultipleConnectorInputs } from "@/lib/integrations/url-parser";
 import { STACK_PRESETS, type StackPresetId } from "@/lib/dashboard/presets";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { maskApiKey } from "@/lib/security/mask-key";
 
 interface QuickConnectPanelProps {
   projectId: string;
@@ -61,7 +62,7 @@ export function QuickConnectPanel({
   const detected = useMemo(() => parseMultipleConnectorInputs(linksText), [linksText]);
   const detectedGithubItem = useMemo(() => detected.find((d) => d.kind === "github"), [detected]);
   const presetDef = STACK_PRESETS[preset] || STACK_PRESETS.saas;
-  const snippetText = presetDef.buildSnippet(telemetryApiKey || "dp_live_your_key", projectSlug);
+  const snippetText = presetDef.buildSnippet(maskApiKey(telemetryApiKey, "dp_live_your_key"), projectSlug);
 
   const handleAutoDiscoverGitHub = async () => {
     if (!detectedGithubItem || isDemo) return;

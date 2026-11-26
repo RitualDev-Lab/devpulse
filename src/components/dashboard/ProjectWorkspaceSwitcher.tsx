@@ -12,8 +12,11 @@ import {
   Package,
   Globe,
   Cpu,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { displaySnippetKey } from "@/lib/security/mask-key";
 
 export interface ProjectSummary {
   id: string;
@@ -42,6 +45,7 @@ export function ProjectWorkspaceSwitcher({
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [revealKey, setRevealKey] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on click outside
@@ -114,13 +118,28 @@ export function ProjectWorkspaceSwitcher({
               >
                 <div className="flex items-center gap-1.5 truncate">
                   <Key className="w-3 h-3 text-indigo-400 shrink-0" />
-                  <span className="truncate">{currentProject.telemetryApiKey}</span>
+                  <span className="truncate">
+                    {displaySnippetKey(currentProject.telemetryApiKey, revealKey)}
+                  </span>
                 </div>
-                {copiedKey ? (
-                  <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-white shrink-0" />
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRevealKey((v) => !v);
+                    }}
+                    className="p-0.5 text-zinc-500 hover:text-white"
+                    title={revealKey ? "Hide API key" : "Reveal API key"}
+                  >
+                    {revealKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                  {copiedKey ? (
+                    <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5 text-zinc-500 hover:text-white" />
+                  )}
+                </div>
               </div>
             </div>
           ) : (

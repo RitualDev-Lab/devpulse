@@ -32,6 +32,8 @@ import {
 import { ImportRepositoryModal } from "./ImportRepositoryModal";
 import { QuickConnectPanel } from "./QuickConnectPanel";
 import { CommandPalette } from "./CommandPalette";
+import { BillingModal } from "./BillingModal";
+import { PackageSearchPicker } from "./PackageSearchPicker";
 
 interface WorkspaceShellProps {
   currentProject: ProjectSummary & {
@@ -88,6 +90,8 @@ export function WorkspaceShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isQuickConnectOpen, setIsQuickConnectOpen] = useState(false);
+  const [isPackageAdderOpen, setIsPackageAdderOpen] = useState(false);
+  const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
 
   useEffect(() => {
@@ -174,12 +178,21 @@ export function WorkspaceShell({
             </div>
             <span className="font-extrabold text-white text-base tracking-tight">DevPulse</span>
           </Link>
-          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
-            {storageTier}
-          </span>
+          <button
+            type="button"
+            onClick={() => setIsBillingOpen(true)}
+            className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border transition ${
+              storageTier === "free"
+                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
+                : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white"
+            }`}
+            title="View plans & upgrade"
+          >
+            {storageTier === "free" ? "FREE · Upgrade" : storageTier}
+          </button>
         </div>
 
-        <div className="p-3 border-b border-zinc-800/60">
+        <div className="p-3 border-b border-zinc-800/60 space-y-2">
           <button
             type="button"
             onClick={() => setIsQuickConnectOpen(true)}
@@ -187,6 +200,14 @@ export function WorkspaceShell({
           >
             <Wand2 className="w-3.5 h-3.5" />
             <span>Quick Connect Link</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsPackageAdderOpen(true)}
+            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-semibold transition"
+          >
+            <Package className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Add Package / Extension</span>
           </button>
         </div>
 
@@ -241,7 +262,7 @@ export function WorkspaceShell({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-3 border-b border-zinc-800">
+            <div className="p-3 border-b border-zinc-800 space-y-2">
               <button
                 type="button"
                 onClick={() => {
@@ -252,6 +273,17 @@ export function WorkspaceShell({
               >
                 <Wand2 className="w-3.5 h-3.5" />
                 <span>Quick Connect Link</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  setIsPackageAdderOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-semibold"
+              >
+                <Package className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Add Package / Extension</span>
               </button>
             </div>
             <div className="flex-1 overflow-y-auto py-3">
@@ -304,11 +336,25 @@ export function WorkspaceShell({
             {effectiveRightActions}
             <button
               type="button"
-              onClick={() => setIsQuickConnectOpen(true)}
-              className="hidden sm:flex lg:hidden items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold"
+              onClick={() => setIsPackageAdderOpen(true)}
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-semibold transition"
+              title="Search & add npm, PyPI, Crates, Docker, VS Code, MCP, or Go packages"
             >
-              <Wand2 className="w-3.5 h-3.5" />
-              <span>Quick Connect</span>
+              <Package className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Add Package</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsBillingOpen(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                storageTier === "free"
+                  ? "bg-emerald-600/20 hover:bg-emerald-600/30 border-emerald-500/40 text-emerald-300"
+                  : "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-200"
+              }`}
+              title="Manage DevPulse subscription plans, quotas, and upgrades"
+            >
+              <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{storageTier === "free" ? "Upgrade" : `${storageTier.toUpperCase()} Plan`}</span>
             </button>
             <AuthButton />
           </div>
@@ -325,6 +371,78 @@ export function WorkspaceShell({
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
       />
+
+      <BillingModal
+        isOpen={isBillingOpen}
+        onClose={() => setIsBillingOpen(false)}
+        storageTier={storageTier}
+        isDemo={isDemo}
+      />
+
+      {isPackageAdderOpen && (
+        <div
+          onClick={() => setIsPackageAdderOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">
+                    Add Package, Extension, Container or MCP Server
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Search public registries and attach in 1 click to {currentProject.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPackageAdderOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <PackageSearchPicker
+              selectedValues={{
+                npmPackage: currentProject.npmPackage,
+                pypiPackage: currentProject.pypiPackage,
+                rustCrate: currentProject.rustCrate,
+                goModule: currentProject.goModule,
+                dockerImage: currentProject.dockerImage,
+              }}
+              onSelectItem={async (item) => {
+                if (isDemo) return;
+                const res = await fetch("/api/v1/projects/connectors", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    action: "quick_connect",
+                    projectId: currentProject.id,
+                    linksText: item.url,
+                  }),
+                });
+                if (res.ok) {
+                  setIsPackageAdderOpen(false);
+                  window.location.reload();
+                }
+              }}
+            />
+            {isDemo && (
+              <p className="text-[11px] text-amber-300">
+                Sign in with GitHub to attach packages or extensions to a live workspace.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <CommandPalette
         isOpen={isPaletteOpen}

@@ -31,6 +31,7 @@ import {
 import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/utils/format";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { maskApiKey } from "@/lib/security/mask-key";
 
 export interface ErrorEventItem {
   id: string;
@@ -520,7 +521,7 @@ export function ErrorStreamCard({
     }
   };
 
-  const testBeaconCommand = `curl -X POST ${PUBLIC_APP_URL}/api/v1/event -H "Content-Type: application/json" -d '{"apiKey":"${telemetryApiKey || "YOUR_KEY"}","errorName":"UnhandledError","runtime":"node","message":"Crash report test"}'`;
+  const testBeaconCommand = `curl -X POST ${PUBLIC_APP_URL}/api/v1/event -H "Content-Type: application/json" -d '{"apiKey":"${maskApiKey(telemetryApiKey, "YOUR_KEY")}","errorName":"UnhandledError","runtime":"node","message":"Crash report test"}'`;
 
   const copyTestBeacon = () => {
     if (navigator.clipboard) {

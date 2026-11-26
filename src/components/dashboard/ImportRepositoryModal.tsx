@@ -20,6 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { STACK_PRESETS, type StackPresetId } from "@/lib/dashboard/presets";
+import { PackageSearchPicker } from "./PackageSearchPicker";
 
 interface GitHubRepoChoice {
   id: number;
@@ -498,8 +499,39 @@ export function ImportRepositoryModal({
                 <span>Create Standalone App / Package / OCI Server Workspace</span>
               </div>
               <p className="text-[11px] text-zinc-400">
-                No GitHub repo required. Track Python-only (PyPI), npm, OCI/VPS websites, GA4, and runtime crash SDKs in one hub.
+                No GitHub repo required. Search and attach any PyPI, npm, Crates.io, Docker, VS Code, MCP, or Go package below, or enter names manually.
               </p>
+
+              <div className="p-3 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-2">
+                <span className="text-[11px] font-semibold text-zinc-300 block">
+                  Search &amp; Select Package / Extension / Container
+                </span>
+                <PackageSearchPicker
+                  compact
+                  actionLabel="Select"
+                  selectedValues={{
+                    pypiPackage,
+                    npmPackage,
+                    rustCrate,
+                    dockerImage,
+                    vscodeExtension,
+                    mcpServerName,
+                    goModule,
+                  }}
+                  onSelectItem={(item) => {
+                    if (item.field === "pypiPackage") setPypiPackage(item.name);
+                    else if (item.field === "npmPackage") setNpmPackage(item.name);
+                    else if (item.field === "rustCrate") setRustCrate(item.name);
+                    else if (item.field === "dockerImage") setDockerImage(item.name);
+                    else if (item.field === "vscodeExtension") setVsCodeExtension(item.name);
+                    else if (item.field === "mcpServerName") setMcpServerName(item.name);
+                    else if (item.field === "goModule") setGoModule(item.name);
+                    if (!standaloneName.trim()) {
+                      setStandaloneName(item.name.split("/").pop() || item.name);
+                    }
+                  }}
+                />
+              </div>
 
               <div className="space-y-2.5">
                 <div>

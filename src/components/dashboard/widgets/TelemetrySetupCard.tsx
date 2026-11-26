@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Copy, Check, Code2, Terminal, Key } from "lucide-react";
+import { Copy, Check, Code2, Terminal, Key, Eye, EyeOff } from "lucide-react";
 import {
   getPythonSnippet,
   getNodeSnippet,
@@ -9,6 +9,7 @@ import {
   getCliSnippet,
   getWebAppSnippet,
 } from "@/lib/sdk-generator";
+import { displaySnippetKey } from "@/lib/security/mask-key";
 
 interface TelemetrySetupCardProps {
   apiKey: string;
@@ -18,25 +19,30 @@ export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
   const [tab, setTab] = useState<"web" | "mobile" | "python" | "node" | "rust" | "cli">("web");
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
-  const mobileSnippet = `// React Native (@ritualdev/devpulse) or Flutter (devpulse_flutter)
+  const visibleKey = displaySnippetKey(apiKey, revealed);
+
+  const buildSnippets = (k: string): Record<"web" | "mobile" | "python" | "node" | "rust" | "cli", { file: string; code: string }> => ({
+    web: { file: "devpulse-browser.ts", code: getWebAppSnippet(k) },
+    mobile: {
+      file: "mobile-telemetry.ts",
+      code: `// React Native (@ritualdev/devpulse) or Flutter (devpulse_flutter)
 import { DevPulseClient } from "@ritualdev/devpulse";
 
 const pulse = new DevPulseClient({
-  apiKey: "${apiKey}",
+  apiKey: "${k}",
   release: "1.0.0",
-}).initReactNative({ platform: "ios", anrThresholdMs: 5000 });`;
+}).initReactNative({ platform: "ios", anrThresholdMs: 5000 });`,
+    },
+    python: { file: "tracker.py", code: getPythonSnippet(k) },
+    node: { file: "tracker.js", code: getNodeSnippet(k) },
+    rust: { file: "panic_hook.rs", code: getRustSnippet(k) },
+    cli: { file: "beacon.sh", code: getCliSnippet(k) },
+  });
 
-  const snippets: Record<"web" | "mobile" | "python" | "node" | "rust" | "cli", { file: string; code: string }> = {
-    web: { file: "devpulse-browser.ts", code: getWebAppSnippet(apiKey) },
-    mobile: { file: "mobile-telemetry.ts", code: mobileSnippet },
-    python: { file: "tracker.py", code: getPythonSnippet(apiKey) },
-    node: { file: "tracker.js", code: getNodeSnippet(apiKey) },
-    rust: { file: "panic_hook.rs", code: getRustSnippet(apiKey) },
-    cli: { file: "beacon.sh", code: getCliSnippet(apiKey) },
-  };
-
-  const current = snippets[tab];
+  const currentDisplay = buildSnippets(visibleKey)[tab];
+  const currentCopy = buildSnippets(apiKey)[tab];
 
   const copyKey = () => {
     navigator.clipboard.writeText(apiKey);
@@ -45,7 +51,7 @@ const pulse = new DevPulseClient({
   };
 
   const copySnippet = () => {
-    navigator.clipboard.writeText(current.code);
+    navigator.clipboard.writeText(currentCopy.code);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
@@ -89,19 +95,31 @@ const pulse = new DevPulseClient({
           </div>
         </div>
 
-        {/* API Key Box */}
-        <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800/80 mb-3 text-xs">
+        {/* API Key Box (masked by default for screen safety) */}
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800/80 mb-3 text-xs gap-2">
           <div className="flex items-center gap-2 text-zinc-400 truncate">
             <Key className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="font-mono text-zinc-200 truncate">{apiKey}</span>
+            <span className="font-mono text-zinc-200 truncate">{visibleKey}</span>
           </div>
-          <button
-            onClick={copyKey}
-            className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition shrink-0"
-          >
-            {copiedKey ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            <span>{copiedKey ? "Copied" : "Copy Key"}</span>
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setRevealed((v) => !v)}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 transition"
+              title={revealed ? "Mask API key" : "Reveal API key"}
+            >
+              {revealed ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              <span>{revealed ? "Hide" : "Reveal"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={copyKey}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition"
+            >
+              {copiedKey ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              <span>{copiedKey ? "Copied" : "Copy Key"}</span>
+            </button>
+          </div>
         </div>
 
         {/* Code Snippet */}
@@ -109,9 +127,10 @@ const pulse = new DevPulseClient({
           <div className="flex items-center justify-between mb-1.5 text-[11px] text-zinc-400">
             <span className="flex items-center gap-1 font-mono text-zinc-300">
               <Terminal className="w-3.5 h-3.5 text-zinc-500" />
-              {current.file}
+              {currentDisplay.file}
             </span>
             <button
+              type="button"
               onClick={copySnippet}
               className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition"
             >
@@ -120,7 +139,7 @@ const pulse = new DevPulseClient({
             </button>
           </div>
           <pre className="text-[11px] font-mono text-zinc-300 overflow-x-auto max-h-36 leading-relaxed select-text">
-            {current.code}
+            {currentDisplay.code}
           </pre>
         </div>
       </div>

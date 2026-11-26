@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { maskApiKey } from "@/lib/security/mask-key";
 
 interface ExternalConnector {
   id: string;
@@ -151,7 +152,7 @@ export function ExternalAnalyticsHub({
   };
 
   const writeToken = publicWriteKey || projectSlug;
-  const sdkKey = telemetryApiKey || "dp_live_your_api_key";
+  const sdkKey = maskApiKey(telemetryApiKey);
 
   const handleAttachMonitor = async (e: React.FormEvent) => {
     e.preventDefault();

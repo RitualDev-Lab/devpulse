@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
+import { maskApiKey } from "@/lib/security/mask-key";
 
 interface AbStat {
   variant: string;
@@ -144,7 +145,7 @@ export function FlagsFullView({ workspace }: { workspace: LoadedWorkspaceReady }
   };
 
   const sdkCode = `import { DevPulse } from "@ritualdev/devpulse";
-const pulse = new DevPulse({ apiKey: "${project.telemetryApiKey || "YOUR_API_KEY"}" }).init();
+const pulse = new DevPulse({ apiKey: "${maskApiKey(project.telemetryApiKey, "YOUR_API_KEY")}" }).init();
 
 if (await pulse.flag("new-checkout", { userId: "usr_123" })) {
   const variant = await pulse.getFlagVariant("new-checkout", "usr_123"); // "control" | "treatment"

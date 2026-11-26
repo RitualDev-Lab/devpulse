@@ -13,6 +13,7 @@ import {
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { maskApiKey } from "@/lib/security/mask-key";
 
 interface StructuredLogRow {
   id: string;
@@ -66,7 +67,7 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
   }, [loadLogs]);
 
   const lokiSnippet = `curl -X POST ${PUBLIC_APP_URL}/api/v1/loki/api/v1/push \\
-  -H "Authorization: Bearer ${project.telemetryApiKey || "YOUR_API_KEY"}" \\
+  -H "Authorization: Bearer ${maskApiKey(project.telemetryApiKey, "YOUR_API_KEY")}" \\
   -H "Content-Type: application/json" \\
   -d '{"streams":[{"stream":{"service":"api","level":"info"},"values":[["'$(date +%s%N)'","Server started on port 3000"]]}]}'`;
 

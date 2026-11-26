@@ -21,6 +21,7 @@ import { DockerContainerCard } from "../widgets/DockerContainerCard";
 import { VsCodeStatsCard } from "../widgets/VsCodeStatsCard";
 import { McpStatsCard } from "../widgets/McpStatsCard";
 import { QuickConnectPanel } from "../QuickConnectPanel";
+import { PackageSearchPicker } from "../PackageSearchPicker";
 
 export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { projects, customDomain, storageTier, isDemo } = workspace;
@@ -272,6 +273,41 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
             )}
           </div>
         )}
+
+        {/* 1-Click Search & Add Package / Extension / Container */}
+        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+          <div>
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <Package className="w-4 h-4 text-emerald-400" />
+              <span>Search &amp; Add Package, Extension, Container or MCP Server</span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Browse live registries (npm, PyPI, Crates.io, VS Code / Open-VSX, Docker Hub, MCP, Go) and attach in 1 click without a Git repo.
+            </p>
+          </div>
+          <PackageSearchPicker
+            selectedValues={{
+              npmPackage: project.npmPackage,
+              pypiPackage: project.pypiPackage,
+              rustCrate: project.rustCrate,
+              goModule: project.goModule,
+              dockerImage: project.dockerImage,
+            }}
+            onSelectItem={async (item) => {
+              if (isDemo) return;
+              const res = await fetch("/api/v1/projects/connectors", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "quick_connect",
+                  projectId: project.id,
+                  linksText: item.url,
+                }),
+              });
+              if (res.ok) window.location.reload();
+            }}
+          />
+        </div>
 
         {/* Modular Package Tokens & Custom URL Probes */}
         <form

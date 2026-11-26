@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { Code2, Copy, Check, Play, Loader2, Activity } from "lucide-react";
+import { Code2, Copy, Check, Play, Loader2, Activity, Eye, EyeOff } from "lucide-react";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { displaySnippetKey } from "@/lib/security/mask-key";
 
 type LangTabId =
   | "nextjs"
@@ -74,16 +75,19 @@ export function LanguageSdkTabs({
 }: LanguageSdkTabsProps) {
   const [activeTab, setActiveTab] = useState<LangTabId>("nextjs");
   const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [metricName, setMetricName] = useState("active_jobs");
   const [metricValue, setMetricValue] = useState("42");
   const [sending, setSending] = useState(false);
   const [sentNotice, setSentNotice] = useState<string | null>(null);
 
   const tabMeta = LANG_TABS.find((t) => t.id === activeTab) || LANG_TABS[0];
-  const code = buildLanguageSnippet(activeTab, apiKey);
+  const displayKey = displaySnippetKey(apiKey, revealed);
+  const code = buildLanguageSnippet(activeTab, displayKey);
+  const fullCode = buildLanguageSnippet(activeTab, apiKey);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(code);
+    navigator.clipboard.writeText(fullCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -153,14 +157,27 @@ export function LanguageSdkTabs({
       <div className="rounded-xl bg-zinc-950 border border-zinc-800 overflow-hidden">
         <div className="px-3.5 py-2 border-b border-zinc-800/80 flex items-center justify-between text-[11px]">
           <span className="font-mono text-zinc-400">{tabMeta.file}</span>
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800"
-          >
-            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            <span>{copied ? "Copied!" : "Copy Code"}</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            {apiKey && (
+              <button
+                type="button"
+                onClick={() => setRevealed((v) => !v)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800"
+                title={revealed ? "Mask API key in snippet" : "Reveal API key in snippet"}
+              >
+                {revealed ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                <span>{revealed ? "Hide Key" : "Reveal Key"}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800"
+            >
+              {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              <span>{copied ? "Copied!" : "Copy Code"}</span>
+            </button>
+          </div>
         </div>
         <pre className="p-3.5 text-[11px] font-mono text-emerald-300/90 overflow-x-auto leading-relaxed whitespace-pre-wrap">
           {code}

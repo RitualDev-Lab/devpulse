@@ -3,6 +3,7 @@
 import React from "react";
 import { Bug, Code2, Terminal } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
+import { maskApiKey } from "@/lib/security/mask-key";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { ErrorStreamCard } from "../widgets/ErrorStreamCard";
 import { ReleaseHealthCard } from "../widgets/ReleaseHealthCard";
@@ -76,7 +77,7 @@ export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady
           <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-xs text-cyan-300 flex items-center gap-2 overflow-x-auto">
             <Terminal className="w-4 h-4 shrink-0 text-zinc-500" />
             <code>
-              npx @ritualdev/pulse upload-sourcemaps --key {project.telemetryApiKey} --release v1.0.0 --dir ./dist
+              npx @ritualdev/pulse upload-sourcemaps --key {maskApiKey(project.telemetryApiKey, "YOUR_API_KEY")} --release v1.0.0 --dir ./dist
             </code>
           </div>
           {(initialData.sourceMaps || []).length > 0 && (
