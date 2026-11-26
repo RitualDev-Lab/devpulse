@@ -132,7 +132,8 @@ export default {
         // Cloudflare Scheduled Cron Trigger (every 6 hours)
         try {
             console.log("Cloudflare Cron Trigger fired at:", new Date(event.scheduledTime).toISOString(), "cron:", event.cron);
-            const dummyRequest = new Request(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/cron/sync`, {
+            const cronBaseUrl = (env && env.NEXT_PUBLIC_APP_URL) || (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_APP_URL) || "http://localhost:3000";
+            const dummyRequest = new Request(cronBaseUrl.replace(/\/$/, "") + "/api/cron/sync", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
