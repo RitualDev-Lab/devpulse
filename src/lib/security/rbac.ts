@@ -4,25 +4,9 @@ import { projects, organizations, organizationMembers } from "@/db/schema";
 import { eq, and, or, desc, inArray, sql } from "drizzle-orm";
 import type { AuthenticatedUser } from "@/lib/auth";
 
-export type OrgRole = "owner" | "admin" | "developer" | "viewer" | "billing";
+import { normalizeOrgRole, type OrgRole } from "./org-roles";
 
-export const VALID_ORG_ROLES: readonly OrgRole[] = [
-  "owner",
-  "admin",
-  "developer",
-  "viewer",
-  "billing",
-];
-
-/**
- * Normalizes legacy role names ("maintainer" -> "developer") cleanly.
- */
-export function normalizeOrgRole(raw?: string | null): OrgRole {
-  const r = String(raw || "viewer").trim().toLowerCase();
-  if (r === "maintainer") return "developer";
-  if ((VALID_ORG_ROLES as readonly string[]).includes(r)) return r as OrgRole;
-  return "viewer";
-}
+export { VALID_ORG_ROLES, normalizeOrgRole, clampProvisionedRole, type OrgRole } from "./org-roles";
 
 export interface ProjectAccessResult {
   project: typeof projects.$inferSelect;

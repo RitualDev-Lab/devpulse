@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { errorEvents, featureFlags, flagExposures } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { checkAndAutoRollbackFlags, parseFlagVariants } from "@/lib/flags/flag-engine";
+import { buildExperimentReadout } from "@/lib/flags/experiment-readout";
 import { isPublicDemoProject } from "@/lib/security/demo-project";
 
 export const dynamic = "force-dynamic";
@@ -22,18 +23,13 @@ export async function GET(req: NextRequest) {
       if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const [flags, exposures, flagErrors] = await Promise.all([
+    const [flags, flagErrors] = await Promise.all([
       db
         .select()
         .from(featureFlags)
         .where(eq(featureFlags.projectId, projectId))
         .orderBy(desc(featureFlags.createdAt))
         .limit(40),
-      db
-        .select()
-        .from(flagExposures)
-        .where(eq(flagExposures.projectId, projectId))
-        .limit(1000),
       db
         .select({
           id: errorEvents.id,
@@ -45,34 +41,63 @@ export async function GET(req: NextRequest) {
         .limit(500),
     ]);
 
-    const enriched = flags.map((f) => {
-      const variants = parseFlagVariants(f.variantsJson);
-      const exps = exposures.filter((e) => e.flagKey === f.key);
-      const errs = flagErrors.filter((er) => er.flagKey === f.key);
+    // Experiment readouts use the same 30-day window as rollback, queried per flag so one busy flag
+    // can't truncate another flag's sample. Rows are capped, and the readout pauses when capped.
+    const EXPERIMENT_ROW_CAP = 5000;
+    const cutoffIso = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 19).replace("T", " ");
+    const hashingEnabled = Boolean(process.env.ANALYTICS_HASH_SECRET);
 
-      const abStats = variants.map((v) => {
-        const varExps = exps.filter((e) => e.variant === v.name);
-        const conversions = varExps.filter((e) => e.converted).length;
-        const crashes = errs.filter((er) => (er.flagVariant || "control") === v.name).length;
-        const conversionRate =
-          varExps.length > 0 ? Math.round((conversions / varExps.length) * 1000) / 10 : 0;
+    const enriched = await Promise.all(
+      flags.map(async (f) => {
+        const variants = parseFlagVariants(f.variantsJson);
+        const windowRows = await db
+          .select({ userHash: flagExposures.userHash, variant: flagExposures.variant, converted: flagExposures.converted })
+          .from(flagExposures)
+          .where(
+            and(
+              eq(flagExposures.projectId, projectId),
+              eq(flagExposures.flagKey, f.key),
+              gte(flagExposures.createdAt, cutoffIso)
+            )
+          )
+          .limit(EXPERIMENT_ROW_CAP + 1);
+        const truncated = windowRows.length > EXPERIMENT_ROW_CAP;
+        const readout = buildExperimentReadout({
+          variants: variants.map((v) => ({ name: v.name, weight: v.weight })),
+          rows: truncated ? windowRows.slice(0, EXPERIMENT_ROW_CAP) : windowRows,
+          hashingEnabled,
+          truncated,
+        });
+        const errs = flagErrors.filter((er) => er.flagKey === f.key);
+
+        const abStats = readout.arms.map((arm) => ({
+          variant: arm.variant,
+          weight: arm.weight,
+          exposures: arm.exposedUsers,
+          conversions: arm.convertedUsers,
+          conversionRate: arm.conversionRatePercent,
+          crashes: errs.filter((er) => (er.flagVariant || "control") === arm.variant).length,
+          status: arm.status,
+          differencePoints: arm.differencePoints,
+          ciLowerPoints: arm.ciLowerPoints,
+          ciUpperPoints: arm.ciUpperPoints,
+        }));
+
         return {
-          variant: v.name,
-          weight: v.weight,
-          exposures: varExps.length,
-          conversions,
-          conversionRate,
-          crashes,
+          ...f,
+          totalExposures: readout.arms.reduce((sum, arm) => sum + arm.exposedUsers, 0),
+          totalCrashes: errs.length,
+          abStats,
+          experiment: {
+            available: readout.available,
+            reason: readout.reason,
+            controlVariant: readout.controlVariant,
+            minUsersPerArm: readout.minUsersPerArm,
+            excludedCrossVariantUsers: readout.excludedCrossVariantUsers,
+          },
         };
-      });
-
-      return {
-        ...f,
-        totalExposures: exps.length,
-        totalCrashes: errs.length,
-        abStats,
-      };
-    });
+      })
+    );
 
     return NextResponse.json({ flags: enriched });
   } catch (err) {

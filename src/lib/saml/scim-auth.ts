@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { scimTokens, organizations, organizationMembers, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { hashApiKey } from "@/lib/security/api-keys";
-import type { OrgRole } from "@/lib/security/rbac";
+import { clampProvisionedRole, type OrgRole } from "@/lib/security/org-roles";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const SCIM_CONTENT_TYPE = "application/scim+json; charset=utf-8";
@@ -113,7 +113,7 @@ export async function authenticateScimRequest(
 
 export function mapScimRole(raw?: string | null): OrgRole {
   const r = String(raw || "").trim().toLowerCase();
-  if (r.includes("owner")) return "owner";
+  if (r.includes("owner")) return clampProvisionedRole("owner");
   if (r.includes("admin")) return "admin";
   if (r.includes("billing")) return "billing";
   if (r.includes("maintain") || r.includes("dev") || r.includes("write")) return "developer";

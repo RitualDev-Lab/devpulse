@@ -97,7 +97,8 @@ test("accepts a correctly signed, bound, in-window response", async () => {
   const user = await parseSamlResponse(encode(xml), config, { acsUrl: ACS, expectedRequest });
   assert.equal(user.email, "alice@example.com");
   assert.equal(user.name, "Alice");
-  assert.equal(user.role, "owner");
+  // Owner-level IdP claims are capped at admin; SSO never grants ownership.
+  assert.equal(user.role, "admin");
 });
 
 test("rejects an unsigned assertion", async () => {

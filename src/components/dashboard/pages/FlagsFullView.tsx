@@ -22,7 +22,27 @@ interface AbStat {
   conversions: number;
   conversionRate: number;
   crashes: number;
+  status: "control" | "insufficient_data" | "significant_positive" | "significant_negative" | "inconclusive";
+  differencePoints: number | null;
+  ciLowerPoints: number | null;
+  ciUpperPoints: number | null;
 }
+
+interface ExperimentSummary {
+  available: boolean;
+  reason: string | null;
+  controlVariant: string | null;
+  minUsersPerArm: number;
+  excludedCrossVariantUsers: number;
+}
+
+const EXPERIMENT_STATUS_LABEL: Record<AbStat["status"], string> = {
+  control: "control",
+  insufficient_data: "collecting data",
+  significant_positive: "significant win",
+  significant_negative: "significant loss",
+  inconclusive: "no clear difference",
+};
 
 interface FlagRow {
   id: string;
@@ -37,6 +57,7 @@ interface FlagRow {
   totalExposures: number;
   totalCrashes: number;
   abStats: AbStat[];
+  experiment: ExperimentSummary;
 }
 
 export function FlagsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
@@ -370,7 +391,10 @@ if (await pulse.flag("new-checkout", { userId: "usr_123" })) {
                   )}
                 </div>
 
-                {/* A/B Variant Performance */}
+                {/* A/B Variant Performance (distinct users, 30-day window) */}
+                {!f.experiment.available && f.experiment.reason && (
+                  <p className="text-[11px] text-amber-300/90 pt-2 border-t border-zinc-800/70">Experiment readout paused: {f.experiment.reason}</p>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-zinc-800/70">
                   {f.abStats.map((ab) => (
                     <div
@@ -384,8 +408,14 @@ if (await pulse.flag("new-checkout", { userId: "usr_123" })) {
                           <span className="text-[10px] text-zinc-500">({ab.weight}%)</span>
                         </div>
                         <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                          {ab.exposures} exposures • {ab.conversions} conversions ({ab.conversionRate}%)
+                          {ab.exposures} users • {ab.conversions} converted ({ab.conversionRate}%)
                         </div>
+                        {ab.differencePoints !== null && ab.ciLowerPoints !== null && ab.ciUpperPoints !== null && (
+                          <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                            {ab.differencePoints >= 0 ? "+" : ""}{ab.differencePoints} pp vs control (adjusted CI {ab.ciLowerPoints} to {ab.ciUpperPoints})
+                          </div>
+                        )}
+                        <div className="text-[10px] text-zinc-500 mt-0.5">{EXPERIMENT_STATUS_LABEL[ab.status]}</div>
                       </div>
                       <span
                         className={`font-mono text-xs font-bold ${

@@ -337,6 +337,7 @@ export const auditLogs = sqliteTable("audit_logs", {
   seq: integer("seq").default(0).notNull(),
   prevHash: text("prev_hash"),
   entryHash: text("entry_hash"),
+  chainVersion: integer("chain_version").default(0).notNull(),
   createdAt: text("created_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 

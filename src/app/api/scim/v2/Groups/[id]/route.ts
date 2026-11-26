@@ -1,17 +1,17 @@
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { organizationMembers } from "@/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, ne } from "drizzle-orm";
 import { authenticateScimRequest, mapScimRole, scimError, scimJson } from "@/lib/saml/scim-auth";
 import { recordAuditEvent } from "@/lib/security/audit";
-import type { OrgRole } from "@/lib/security/rbac";
+import { clampProvisionedRole, type OrgRole } from "@/lib/security/org-roles";
 
 export const dynamic = "force-dynamic";
 
 function resolveGroupRole(id: string): OrgRole | null {
   const clean = id.trim().toLowerCase();
   if (clean === "maintainer") return "developer";
-  if (["owner", "admin", "developer", "viewer", "billing"].includes(clean)) return clean as OrgRole;
+  if (["owner", "admin", "developer", "viewer", "billing"].includes(clean)) return clampProvisionedRole(clean);
   return null;
 }
 
@@ -86,6 +86,7 @@ export async function PATCH(
         .where(
           and(
             eq(organizationMembers.organizationId, auth.ctx.organizationId),
+            ne(organizationMembers.role, "owner"),
             inArray(organizationMembers.id, list)
           )
         );
@@ -96,6 +97,7 @@ export async function PATCH(
         .where(
           and(
             eq(organizationMembers.organizationId, auth.ctx.organizationId),
+            ne(organizationMembers.role, "owner"),
             inArray(organizationMembers.id, list)
           )
         );

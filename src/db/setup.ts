@@ -876,6 +876,28 @@ export async function initDb() {
   await client.execute(`ALTER TABLE audit_logs ADD COLUMN seq INTEGER DEFAULT 0 NOT NULL;`).catch(() => {});
   await client.execute(`ALTER TABLE audit_logs ADD COLUMN prev_hash TEXT;`).catch(() => {});
   await client.execute(`ALTER TABLE audit_logs ADD COLUMN entry_hash TEXT;`).catch(() => {});
+  await client.execute(`ALTER TABLE audit_logs ADD COLUMN chain_version INTEGER DEFAULT 0 NOT NULL;`).catch(() => {});
+  // Rows hashed before chain_version existed are version 1. Runs only while such rows remain, so the
+  // append-only triggers below never block it.
+  await client
+    .execute(`UPDATE audit_logs SET chain_version = 1 WHERE entry_hash IS NOT NULL AND chain_version = 0;`)
+    .catch(() => {});
+  // Two writers can read the same latest row. This index makes the second insert fail so it can retry.
+  // It is partial so pre-chain rows (all seq 0) do not collide. Skipped if legacy duplicates exist.
+  await client
+    .execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_user_seq_chain_idx ON audit_logs (user_id, seq) WHERE chain_version > 0;`
+    )
+    .catch((err) => console.warn("audit chain index not created:", err));
+  // Append-only at the database layer. Application code never updates or deletes audit rows.
+  await client.execute(`
+    CREATE TRIGGER IF NOT EXISTS audit_logs_block_update BEFORE UPDATE ON audit_logs
+    BEGIN SELECT RAISE(ABORT, 'audit_logs is append-only'); END;
+  `).catch(() => {});
+  await client.execute(`
+    CREATE TRIGGER IF NOT EXISTS audit_logs_block_delete BEFORE DELETE ON audit_logs
+    BEGIN SELECT RAISE(ABORT, 'audit_logs is append-only'); END;
+  `).catch(() => {});
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS metrics_hourly (

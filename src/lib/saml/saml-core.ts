@@ -12,6 +12,7 @@
  */
 
 import { DOMParser } from "@xmldom/xmldom";
+import { clampProvisionedRole, type OrgRole } from "../security/org-roles";
 import {
   SAML,
   ValidateInResponseTo,
@@ -36,7 +37,7 @@ export interface SamlConfigRecord {
 export interface SamlUserInfo {
   email: string;
   name: string;
-  role: "owner" | "maintainer" | "viewer";
+  role: OrgRole;
   nameId: string;
   issuer: string;
   assertionId: string | null;
@@ -526,16 +527,14 @@ export async function parseSamlResponse(
   };
 }
 
-function mapRole(
-  claim: string,
-  defaultRole: "owner" | "maintainer" | "viewer"
-): "owner" | "maintainer" | "viewer" {
+function mapRole(claim: string, defaultRole: string): OrgRole {
   const c = claim.trim().toLowerCase();
-  if (!c) return defaultRole;
-  if (c.includes("admin") || c.includes("owner")) return "owner";
+  if (!c) return clampProvisionedRole(defaultRole);
+  // Owner-level claims are capped at admin: SSO never grants ownership.
+  if (c.includes("admin") || c.includes("owner")) return "admin";
   if (c.includes("maintain") || c.includes("developer") || c.includes("write") || c.includes("editor")) {
-    return "maintainer";
+    return "developer";
   }
   if (c.includes("viewer") || c.includes("read")) return "viewer";
-  return defaultRole;
+  return clampProvisionedRole(defaultRole);
 }
