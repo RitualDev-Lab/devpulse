@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Loader2,
   Clock,
+  Sparkles,
 } from "lucide-react";
 
 interface SlaMonitorRow {
@@ -146,6 +147,31 @@ export function SlaCompliancePanel({
       setErrorMsg(err.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const [draftingId, setDraftingId] = useState<string | null>(null);
+
+  const handleGeneratePostmortem = async (incidentId: string) => {
+    if (isDemo) return;
+    setDraftingId(incidentId);
+    try {
+      const res = await fetch("/api/v1/sla", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          action: "generate_postmortem",
+          incidentId,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.postmortem) {
+        setEditRca(data.postmortem);
+        await loadSla();
+      }
+    } finally {
+      setDraftingId(null);
     }
   };
 
@@ -457,17 +483,28 @@ export function SlaCompliancePanel({
                     )}
                   </div>
                   {!isDemo && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingId(editingId === inc.id ? null : inc.id);
-                        setEditStatus(inc.status);
-                        setEditRca(inc.rcaText || "");
-                      }}
-                      className="text-[11px] text-indigo-400 hover:underline"
-                    >
-                      {editingId === inc.id ? "Close" : "Update Status / RCA"}
-                    </button>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        disabled={draftingId === inc.id}
+                        onClick={() => void handleGeneratePostmortem(inc.id)}
+                        className="inline-flex items-center gap-1 text-[11px] text-purple-300 hover:text-purple-200 disabled:opacity-50"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>{draftingId === inc.id ? "Drafting..." : "AI Draft Postmortem"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(editingId === inc.id ? null : inc.id);
+                          setEditStatus(inc.status);
+                          setEditRca(inc.rcaText || "");
+                        }}
+                        className="text-[11px] text-indigo-400 hover:underline"
+                      >
+                        {editingId === inc.id ? "Close" : "Update Status / RCA"}
+                      </button>
+                    </div>
                   )}
                 </div>
 

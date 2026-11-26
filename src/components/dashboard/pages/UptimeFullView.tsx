@@ -16,6 +16,7 @@ import { UptimeMonitorsCard } from "../widgets/UptimeMonitorsCard";
 import { SlaCompliancePanel } from "../widgets/SlaCompliancePanel";
 import { SyntheticsPanel } from "../widgets/SyntheticsPanel";
 import { CronHeartbeatsPanel } from "../widgets/CronHeartbeatsPanel";
+import { MaintenanceWindowsPanel } from "../widgets/MaintenanceWindowsPanel";
 
 export function UptimeFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, user, isDemo } = workspace;
@@ -144,6 +145,8 @@ export function UptimeFullView({ workspace }: { workspace: LoadedWorkspaceReady 
         </div>
 
         <CronHeartbeatsPanel projectId={project.id} isDemo={isDemo} />
+
+        <MaintenanceWindowsPanel projectId={project.id} isDemo={isDemo} />
 
         <SlaCompliancePanel
           projectId={project.id}

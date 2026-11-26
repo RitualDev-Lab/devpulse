@@ -7,6 +7,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { DEVPULSE_MCP_TOOLS, parseMcpToolAllowlist } from "@/lib/integrations/mcp-policy";
+import { isPublicDemoProject } from "@/lib/security/demo-project";
+import { aggregateMcpMetrics } from "@/lib/integrations/mcp-analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +27,12 @@ export async function GET(req: NextRequest) {
       authorizedProjectId = verified.id;
     } else {
       if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
-      const user = await getCurrentUser();
-      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      const access = await resolveProjectAccess(projectId, user);
-      if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (!isPublicDemoProject(projectId)) {
+        const user = await getCurrentUser();
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const access = await resolveProjectAccess(projectId, user);
+        if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
     if (!authorizedProjectId) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
@@ -41,28 +45,22 @@ export async function GET(req: NextRequest) {
         .limit(5000),
       db.select({ policy: projects.mcpAllowedToolsJson }).from(projects).where(eq(projects.id, authorizedProjectId)).limit(1),
     ]);
-    const byTool = new Map<string, { toolName: string; calls: number; denied: number; errors: number; avgDurationMs: number }>();
-    for (const call of calls) {
-      const stat = byTool.get(call.toolName) || { toolName: call.toolName, calls: 0, denied: 0, errors: 0, avgDurationMs: 0 };
-      const prevCount = stat.calls;
-      stat.calls++;
-      if (call.outcome === "denied") stat.denied++;
-      if (call.outcome === "error") stat.errors++;
-      stat.avgDurationMs = Math.round((stat.avgDurationMs * prevCount + call.durationMs) / stat.calls);
-      byTool.set(call.toolName, stat);
-    }
+    const agg = aggregateMcpMetrics(calls);
     const allowlist = parseMcpToolAllowlist(project[0]?.policy ?? null);
     return NextResponse.json({
       windowDays: 30,
-      totalCalls: calls.length,
+      totalCalls: agg.totalCalls,
+      deniedCount: agg.deniedCount,
+      errorCount: agg.errorCount,
+      errorRatePercent: agg.errorRatePercent,
+      p50DurationMs: agg.p50DurationMs,
+      p95DurationMs: agg.p95DurationMs,
+      totalTokens: agg.totalTokens,
+      estimatedCostUsd: agg.estimatedCostUsd,
       truncated: calls.length === 5000,
       policy: { mode: allowlist === null ? "all_allowed" : "allowlist", allowedTools: allowlist ?? [...DEVPULSE_MCP_TOOLS] },
-      tools: Array.from(byTool.values()).sort((a, b) => b.calls - a.calls),
-      daily: calls.reduce<Record<string, number>>((result, call) => {
-        const day = call.createdAt.slice(0, 10);
-        result[day] = (result[day] || 0) + 1;
-        return result;
-      }, {}),
+      tools: agg.tools,
+      daily: agg.daily,
     });
   } catch (error) {
     console.error("MCP analytics error:", error);

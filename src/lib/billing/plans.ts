@@ -169,6 +169,39 @@ export function getEffectiveEntitlements(input: {
   };
 }
 
+export interface PlanQuotas {
+  maxEventsPerMonth: number;
+  maxPackages: number | null; // null = Unlimited
+  maxHeartbeats: number | null;
+  maxMembers: number;
+}
+
+export function getPlanQuotas(tier?: string | null): PlanQuotas {
+  const normalized = normalizePlanTier(tier);
+  if (normalized === "team") {
+    return {
+      maxEventsPerMonth: 2_000_000,
+      maxPackages: null,
+      maxHeartbeats: null,
+      maxMembers: 25,
+    };
+  }
+  if (normalized === "pro") {
+    return {
+      maxEventsPerMonth: 250_000,
+      maxPackages: 30,
+      maxHeartbeats: 20,
+      maxMembers: 5,
+    };
+  }
+  return {
+    maxEventsPerMonth: 10_000,
+    maxPackages: 5,
+    maxHeartbeats: 2,
+    maxMembers: 2,
+  };
+}
+
 export function canUseAlertChannel(
   tier: string | null | undefined,
   channel:

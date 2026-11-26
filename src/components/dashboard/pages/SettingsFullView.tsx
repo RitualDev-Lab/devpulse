@@ -30,6 +30,7 @@ import { StorageSettingsModal } from "../StorageSettingsModal";
 import { CustomCssModal } from "../CustomCssModal";
 import { IntegrationsModal } from "../IntegrationsModal";
 import { SsoScimModal } from "../SsoScimModal";
+import { BillingQuotaMeters } from "../widgets/BillingQuotaMeters";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
@@ -147,6 +148,8 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
             Configure pasted link auto-detection, Role-Aware stack presets, alerts, security, domains, and themes cleanly in one place.
           </p>
         </div>
+
+        <BillingQuotaMeters isDemo={isDemo} />
 
         <QuickConnectPanel
           projectId={project.id}

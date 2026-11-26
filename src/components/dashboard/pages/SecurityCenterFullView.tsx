@@ -1,0 +1,437 @@
+"use client";
+
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  ShieldAlert,
+  ShieldCheck,
+  Scale,
+  Download,
+  GitPullRequest,
+  ExternalLink,
+  RefreshCw,
+  Award,
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-react";
+import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
+import type { CveSeverity, SbomInventoryReport, SbomVulnerability } from "@/lib/security/sbom";
+import { WorkspaceShell } from "../WorkspaceShell";
+import { useWorkspaceData } from "../WorkspaceCacheContext";
+
+interface EnrichedVulnerability extends SbomVulnerability {
+  fixIssueUrl?: string | null;
+}
+
+interface EnrichedReport extends SbomInventoryReport {
+  packages: Array<
+    SbomInventoryReport["packages"][number] & {
+      vulnerabilities: EnrichedVulnerability[];
+    }
+  >;
+  githubRepo?: string | null;
+}
+
+const DEMO_SBOM_REPORT: EnrichedReport = {
+  generatedAt: new Date().toISOString(),
+  totalPackages: 4,
+  totalVulnerabilities: 1,
+  severityCounts: { CRITICAL: 0, HIGH: 1, MEDIUM: 0, LOW: 0 },
+  spdxApprovedCount: 4,
+  githubRepo: "RitualDev-Lab/devpulse",
+  packages: [
+    {
+      ecosystem: "npm",
+      packageName: "@ritualdev/pulse",
+      version: "1.4.2",
+      license: "MIT",
+      spdxCompliant: true,
+      advisoryCount: 0,
+      scorecardOverall: 8.4,
+      sourceRepo: "github.com/RitualDev-Lab/devpulse",
+      vulnerabilities: [],
+    },
+    {
+      ecosystem: "pypi",
+      packageName: "devpulse-sdk",
+      version: "1.1.0",
+      license: "Apache-2.0",
+      spdxCompliant: true,
+      advisoryCount: 1,
+      scorecardOverall: 7.9,
+      sourceRepo: "github.com/RitualDev-Lab/devpulse",
+      vulnerabilities: [
+        {
+          id: "GHSA-demo-98vx-4q2m",
+          packageName: "devpulse-sdk",
+          ecosystem: "pypi",
+          version: "1.1.0",
+          severity: "HIGH",
+          summary: "Sample OSV.dev advisory illustrating Fix PR workflow & SPDX license compliance verification.",
+          fixedVersion: "1.1.2",
+          referenceUrl: "https://osv.dev/",
+          fixIssueUrl: "https://github.com/RitualDev-Lab/devpulse/issues/new",
+        },
+      ],
+    },
+    {
+      ecosystem: "crates",
+      packageName: "devpulse-rs",
+      version: "0.9.1",
+      license: "MIT",
+      spdxCompliant: true,
+      advisoryCount: 0,
+      scorecardOverall: 8.1,
+      sourceRepo: "github.com/RitualDev-Lab/devpulse",
+      vulnerabilities: [],
+    },
+    {
+      ecosystem: "go",
+      packageName: "github.com/ritualdev-lab/devpulse-go",
+      version: "v0.4.0",
+      license: "BSD-3-Clause",
+      spdxCompliant: true,
+      advisoryCount: 0,
+      scorecardOverall: 8.0,
+      sourceRepo: "github.com/RitualDev-Lab/devpulse",
+      vulnerabilities: [],
+    },
+  ],
+};
+
+const SEVERITY_BADGE: Record<CveSeverity, string> = {
+  CRITICAL: "bg-red-500/20 text-red-300 border-red-500/40",
+  HIGH: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+  MEDIUM: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  LOW: "bg-zinc-800 text-zinc-300 border-zinc-700",
+};
+
+export function SecurityCenterFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
+  const { projects, customDomain, storageTier, isDemo } = workspace;
+  const initialData = useWorkspaceData(workspace.initialData);
+  const project = initialData.project;
+
+  const [report, setReport] = useState<EnrichedReport | null>(isDemo ? DEMO_SBOM_REPORT : null);
+  const [loading, setLoading] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState<"ALL" | CveSeverity>("ALL");
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const loadSbom = useCallback(async () => {
+    if (isDemo) {
+      setReport(DEMO_SBOM_REPORT);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/v1/security/sbom?projectId=${encodeURIComponent(project.id)}`);
+      const d = await res.json();
+      if (res.ok) setReport(d);
+    } finally {
+      setLoading(false);
+    }
+  }, [project.id, isDemo]);
+
+  useEffect(() => {
+    void loadSbom();
+  }, [loadSbom]);
+
+  const handleOpenFixPr = async (v: EnrichedVulnerability) => {
+    const key = `${v.packageName}:${v.id}`;
+    if (isDemo) {
+      setActionMsg(`Demo Fix PR preview: opens security remediation issue for ${v.packageName} (${v.id}) in GitHub.`);
+      return;
+    }
+    setBusyKey(key);
+    setActionMsg(null);
+    try {
+      const res = await fetch("/api/v1/security/sbom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          packageName: v.packageName,
+          ecosystem: v.ecosystem,
+          advisoryId: v.id,
+          fixedVersion: v.fixedVersion,
+        }),
+      });
+      const data = await res.json();
+      if (data.issueUrl) {
+        if (data.mode === "created") {
+          setActionMsg(`Created GitHub security fix issue #${data.issueNumber}.`);
+        } else {
+          window.open(data.issueUrl, "_blank", "noopener,noreferrer");
+          setActionMsg(data.message || "Opened pre-filled GitHub remediation issue.");
+        }
+      } else {
+        setActionMsg(data.error || data.message || "Unable to open Fix PR.");
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const handleExportCycloneDx = () => {
+    if (!report) return;
+    const cyclonedx = {
+      bomFormat: "CycloneDX",
+      specVersion: "1.5",
+      version: 1,
+      metadata: {
+        timestamp: report.generatedAt,
+        component: { name: project.name, type: "application" },
+      },
+      components: report.packages.map((p) => ({
+        type: "library",
+        name: p.packageName,
+        version: p.version || "latest",
+        licenses: p.license && p.license !== "UNKNOWN" ? [{ license: { id: p.license } }] : [],
+        purl: `pkg:${p.ecosystem}/${p.packageName}${p.version ? `@${p.version}` : ""}`,
+      })),
+      vulnerabilities: report.packages.flatMap((p) =>
+        p.vulnerabilities.map((v) => ({
+          id: v.id,
+          ratings: [{ severity: v.severity.toLowerCase() }],
+          description: v.summary,
+        }))
+      ),
+    };
+    const blob = new Blob([JSON.stringify(cyclonedx, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${project.slug}-sbom-cyclonedx.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const allVulns = (report?.packages || []).flatMap((p) => p.vulnerabilities);
+  const filteredVulns =
+    severityFilter === "ALL" ? allVulns : allVulns.filter((v) => v.severity === severityFilter);
+
+  return (
+    <WorkspaceShell
+      currentProject={{ ...project, telemetryApiKey: project.telemetryApiKey }}
+      projects={projects}
+      storageTier={storageTier}
+      customDomain={customDomain}
+      isDemo={isDemo}
+    >
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold text-white flex items-center gap-2.5">
+              <ShieldAlert className="w-6 h-6 text-emerald-400" />
+              <span>Security &amp; SBOM Vulnerability Center</span>
+            </h1>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Live OSV.dev CVEs, OpenSSF Scorecard ratings, SPDX license compliance matrix &amp; 1-click Fix PR automation
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void loadSbom()}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-200 transition"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${loading ? "animate-spin" : ""}`} />
+              <span>Rescan SBOM</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCycloneDx}
+              disabled={!report}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-xs font-semibold text-emerald-300 transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CycloneDX JSON</span>
+            </button>
+          </div>
+        </div>
+
+        {actionMsg && (
+          <div className="p-3 rounded-xl bg-cyan-950/50 border border-cyan-500/30 text-xs text-cyan-200">
+            {actionMsg}
+          </div>
+        )}
+
+        {/* Top KPI Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800">
+            <div className="text-[11px] text-zinc-400">Tracked SBOM Packages</div>
+            <div className="text-2xl font-bold text-white mt-1">{report?.totalPackages ?? 0}</div>
+          </div>
+          <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800">
+            <div className="text-[11px] text-zinc-400">Open CVEs (OSV.dev)</div>
+            <div className={`text-2xl font-bold mt-1 ${(report?.totalVulnerabilities || 0) > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+              {report?.totalVulnerabilities ?? 0}
+            </div>
+          </div>
+          <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800">
+            <div className="text-[11px] text-zinc-400">Critical / High Severity</div>
+            <div className="text-2xl font-bold text-red-400 mt-1">
+              {(report?.severityCounts.CRITICAL || 0) + (report?.severityCounts.HIGH || 0)}
+            </div>
+          </div>
+          <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800">
+            <div className="text-[11px] text-zinc-400">SPDX License Compliance</div>
+            <div className="text-2xl font-bold text-cyan-300 mt-1">
+              {report?.spdxApprovedCount ?? 0}/{report?.totalPackages ?? 0}
+            </div>
+          </div>
+        </div>
+
+        {/* CVE Severity Queue */}
+        <section className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-white">Vulnerability Advisories &amp; 1-Click Fix PRs</h2>
+              <p className="text-xs text-zinc-400">Filter OSV.dev CVEs by severity across all attached ecosystems</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 text-[11px]">
+              {(["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW"] as const).map((sev) => (
+                <button
+                  key={sev}
+                  type="button"
+                  onClick={() => setSeverityFilter(sev)}
+                  className={`px-2.5 py-1 rounded-lg border font-semibold transition ${
+                    severityFilter === sev
+                      ? "bg-indigo-600 text-white border-indigo-500"
+                      : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white"
+                  }`}
+                >
+                  {sev}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredVulns.length === 0 ? (
+            <div className="p-6 rounded-xl bg-zinc-950/70 border border-zinc-800 flex items-center gap-3 text-xs text-emerald-300">
+              <ShieldCheck className="w-5 h-5 shrink-0" />
+              <span>Zero known vulnerabilities matching the selected filter.</span>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {filteredVulns.map((v) => {
+                const key = `${v.packageName}:${v.id}`;
+                return (
+                  <div
+                    key={key}
+                    className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${SEVERITY_BADGE[v.severity]}`}>
+                          {v.severity}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-white">{v.id}</span>
+                        <span className="text-xs font-mono text-cyan-300">
+                          {v.packageName} ({v.ecosystem})
+                        </span>
+                        {v.fixedVersion && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">
+                            Fix &rarr; {v.fixedVersion}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-zinc-400">{v.summary}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <a
+                        href={v.referenceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[11px] text-zinc-300 inline-flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>OSV</span>
+                      </a>
+                      <button
+                        type="button"
+                        disabled={busyKey === key}
+                        onClick={() => void handleOpenFixPr(v)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <GitPullRequest className="w-3.5 h-3.5" />
+                        <span>Open Fix PR</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* SBOM Dependency Inventory & SPDX Matrix */}
+        <section className="rounded-2xl bg-zinc-900/90 border border-zinc-800 overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-zinc-800 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white">SBOM Dependency Tree &amp; SPDX Compliance Matrix</h2>
+              <p className="text-xs text-zinc-400">Aggregated across primary slots and multi-registry connectors</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-950/70 text-zinc-400 border-b border-zinc-800">
+                <tr>
+                  <th className="px-4 py-2.5">Package</th>
+                  <th className="px-4 py-2.5">Ecosystem</th>
+                  <th className="px-4 py-2.5">Version</th>
+                  <th className="px-4 py-2.5">License / SPDX</th>
+                  <th className="px-4 py-2.5">OpenSSF Scorecard</th>
+                  <th className="px-4 py-2.5">CVEs</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {(report?.packages || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-zinc-500">
+                      Attach packages in Packages to inspect their SBOM inventory and OSV advisories.
+                    </td>
+                  </tr>
+                ) : (
+                  (report?.packages || []).map((pkg) => (
+                    <tr key={`${pkg.ecosystem}:${pkg.packageName}`} className="hover:bg-zinc-950/40">
+                      <td className="px-4 py-2.5 font-mono text-white font-semibold">{pkg.packageName}</td>
+                      <td className="px-4 py-2.5 uppercase text-[11px] font-mono text-zinc-400">{pkg.ecosystem}</td>
+                      <td className="px-4 py-2.5 font-mono text-cyan-300">{pkg.version || "latest"}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-1.5">
+                          {pkg.spdxCompliant ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                          )}
+                          <Scale className="w-3 h-3 text-zinc-500" />
+                          <span className="font-mono text-zinc-200">{pkg.license}</span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {typeof pkg.scorecardOverall === "number" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-cyan-300 font-mono text-[11px]">
+                            <Award className="w-3 h-3 text-cyan-400" />
+                            {pkg.scorecardOverall.toFixed(1)}/10
+                          </span>
+                        ) : (
+                          <span className="text-zinc-500">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono">
+                        <span className={pkg.advisoryCount > 0 ? "text-amber-400 font-bold" : "text-emerald-400"}>
+                          {pkg.advisoryCount}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </WorkspaceShell>
+  );
+}

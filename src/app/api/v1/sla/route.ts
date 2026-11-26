@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { projects, uptimeChecks, uptimeIncidents, uptimeMonitors } from "@/db/schema";
+import { deployments, errorEvents, projects, uptimeChecks, uptimeIncidents, uptimeMonitors } from "@/db/schema";
 import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
@@ -269,6 +269,110 @@ export async function POST(req: NextRequest) {
       });
 
       return NextResponse.json({ success: true });
+    }
+
+    if (action === "generate_postmortem") {
+      const incidentId = String(body.incidentId || "");
+      const [existing] = await db
+        .select()
+        .from(uptimeIncidents)
+        .where(and(eq(uptimeIncidents.id, incidentId), eq(uptimeIncidents.projectId, projectId)))
+        .limit(1);
+
+      if (!existing) {
+        return NextResponse.json({ error: "Incident not found" }, { status: 404 });
+      }
+
+      const [recentDeploys, recentCrashes] = await Promise.all([
+        db
+          .select({
+            environment: deployments.environment,
+            version: deployments.version,
+            commitSha: deployments.commitSha,
+            deployedAt: deployments.deployedAt,
+          })
+          .from(deployments)
+          .where(eq(deployments.projectId, projectId))
+          .orderBy(desc(deployments.deployedAt))
+          .limit(3),
+        db
+          .select({
+            errorName: errorEvents.errorName,
+            message: errorEvents.message,
+            createdAt: errorEvents.createdAt,
+          })
+          .from(errorEvents)
+          .where(eq(errorEvents.projectId, projectId))
+          .orderBy(desc(errorEvents.createdAt))
+          .limit(4),
+      ]);
+
+      const deterministicDraft = [
+        `Incident: ${existing.title} (${existing.severity.toUpperCase()})`,
+        `Timeline: Started ${existing.startedAt}${existing.resolvedAt ? `, resolved ${existing.resolvedAt}` : " (ongoing)"}${existing.durationMinutes ? ` (${existing.durationMinutes}m duration)` : ""}.`,
+        recentDeploys.length > 0
+          ? `Correlated Deployments: ${recentDeploys.map((d) => `${d.version || "release"} on ${d.environment} (${d.commitSha?.slice(0, 7) || "no-sha"})`).join("; ")}.`
+          : `Correlated Deployments: None recorded near outage window.`,
+        recentCrashes.length > 0
+          ? `Related Crash Signals: ${recentCrashes.map((c) => `${c.errorName}: ${c.message.slice(0, 80)}`).join(" | ")}.`
+          : `Related Crash Signals: Zero matching unhandled exceptions during window.`,
+        existing.impactSummary ? `Customer Impact: ${existing.impactSummary}` : `Customer Impact: Monitored endpoints experienced elevated errors/latency.`,
+        `Follow-up Action Items: Verify cron heartbeat alerts, add synthetic edge probe assertion, and link rollback target.`,
+      ].join("\n");
+
+      let postmortem = deterministicDraft;
+      const geminiKey = process.env.GEMINI_API_KEY?.trim();
+      if (geminiKey) {
+        try {
+          const aiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: `Write a crisp, factual public-ready Root Cause Analysis & Postmortem summary (max 120 words) from these telemetry facts:\n\n${deterministicDraft}`,
+                      },
+                    ],
+                  },
+                ],
+              }),
+            }
+          );
+          if (aiRes.ok) {
+            const aiData = (await aiRes.json()) as {
+              candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+            };
+            const text = aiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (text) postmortem = text.slice(0, 3500);
+          }
+        } catch {
+          // keep deterministic draft
+        }
+      }
+
+      await db
+        .update(uptimeIncidents)
+        .set({ rcaText: postmortem, updatedAt: new Date().toISOString() })
+        .where(eq(uptimeIncidents.id, incidentId));
+
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        organizationId: access.project.organizationId,
+        workspaceId: access.project.workspaceId,
+        projectId,
+        action: "sla.postmortem_generated",
+        resourceType: "uptime_incident",
+        resourceId: incidentId,
+        headers: req.headers,
+        metadata: { aiAssisted: Boolean(geminiKey) },
+      });
+
+      return NextResponse.json({ success: true, postmortem });
     }
 
     return NextResponse.json({ error: "Unsupported SLA action" }, { status: 400 });

@@ -24,6 +24,7 @@ import { WorkspaceShell } from "../WorkspaceShell";
 import { useWorkspaceData } from "../WorkspaceCacheContext";
 import { RevenueStatsCard } from "../widgets/RevenueStatsCard";
 import { BillingModal } from "../BillingModal";
+import { BillingQuotaMeters } from "../widgets/BillingQuotaMeters";
 
 const PAYMENT_PROVIDERS = [
   { id: "lemonsqueezy", label: "Lemon Squeezy" },
@@ -124,6 +125,9 @@ export function RevenueFullView({ workspace }: { workspace: LoadedWorkspaceReady
             <span>Manage DevPulse Plan ({storageTier.toUpperCase()}) &amp; Sync</span>
           </button>
         </div>
+
+        {/* Live Plan Quota & Multi-Account Usage Meters */}
+        <BillingQuotaMeters isDemo={isDemo} onUpgrade={() => setIsBillingOpen(true)} />
 
         {/* Built-in + Combined Multi-Provider MRR Chart & Breakdown */}
         {initialData.revenueStats && (

@@ -1,9 +1,20 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
-import { users, projects, userCustomDomains, userStorageConfigs, billingEvents } from "@/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
-import { PLANS, ADDONS, getEffectiveEntitlements } from "@/lib/billing/plans";
+import {
+  users,
+  projects,
+  userCustomDomains,
+  userStorageConfigs,
+  billingEvents,
+  projectConnectors,
+  errorEvents,
+  pageviews,
+  structuredLogs,
+  organizationMembers,
+} from "@/db/schema";
+import { and, eq, desc, gte, inArray, sql } from "drizzle-orm";
+import { PLANS, ADDONS, getEffectiveEntitlements, getPlanQuotas } from "@/lib/billing/plans";
 import { fetchDodoCustomerPayments } from "@/lib/billing/dodo";
 import { apiError } from "@/lib/security/api-error";
 
@@ -22,10 +33,85 @@ export async function GET() {
       .where(eq(users.id, user.id))
       .limit(1);
 
-    const [{ projectCount }] = await db
-      .select({ projectCount: sql<number>`count(*)` })
+    const userProjects = await db
+      .select({ id: projects.id, organizationId: projects.organizationId })
       .from(projects)
       .where(eq(projects.userId, user.id));
+    const projectCount = userProjects.length;
+    const projectIds = userProjects.map((p) => p.id);
+    const orgIds = Array.from(
+      new Set(userProjects.map((p) => p.organizationId).filter(Boolean))
+    ) as string[];
+
+    const monthStartIso = `${new Date().toISOString().slice(0, 7)}-01T00:00:00.000Z`;
+    let packageConnectorCount = 0;
+    let heartbeatCount = 0;
+    let monthlyEventCount = 0;
+    let seatCount = 1;
+
+    if (projectIds.length > 0) {
+      const [pkgRes, hbRes, errRes, pvRes, logRes] = await Promise.all([
+        db
+          .select({ cnt: sql<number>`count(*)` })
+          .from(projectConnectors)
+          .where(
+            and(
+              inArray(projectConnectors.projectId, projectIds),
+              eq(projectConnectors.category, "package")
+            )
+          ),
+        db
+          .select({ cnt: sql<number>`count(*)` })
+          .from(projectConnectors)
+          .where(
+            and(
+              inArray(projectConnectors.projectId, projectIds),
+              eq(projectConnectors.provider, "cron_heartbeat")
+            )
+          ),
+        db
+          .select({ cnt: sql<number>`count(*)` })
+          .from(errorEvents)
+          .where(
+            and(
+              inArray(errorEvents.projectId, projectIds),
+              gte(errorEvents.createdAt, monthStartIso)
+            )
+          ),
+        db
+          .select({ cnt: sql<number>`count(*)` })
+          .from(pageviews)
+          .where(
+            and(
+              inArray(pageviews.projectId, projectIds),
+              gte(pageviews.createdAt, monthStartIso)
+            )
+          ),
+        db
+          .select({ cnt: sql<number>`count(*)` })
+          .from(structuredLogs)
+          .where(
+            and(
+              inArray(structuredLogs.projectId, projectIds),
+              gte(structuredLogs.createdAt, monthStartIso)
+            )
+          ),
+      ]);
+      packageConnectorCount = Number(pkgRes[0]?.cnt || 0);
+      heartbeatCount = Number(hbRes[0]?.cnt || 0);
+      monthlyEventCount =
+        Number(errRes[0]?.cnt || 0) +
+        Number(pvRes[0]?.cnt || 0) +
+        Number(logRes[0]?.cnt || 0);
+    }
+
+    if (orgIds.length > 0) {
+      const [memberRes] = await db
+        .select({ cnt: sql<number>`count(*)` })
+        .from(organizationMembers)
+        .where(inArray(organizationMembers.organizationId, orgIds));
+      seatCount = Math.max(1, Number(memberRes?.cnt || 1));
+    }
 
     const extraDomains = await db
       .select({ domain: userCustomDomains.domain })
@@ -67,7 +153,6 @@ export async function GET() {
       .orderBy(desc(billingEvents.createdAt))
       .limit(20);
 
-    // Also pull live Dodo Payments invoices if customer exists
     const livePayments = userRow?.dodoCustomerId
       ? await fetchDodoCustomerPayments(userRow.dodoCustomerId)
       : [];
@@ -116,7 +201,12 @@ export async function GET() {
         projectCount: Number(projectCount),
         customDomainCount: uniqueCustomDomains.size,
         storageUsedBytes: storageRow?.storageUsedBytes || 0,
+        packageConnectorCount,
+        heartbeatCount,
+        monthlyEventCount,
+        seatCount,
       },
+      quotas: getPlanQuotas(entitlements.plan.id),
       catalog: {
         plans: Object.values(PLANS),
         addons: Object.values(ADDONS),

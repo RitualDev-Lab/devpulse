@@ -5,6 +5,7 @@ import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts
 import { sendTransactionalEmail } from "@/lib/alerts/email";
 import { decryptSecret } from "@/lib/security/crypto";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { isProjectInMaintenanceWindow } from "./maintenance";
 import {
   evaluateHeartbeatDue,
   parseHeartbeatMetadata,
@@ -20,6 +21,9 @@ export {
 };
 
 async function dispatchHeartbeatAlert(projectId: string, monitorName: string, reason: string) {
+  const maintenance = await isProjectInMaintenanceWindow(projectId).catch(() => null);
+  if (maintenance) return;
+
   const [proj] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
   if (!proj) return;
 

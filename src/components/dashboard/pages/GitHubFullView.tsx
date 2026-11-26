@@ -803,6 +803,30 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
         </div>
       </div>
 
+      {/* PR Intelligence Bot Card */}
+      <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3 mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <GitPullRequest className="w-4 h-4 text-emerald-400" />
+              <span>GitHub / GitLab Pull Request Bot</span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Post Core Web Vitals preview budgets, new CVEs, and matching unresolved crashes onto open PRs &amp; MRs.
+            </p>
+          </div>
+          <code className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-cyan-300">
+            POST /api/v1/webhooks/pr-check
+          </code>
+        </div>
+        <pre className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 overflow-x-auto">
+{`curl -X POST https://devpulse.ritualdev.in/api/v1/webhooks/pr-check \\
+  -H "Authorization: Bearer $DEVPULSE_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"prNumber":42,"branch":"feat/checkout","previewUrl":"https://pr-42.pages.dev"}'`}
+        </pre>
+      </div>
+
       {/* Issue / PR Thread Inspector Modal (Portaled to document.body) */}
       {threadModal &&
         typeof document !== "undefined" &&

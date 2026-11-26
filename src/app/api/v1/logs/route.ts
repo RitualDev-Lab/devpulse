@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { errorEvents, structuredLogs } from "@/db/schema";
+import { errorEvents, projectConnectors, structuredLogs } from "@/db/schema";
 import { and, desc, eq, gte, lte, or } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
@@ -8,26 +8,34 @@ import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { parseLokiOrStructuredLogs } from "@/lib/logs/loki-parser";
 import { isPublicDemoProject } from "@/lib/security/demo-project";
 import { scrubTelemetryText, scrubTelemetryValue } from "@/lib/security/ingest-scrub";
+import { detectLogErrorSpike } from "@/lib/logs/spike-detector";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const projectId = req.nextUrl.searchParams.get("projectId");
+    let projectId = req.nextUrl.searchParams.get("projectId");
     const q = (req.nextUrl.searchParams.get("q") || "").trim().toLowerCase();
     const level = (req.nextUrl.searchParams.get("level") || "").trim().toLowerCase();
     const service = (req.nextUrl.searchParams.get("service") || "").trim().toLowerCase();
+    const sinceMsRaw = Number(req.nextUrl.searchParams.get("sinceMs") || 0);
     const aroundErrorId = req.nextUrl.searchParams.get("aroundErrorId");
 
-    if (!projectId) {
-      return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
-    }
-
-    if (!isPublicDemoProject(projectId)) {
-      const user = await getCurrentUser();
-      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      const access = await resolveProjectAccess(projectId, user);
-      if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const bearerKey = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+    if (bearerKey) {
+      const verified = await verifyTelemetryApiKey(bearerKey);
+      if (!verified) return NextResponse.json({ error: "Invalid telemetry API key" }, { status: 401 });
+      projectId = verified.id;
+    } else {
+      if (!projectId) {
+        return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+      }
+      if (!isPublicDemoProject(projectId)) {
+        const user = await getCurrentUser();
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const access = await resolveProjectAccess(projectId, user);
+        if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
     // Correlate log lines right before a crash (default +-2000ms window, highlighting <= 500ms prior)
@@ -77,14 +85,34 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const rawLogs = await db
-      .select()
-      .from(structuredLogs)
-      .where(eq(structuredLogs.projectId, projectId))
-      .orderBy(desc(structuredLogs.timestampMs))
-      .limit(250);
+    const [rawLogs, savedQueryRows] = await Promise.all([
+      db
+        .select()
+        .from(structuredLogs)
+        .where(eq(structuredLogs.projectId, projectId))
+        .orderBy(desc(structuredLogs.timestampMs))
+        .limit(250),
+      db
+        .select({
+          id: projectConnectors.id,
+          label: projectConnectors.label,
+          metadataJson: projectConnectors.metadataJson,
+        })
+        .from(projectConnectors)
+        .where(
+          and(
+            eq(projectConnectors.projectId, projectId),
+            eq(projectConnectors.category, "telemetry"),
+            eq(projectConnectors.provider, "saved_log_query")
+          )
+        )
+        .limit(20),
+    ]);
+
+    const spikeAnalysis = detectLogErrorSpike(rawLogs);
 
     const filtered = rawLogs.filter((l) => {
+      if (Number.isFinite(sinceMsRaw) && sinceMsRaw > 0 && l.timestampMs <= sinceMsRaw) return false;
       if (level && level !== "all" && l.level.toLowerCase() !== level) return false;
       if (service && service !== "all" && l.serviceName.toLowerCase() !== service) return false;
       if (q) {
@@ -95,11 +123,28 @@ export async function GET(req: NextRequest) {
     });
 
     const services = Array.from(new Set(rawLogs.map((l) => l.serviceName)));
+    const savedQueries = savedQueryRows.map((row) => {
+      let meta: { q?: string; level?: string; service?: string } = {};
+      try {
+        meta = row.metadataJson ? JSON.parse(row.metadataJson) : {};
+      } catch {
+        meta = {};
+      }
+      return {
+        id: row.id,
+        name: row.label,
+        q: meta.q || "",
+        level: meta.level || "all",
+        service: meta.service || "all",
+      };
+    });
 
     return NextResponse.json({
       logs: filtered.slice(0, 120),
       services,
       totalMatched: filtered.length,
+      spikeAnalysis,
+      savedQueries,
     });
   } catch (err) {
     console.error("GET /api/v1/logs error:", err);
@@ -110,6 +155,47 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    if (body.action === "save_query" && body.projectId) {
+      const user = await getCurrentUser();
+      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const access = await resolveProjectAccess(String(body.projectId), user);
+      if (!access || !access.canWrite) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      const name = String(body.name || "").trim().slice(0, 60);
+      if (!name) return NextResponse.json({ error: "Query name required" }, { status: 400 });
+      const id = `lq_${crypto.randomUUID().replace(/-/g, "").slice(0, 14)}`;
+      await db.insert(projectConnectors).values({
+        id,
+        projectId: access.project.id,
+        category: "telemetry",
+        provider: "saved_log_query",
+        label: name,
+        identifier: `query_${Date.now()}`,
+        metadataJson: JSON.stringify({
+          q: String(body.q || "").slice(0, 120),
+          level: String(body.level || "all"),
+          service: String(body.service || "all"),
+        }),
+      });
+      return NextResponse.json({ success: true, id }, { status: 201 });
+    }
+
+    if (body.action === "delete_query" && body.projectId && body.id) {
+      const user = await getCurrentUser();
+      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const access = await resolveProjectAccess(String(body.projectId), user);
+      if (!access || !access.canWrite) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      await db
+        .delete(projectConnectors)
+        .where(
+          and(
+            eq(projectConnectors.id, String(body.id)),
+            eq(projectConnectors.projectId, access.project.id),
+            eq(projectConnectors.provider, "saved_log_query")
+          )
+        );
+      return NextResponse.json({ success: true });
+    }
 
     // Sample emitter for authenticated dashboard users
     if (body.action === "emit_sample" && body.projectId) {

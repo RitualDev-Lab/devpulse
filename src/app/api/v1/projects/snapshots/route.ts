@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { readProjectSnapshots, refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
 import { isPublicDemoProject } from "@/lib/security/demo-project";
+import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
 import { apiError } from "@/lib/security/api-error";
 
 export const dynamic = "force-dynamic";
@@ -17,17 +18,22 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
-    const projectId = req.nextUrl.searchParams.get("projectId");
+    let projectId = req.nextUrl.searchParams.get("projectId");
     const forceRefresh = req.nextUrl.searchParams.get("refresh") === "1";
-
-    if (!projectId) {
-      return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
-    }
 
     let projectRow: typeof projects.$inferSelect | undefined;
     let userIdForOAuth: string | null = null;
 
-    if (isPublicDemoProject(projectId)) {
+    const bearerKey = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+    if (bearerKey) {
+      const verified = await verifyTelemetryApiKey(bearerKey);
+      if (!verified) return NextResponse.json({ error: "Invalid telemetry API key" }, { status: 401 });
+      const [row] = await db.select().from(projects).where(eq(projects.id, verified.id)).limit(1);
+      projectRow = row;
+      projectId = verified.id;
+    } else if (!projectId) {
+      return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+    } else if (isPublicDemoProject(projectId)) {
       const [demoRow] = await db
         .select()
         .from(projects)

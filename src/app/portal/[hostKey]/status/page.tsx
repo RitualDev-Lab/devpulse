@@ -35,7 +35,7 @@ export default async function PortalStatusHistoryPage(props: {
     );
   }
 
-  const { portal, history, incidents } = loaded;
+  const { portal, history, incidents, maintenanceWindows = [] } = loaded;
   const project = portal.activeProject;
   const brandName = portal.user.brandTitle || project?.name || portal.user.githubUsername;
   const hasActiveOutage = history.perMonitor.some((m) => m.lastStatus === "down");
@@ -70,6 +70,26 @@ export default async function PortalStatusHistoryPage(props: {
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Global Operational Banner */}
+        {maintenanceWindows.length > 0 && (
+          <div className="p-4 rounded-2xl border bg-amber-950/35 border-amber-600/40 text-amber-100 space-y-1.5">
+            {maintenanceWindows.map((mw) => (
+              <div key={mw.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="font-bold uppercase text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 mr-2">
+                    {mw.isActiveNow ? "Maintenance Active" : "Scheduled Maintenance"}
+                  </span>
+                  <span className="font-semibold text-white">{mw.title}</span>
+                  {mw.reason && <span className="text-amber-200/80 ml-2">— {mw.reason}</span>}
+                </div>
+                <span className="font-mono text-[11px] text-amber-200/75">
+                  {new Date(mw.startsAt).toISOString().slice(0, 16).replace("T", " ")} UTC &rarr;{" "}
+                  {new Date(mw.endsAt).toISOString().slice(0, 16).replace("T", " ")} UTC
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div
           className={`p-5 rounded-2xl border flex flex-wrap items-center justify-between gap-4 ${
             hasActiveOutage

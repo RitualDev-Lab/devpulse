@@ -3,6 +3,7 @@ import { uptimeChecks, uptimeIncidents, uptimeMonitors } from "@/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { loadPortalData } from "@/lib/domains/portal-loader";
 import { build90DayStatusHistory } from "@/lib/monitors/sla";
+import { listProjectMaintenanceWindows } from "@/lib/monitors/maintenance";
 
 export async function loadPortalStatusHistory(
   hostKey: string,
@@ -17,10 +18,11 @@ export async function loadPortalStatusHistory(
       portal,
       history: build90DayStatusHistory([], [], []),
       incidents: [],
+      maintenanceWindows: [],
     };
   }
 
-  const [monitors, checks, incidents] = await Promise.all([
+  const [monitors, checks, incidents, maintenanceWindows] = await Promise.all([
     db.select().from(uptimeMonitors).where(eq(uptimeMonitors.projectId, active.id)).limit(25),
     db
       .select()
@@ -36,6 +38,7 @@ export async function loadPortalStatusHistory(
       )
       .orderBy(desc(uptimeIncidents.startedAt))
       .limit(60),
+    listProjectMaintenanceWindows(active.id).catch(() => []),
   ]);
 
   const cutoffIso = new Date(Date.now() - 90 * 86400_000).toISOString();
@@ -48,5 +51,6 @@ export async function loadPortalStatusHistory(
     portal,
     history,
     incidents: recent90Incidents,
+    maintenanceWindows: maintenanceWindows.filter((w) => w.isActiveNow || w.isUpcoming),
   };
 }
