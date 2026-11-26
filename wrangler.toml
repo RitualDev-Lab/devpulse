@@ -8,4 +8,12 @@ compatibility_flags = ["nodejs_compat"]
 #   TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
 #   NEXT_PUBLIC_APP_URL, CLOUDFLARE_ZONE_ID, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, CRON_SECRET, ...
 [vars]
+NEXT_PUBLIC_APP_URL = "https://devpulse.ritualdev.in"
+TURSO_DATABASE_URL = "libsql://devpulse-ritual-dev-git.aws-us-east-2.turso.io"
+NEXT_PUBLIC_SUPABASE_URL = "https://udgiyoakgxremqeviwng.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_oGnWgyQqq-0v1Tot0JpUdw_sUyj_XqO"
+GITHUB_CLIENT_ID = "Ov23liPtuy9zT2SPXxL1"
 R2_BUCKET_NAME = "devpulse-storage"
+CLOUDFLARE_ZONE_ID = "0229d02254a02cce9a93f18d960086a7"
+DEVPULSE_PUBLIC_DEMO_PROJECT = "true"
+DODO_PAYMENTS_ENVIRONMENT = "live"
