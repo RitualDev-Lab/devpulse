@@ -133,7 +133,8 @@ export default {
         try {
             console.log("Cloudflare Cron Trigger fired at:", new Date(event.scheduledTime).toISOString(), "cron:", event.cron);
             const cronBaseUrl = (env && env.NEXT_PUBLIC_APP_URL) || (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_APP_URL) || "http://localhost:3000";
-            const dummyRequest = new Request(cronBaseUrl.replace(/\/$/, "") + "/api/cron/sync", {
+            const normalizedCronBase = cronBaseUrl.endsWith("/") ? cronBaseUrl.slice(0, -1) : cronBaseUrl;
+            const dummyRequest = new Request(normalizedCronBase + "/api/cron/sync", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
