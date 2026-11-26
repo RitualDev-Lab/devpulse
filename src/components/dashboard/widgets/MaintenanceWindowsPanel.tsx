@@ -9,8 +9,8 @@ const DEMO_WINDOWS: MaintenanceWindowRecord[] = [
     id: "demo_mw_1",
     title: "Turso Primary Region Storage Migration",
     reason: "Zero-downtime replication cutover; suppressing transient heartbeat alerts for 15 minutes.",
-    startsAt: new Date(Date.now() + 3600_000 * 6).toISOString(),
-    endsAt: new Date(Date.now() + 3600_000 * 6.25).toISOString(),
+    startsAt: "2026-12-01T02:00:00.000Z",
+    endsAt: "2026-12-01T02:15:00.000Z",
     suppressAlerts: true,
     isActiveNow: false,
     isUpcoming: true,
@@ -219,8 +219,9 @@ export function MaintenanceWindowsPanel({
                   )}
                 </div>
                 {w.reason && <p className="text-xs text-zinc-400">{w.reason}</p>}
-                <div className="text-[11px] font-mono text-zinc-500">
-                  {new Date(w.startsAt).toLocaleString()} &rarr; {new Date(w.endsAt).toLocaleString()}
+                <div className="text-[11px] font-mono text-zinc-500" suppressHydrationWarning>
+                  {new Date(w.startsAt).toISOString().slice(0, 16).replace("T", " ")} UTC &rarr;{" "}
+                  {new Date(w.endsAt).toISOString().slice(0, 16).replace("T", " ")} UTC
                 </div>
               </div>
               {!isDemo && (
