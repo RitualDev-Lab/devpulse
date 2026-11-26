@@ -260,8 +260,20 @@ export async function POST(req: NextRequest) {
       await confirmPendingUpload(attachmentUrl, project.userId);
     }
 
-    const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? scrubBreadcrumbs(body.breadcrumbs.slice(-50)) : null;
-    const breadcrumbsJson = rawBreadcrumbs ? JSON.stringify(rawBreadcrumbs).slice(0, 12000) : null;
+    const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? scrubBreadcrumbs(body.breadcrumbs.slice(-50)) : [];
+    const rawReplay = Array.isArray(body.replayTimeline) ? body.replayTimeline.slice(-80) : [];
+    const replayBreadcrumbs = rawReplay.map((f: any) => ({
+      timestamp: typeof f?.t === "number" ? new Date(f.t).toISOString() : new Date().toISOString(),
+      category: "replay",
+      level: typeof f?.kind === "string" ? f.kind.slice(0, 16) : "dom",
+      message: scrubTelemetryText(String(f?.label || "event")).slice(0, 200),
+      data: {
+        offsetMs: typeof f?.offsetMs === "number" ? f.offsetMs : 0,
+        detail: f?.detail ? scrubTelemetryText(String(f.detail)).slice(0, 240) : undefined,
+      },
+    }));
+    const mergedTimeline = [...rawBreadcrumbs, ...replayBreadcrumbs];
+    const breadcrumbsJson = mergedTimeline.length > 0 ? JSON.stringify(mergedTimeline).slice(0, 16000) : null;
     let commitSha: string | null = body.commitSha || body.commit_sha ? String(body.commitSha || body.commit_sha).slice(0, 64) : null;
     const traceId: string | null = body.traceId || body.trace_id ? String(body.traceId || body.trace_id).slice(0, 64) : null;
     const routePath: string | null = body.routePath || body.route || body.path ? String(body.routePath || body.route || body.path).slice(0, 200) : null;
@@ -334,10 +346,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Combine heavy diagnostic payload (stackTrace + terminal output logs)
-    const combinedPayload = rawLogs
+    // Combine heavy diagnostic payload (stackTrace + terminal output logs + R2 session replay)
+    const replayDump =
+      rawReplay.length > 0
+        ? `\n\n--- SESSION REPLAY TIMELINE (${rawReplay.length} frames) ---\n${JSON.stringify(replayBreadcrumbs)}`
+        : "";
+    const baseLogs = rawLogs
       ? `${rawStack ? rawStack + "\n\n" : ""}--- TERMINAL OUTPUT LOGS ---\n${rawLogs}`
-      : rawStack;
+      : rawStack || "";
+    const combinedPayload = baseLogs || replayDump ? `${baseLogs}${replayDump}`.trim() : null;
 
     const payloadBytes = combinedPayload ? new TextEncoder().encode(combinedPayload).byteLength : 0;
 
@@ -347,7 +364,7 @@ export async function POST(req: NextRequest) {
     let quotaExceeded = false;
 
     // Tiered Storage Architecture: Offload heavy 4KB-100KB+ payloads to Cloudflare R2 / BYOS
-    if (payloadBytes > R2_OFFLOAD_THRESHOLD_BYTES || rawLogs.length > 0) {
+    if (combinedPayload && (payloadBytes > R2_OFFLOAD_THRESHOLD_BYTES || rawLogs.length > 0 || rawReplay.length > 0)) {
       const quota = await checkAndReserveStorageQuota(project.userId, payloadBytes);
       if (quota.allowed && quota.context.credentials) {
         const key = `${quota.context.prefix}/${project.userId}/${project.id}/crashes/${eventId}.log`;

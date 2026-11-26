@@ -317,6 +317,9 @@ export async function POST(req: NextRequest) {
     ]);
 
     if (hasCustomMetric) {
+      const normalizedVitalMatch = rawMetricName.trim().toUpperCase().match(/^(?:WEB_VITAL_)?(LCP|INP|CLS|TTFB)$/);
+      const props = (body.properties && typeof body.properties === "object" ? body.properties : {}) as Record<string, unknown>;
+      const vitalMetric = normalizedVitalMatch?.[1] || (typeof props.metric === "string" && ["LCP", "INP", "CLS", "TTFB"].includes(props.metric.toUpperCase()) ? props.metric.toUpperCase() : null);
       const metricId = `dm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       await db.insert(dailyMetrics).values({
         id: metricId,
@@ -326,7 +329,17 @@ export async function POST(req: NextRequest) {
         date: todayStr,
         value: Math.round(rawMetricValue),
         metadataJson: JSON.stringify({
-          kind: "custom_metric",
+          kind: vitalMetric ? "web_vital" : "custom_metric",
+          ...(vitalMetric
+            ? {
+                vitalMetric,
+                vitalValue: rawMetricValue,
+                route: typeof props.path === "string" ? props.path : path,
+                country,
+                browser,
+                release: appVersion || "unreleased",
+              }
+            : {}),
           metricName: rawMetricName.trim().slice(0, 64),
           metricValue: rawMetricValue,
           properties: body.properties || null,

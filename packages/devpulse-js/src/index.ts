@@ -2,10 +2,18 @@ export type BreadcrumbLevel = "debug" | "info" | "warning" | "error";
 
 export interface Breadcrumb {
   timestamp: string;
-  category: "http" | "console" | "ui.click" | "navigation" | "custom";
+  category: "http" | "console" | "ui.click" | "navigation" | "replay" | "custom";
   level: BreadcrumbLevel;
   message: string;
   data?: Record<string, unknown>;
+}
+
+export interface ReplayFrame {
+  t: number;
+  offsetMs: number;
+  kind: "dom" | "click" | "nav" | "console" | "network";
+  label: string;
+  detail?: string;
 }
 
 export interface DevPulseConfig {
@@ -68,6 +76,7 @@ export class DevPulseClient {
   > &
     DevPulseConfig;
   private breadcrumbs: Breadcrumb[] = [];
+  private replayFrames: ReplayFrame[] = [];
   private queue: QueuedBeacon[] = [];
   private initialized = false;
   private flushing = false;
@@ -138,6 +147,30 @@ export class DevPulseClient {
 
   public getBreadcrumbs(): Breadcrumb[] {
     return [...this.breadcrumbs];
+  }
+
+  public recordReplayFrame(
+    kind: ReplayFrame["kind"],
+    label: string,
+    detail?: string
+  ): void {
+    const now = Date.now();
+    const shouldScrub = this.config.scrubPii !== false;
+    const cleanLabel = (shouldScrub ? redactPiiString(label) : label).slice(0, 160);
+    const cleanDetail = detail ? (shouldScrub ? redactPiiString(detail) : detail).slice(0, 240) : undefined;
+    this.replayFrames.push({ t: now, offsetMs: 0, kind, label: cleanLabel, detail: cleanDetail });
+    const cutoff = now - 20_000;
+    while (this.replayFrames.length > 80 || (this.replayFrames.length > 0 && this.replayFrames[0].t < cutoff)) {
+      this.replayFrames.shift();
+    }
+  }
+
+  public getReplayTimeline(): ReplayFrame[] {
+    const crashTime = Date.now();
+    return this.replayFrames.map((f) => ({
+      ...f,
+      offsetMs: f.t - crashTime,
+    }));
   }
 
   public async trackReleaseSession(version: string, commitSha?: string): Promise<boolean> {
@@ -261,6 +294,7 @@ export class DevPulseClient {
       os: this.detectOs(),
       environment: this.config.environment,
       breadcrumbs: this.getBreadcrumbs(),
+      replayTimeline: this.getReplayTimeline(),
       ...(extra?.flagKey ? { flagKey: extra.flagKey } : {}),
       ...(extra?.flagVariant ? { flagVariant: extra.flagVariant } : {}),
       ...(extra?.flagUserId ? { flagUserId: extra.flagUserId } : {}),
@@ -453,6 +487,25 @@ export class DevPulseClient {
           level: "info",
           message: `Clicked <${el.tagName?.toLowerCase()}> ${label || ""}`.trim(),
         });
+        this.recordReplayFrame("click", `<${el.tagName?.toLowerCase()}> ${label || ""}`.trim());
+      });
+
+      if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+        let lastDomAt = 0;
+        const domObs = new MutationObserver((mutations) => {
+          const now = Date.now();
+          if (now - lastDomAt < 250) return;
+          lastDomAt = now;
+          const m = mutations[0];
+          const target = m?.target as HTMLElement | null;
+          const tag = target?.tagName?.toLowerCase() || "dom";
+          this.recordReplayFrame("dom", `DOM ${m?.type || "mutation"} on <${tag}>`);
+        });
+        domObs.observe(document.body, { childList: true, subtree: true });
+      }
+
+      window.addEventListener("popstate", () => {
+        this.recordReplayFrame("nav", window.location.pathname);
       });
 
       window.addEventListener("online", () => {
@@ -510,6 +563,25 @@ export class DevPulseClient {
       const navEntries = performance.getEntriesByType?.("navigation") as Array<PerformanceNavigationTiming> | undefined;
       if (navEntries && navEntries[0]?.responseStart > 0) {
         void this.trackWebVital("TTFB", navEntries[0].responseStart);
+      }
+
+      try {
+        let maxInp = 0;
+        const inpObs = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries() as Array<PerformanceEntry & { duration?: number }>) {
+            if (typeof entry.duration === "number" && entry.duration > maxInp) {
+              maxInp = entry.duration;
+            }
+          }
+        });
+        inpObs.observe({ type: "event", buffered: true });
+        window.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "hidden" && maxInp > 0) {
+            void this.trackWebVital("INP", maxInp);
+          }
+        });
+      } catch {
+        // Optional INP observer
       }
 
       window.addEventListener("visibilitychange", () => {

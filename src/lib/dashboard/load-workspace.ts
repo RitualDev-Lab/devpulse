@@ -35,6 +35,7 @@ import { fetchVsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats } from "@/lib/integrations/mcp";
 import { fetchRevenueStats } from "@/lib/integrations/revenue";
 import { computeP95Latency, computeUptimeBasisPoints } from "@/lib/monitors/checker";
+import { aggregateWebVitals, type RawWebVitalSample, type RumWebVitalsSummary } from "@/lib/analytics/rum-vitals";
 import { readProjectSnapshots, refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
 import { loadAnalyticsSummarySql } from "@/lib/analytics/rollup";
 import type { ProjectSummary } from "@/components/dashboard/ProjectWorkspaceSwitcher";
@@ -107,6 +108,7 @@ export interface LoadedWorkspaceReady {
       dailyCohorts?: Array<{ date: string; web: number; appCli: number; total: number }>;
       topPages?: Array<{ path: string; count: number }>;
       topCustomEvents?: Array<{ event: string; count: number }>;
+      webVitals?: RumWebVitalsSummary;
     };
     staleSnapshots?: boolean;
     snapshotUpdatedAt?: string | null;
@@ -300,7 +302,7 @@ export async function loadDashboardWorkspace(
   const needRevenue = needAll || scope === "revenue";
   const needSettings = needAll || scope === "settings";
   const needConnectors = needRevenue || needPackages || needSettings || needGithub;
-  const needDailyMetrics = needGithub || needPackages || needRevenue;
+  const needDailyMetrics = needGithub || needPackages || needRevenue || needAnalytics;
   const needExternal = needGithub || needPackages || needRevenue;
 
   // Single parallel DB wave (~40-100ms total): snapshots + connectors + hot indexed telemetry tables
@@ -572,7 +574,34 @@ export async function loadDashboardWorkspace(
     extraPackages,
     staleSnapshots,
     snapshotUpdatedAt,
-    analyticsSummary,
+    analyticsSummary: (() => {
+      const vitalSamples: RawWebVitalSample[] = [];
+      for (const m of rawDailyMetrics || []) {
+        if (!m.metadataJson) continue;
+        try {
+          const meta = JSON.parse(m.metadataJson);
+          if (meta?.kind === "web_vital" && meta.vitalMetric) {
+            const metric = String(meta.vitalMetric).toUpperCase();
+            if (metric === "LCP" || metric === "INP" || metric === "CLS" || metric === "TTFB") {
+              vitalSamples.push({
+                metric,
+                value: Number(meta.vitalValue ?? m.value),
+                route: typeof meta.route === "string" ? meta.route : "/",
+                country: typeof meta.country === "string" ? meta.country : "Global",
+                browser: typeof meta.browser === "string" ? meta.browser : "other",
+                release: typeof meta.release === "string" ? meta.release : "unreleased",
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return {
+        ...analyticsSummary,
+        webVitals: aggregateWebVitals(vitalSamples),
+      };
+    })(),
     uptimeSummary: {
       monitors: (rawMonitors || []).map((m) => ({
         id: m.id,

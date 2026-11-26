@@ -17,6 +17,7 @@ import { WebAnalyticsCard } from "../widgets/WebAnalyticsCard";
 import { LanguageSdkTabs } from "../LanguageSdkTabs";
 import { ExternalAnalyticsHub } from "../ExternalAnalyticsHub";
 import { EngagementAnalyticsPanel } from "../EngagementAnalyticsPanel";
+import { RumWebVitalsPanel } from "../widgets/RumWebVitalsPanel";
 
 export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { projects, customDomain, storageTier, isDemo } = workspace;
@@ -161,6 +162,7 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
         </div>
 
         <WebAnalyticsCard summary={summary || null} projectSlug={project.slug} />
+        <RumWebVitalsPanel summary={summary?.webVitals || null} />
         <EngagementAnalyticsPanel projectId={project.id} />
 
         {/* Custom Event Metrics (trackMetric("active_jobs", 42)) */}

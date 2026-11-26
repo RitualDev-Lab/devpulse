@@ -205,6 +205,22 @@ export function ErrorStreamCard({
   const [loadingR2, setLoadingR2] = useState(false);
 
   const [symbolicating, setSymbolicating] = useState(false);
+  const [diagnosingCommit, setDiagnosingCommit] = useState(false);
+  const [commitDiagnosis, setCommitDiagnosis] = useState<{
+    commitSha: string | null;
+    commitUrl: string | null;
+    commitAuthor: string | null;
+    commitMessage: string | null;
+    deploy: { version: string; provider: string; status: string; deployedAt: string } | null;
+    changedFiles: Array<{ filename: string; status: string; patch?: string }>;
+    flagCorrelation: { flagKey: string; flagVariant: string; exposures: number; isEnabled: boolean; status: string } | null;
+    rootCause: string;
+    fixSuggestion: string;
+    codeSnippet?: string | null;
+  } | null>(null);
+  const [rollingBackFlag, setRollingBackFlag] = useState(false);
+  const [replayIdx, setReplayIdx] = useState<number>(0);
+  const [playingReplay, setPlayingReplay] = useState(false);
   const [symbolicatedResult, setSymbolicatedResult] = useState<{
     symbolicatedCount: number;
     totalFrames: number;
@@ -295,6 +311,43 @@ export function ErrorStreamCard({
       }
     } finally {
       setAnalyzingAi(false);
+    }
+  };
+
+  const runCommitDiagnose = async (errorId: string) => {
+    setDiagnosingCommit(true);
+    setCommitDiagnosis(null);
+    try {
+      const res = await fetch("/api/v1/crashes/diagnose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, errorId, action: "diagnose" }),
+      });
+      const d = await res.json();
+      if (res.ok && d.diagnosis) {
+        setCommitDiagnosis(d.diagnosis);
+      }
+    } finally {
+      setDiagnosingCommit(false);
+    }
+  };
+
+  const triggerFlagRollback = async (flagKey: string) => {
+    setRollingBackFlag(true);
+    try {
+      const res = await fetch("/api/v1/crashes/diagnose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, action: "rollback_flag", flagKey }),
+      });
+      if (res.ok && commitDiagnosis?.flagCorrelation) {
+        setCommitDiagnosis({
+          ...commitDiagnosis,
+          flagCorrelation: { ...commitDiagnosis.flagCorrelation, isEnabled: false, status: "rolled_back" },
+        });
+      }
+    } finally {
+      setRollingBackFlag(false);
     }
   };
 
@@ -946,18 +999,77 @@ export function ErrorStreamCard({
                   category?: string;
                   level?: string;
                   message?: string;
+                  data?: { offsetMs?: number; detail?: string };
                 }>;
                 if (!Array.isArray(crumbs) || crumbs.length === 0) return null;
+                const activeIdx = Math.min(Math.max(0, replayIdx), crumbs.length - 1);
+                const activeFrame = crumbs[activeIdx];
                 return (
-                  <div className="mb-3 p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
-                      Breadcrumbs Timeline ({crumbs.length})
-                    </span>
+                  <div className="mb-3 p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                        Session Replay &amp; Breadcrumbs ({crumbs.length} frames)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (playingReplay) {
+                              setPlayingReplay(false);
+                              return;
+                            }
+                            setPlayingReplay(true);
+                            let cur = 0;
+                            setReplayIdx(0);
+                            const timer = setInterval(() => {
+                              cur += 1;
+                              if (cur >= crumbs.length) {
+                                clearInterval(timer);
+                                setPlayingReplay(false);
+                              } else {
+                                setReplayIdx(cur);
+                              }
+                            }, 350);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/40 text-emerald-200 text-[10px] font-semibold"
+                        >
+                          <Play className="w-2.5 h-2.5" />
+                          <span>{playingReplay ? "Playing..." : "Replay"}</span>
+                        </button>
+                        <input
+                          type="range"
+                          min={0}
+                          max={Math.max(0, crumbs.length - 1)}
+                          value={activeIdx}
+                          onChange={(e) => setReplayIdx(Number(e.target.value))}
+                          className="w-24 accent-indigo-500"
+                          aria-label="Scrub replay frames"
+                        />
+                      </div>
+                    </div>
+                    {activeFrame && (
+                      <div className="px-2.5 py-1.5 rounded-lg bg-indigo-950/35 border border-indigo-500/30 text-[11px] font-mono text-indigo-200 flex items-center justify-between gap-2">
+                        <span className="truncate">
+                          Frame #{activeIdx + 1} [{activeFrame.category === "replay" ? activeFrame.level : activeFrame.category}]: {activeFrame.message}
+                        </span>
+                        {typeof activeFrame.data?.offsetMs === "number" && (
+                          <span className="text-[10px] text-indigo-300 shrink-0">
+                            {(activeFrame.data.offsetMs / 1000).toFixed(1)}s
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="space-y-1 max-h-28 overflow-y-auto">
                       {crumbs.map((c, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-[11px] font-mono">
+                        <div
+                          key={idx}
+                          onClick={() => setReplayIdx(idx)}
+                          className={`flex items-center gap-2 text-[11px] font-mono px-1.5 py-0.5 rounded cursor-pointer ${
+                            idx === activeIdx ? "bg-indigo-600/20 border border-indigo-500/40" : ""
+                          }`}
+                        >
                           <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-cyan-300 shrink-0">
-                            {c.category || "log"}
+                            {c.category === "replay" ? `replay:${c.level || "dom"}` : c.category || "log"}
                           </span>
                           <span className="text-zinc-300 truncate flex-1">{c.message}</span>
                           {c.timestamp && (
@@ -1015,8 +1127,70 @@ export function ErrorStreamCard({
                     {analyzingAi ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                     <span>Analyze with Gemini</span>
                   </button>
+                  <button
+                    type="button"
+                    disabled={diagnosingCommit}
+                    onClick={() => runCommitDiagnose(inspectedEvent.id)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/35 border border-rose-500/40 text-rose-200 text-[11px] font-semibold"
+                  >
+                    {diagnosingCommit ? <Loader2 className="w-3 h-3 animate-spin" /> : <GitBranch className="w-3 h-3" />}
+                    <span>Diagnose Commit</span>
+                  </button>
                 </div>
               </div>
+
+              {/* Commit-to-Crash AI Regression Correlation + 1-Click Flag Rollback */}
+              {commitDiagnosis && (
+                <div className="p-3.5 rounded-xl bg-rose-950/25 border border-rose-500/40 space-y-2 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-bold text-rose-200 flex items-center gap-1.5">
+                      <GitBranch className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Commit-to-Crash Regression Correlation</span>
+                    </div>
+                    {commitDiagnosis.commitSha && (
+                      <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-amber-300">
+                        commit {commitDiagnosis.commitSha.slice(0, 7)}
+                        {commitDiagnosis.deploy ? ` • ${commitDiagnosis.deploy.version}` : ""}
+                      </span>
+                    )}
+                  </div>
+                  {commitDiagnosis.commitMessage && (
+                    <div className="text-[11px] font-mono text-zinc-300">
+                      {commitDiagnosis.commitAuthor ? `@${commitDiagnosis.commitAuthor}: ` : ""}
+                      {commitDiagnosis.commitMessage}
+                    </div>
+                  )}
+                  {commitDiagnosis.changedFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {commitDiagnosis.changedFiles.map((f) => (
+                        <span key={f.filename} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-cyan-300">
+                          {f.filename} ({f.status})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {commitDiagnosis.flagCorrelation && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800">
+                      <span className="text-[11px] font-mono text-violet-300">
+                        Correlated Flag: <strong>{commitDiagnosis.flagCorrelation.flagKey}</strong>={commitDiagnosis.flagCorrelation.flagVariant} ({commitDiagnosis.flagCorrelation.exposures} exposures &bull; {commitDiagnosis.flagCorrelation.status})
+                      </span>
+                      {commitDiagnosis.flagCorrelation.isEnabled ? (
+                        <button
+                          type="button"
+                          disabled={rollingBackFlag}
+                          onClick={() => triggerFlagRollback(commitDiagnosis.flagCorrelation!.flagKey)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold disabled:opacity-50"
+                        >
+                          {rollingBackFlag ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                          <span>1-Click Rollback Flag</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase text-emerald-300">Rolled Back</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* AI Root Cause & Suggested Fix */}
               {inspectedEvent.aiRootCause && (

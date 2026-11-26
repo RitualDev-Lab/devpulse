@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncAllProjects } from "@/lib/sync/sync-metrics";
 import { runDueUptimeChecks } from "@/lib/monitors/checker";
+import { checkOverdueCronHeartbeats } from "@/lib/monitors/heartbeat";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -48,6 +49,7 @@ async function handleSync(req: NextRequest) {
       results,
       snapshotSummary,
       uptimeSummary,
+      heartbeatSummary,
       escalationSummary,
       syntheticsSummary,
       prunedRateLimits,
@@ -59,6 +61,7 @@ async function handleSync(req: NextRequest) {
         console.error("Uptime check failed:", e);
         return { checked: 0, error: "Uptime check failed" };
       }),
+      checkOverdueCronHeartbeats().catch(() => ({ checked: 0, alerted: 0 })),
       processPendingEscalations().catch(() => ({ escalated: 0 })),
       runDueSyntheticTests().catch(() => ({ totalActive: 0, executed: 0 })),
       pruneExpiredRateLimits(),
@@ -96,6 +99,7 @@ async function handleSync(req: NextRequest) {
       projectsSynced: results.length,
       snapshotSummary,
       uptimeSummary,
+      heartbeatSummary,
       escalationSummary,
       syntheticsSummary,
       maintenance: {
