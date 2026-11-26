@@ -12,6 +12,12 @@ type LangTabId =
   | "python"
   | "rust"
   | "go"
+  | "dotnet"
+  | "java"
+  | "php"
+  | "swift"
+  | "cpp"
+  | "ruby"
   | "desktop"
   | "react_native"
   | "flutter"
@@ -31,7 +37,13 @@ const LANG_TABS: Array<{ id: LangTabId; label: string; file: string }> = [
   { id: "nodejs", label: "Node.js", file: "telemetry.mjs" },
   { id: "python", label: "Python", file: "telemetry.py" },
   { id: "rust", label: "Rust", file: "src/telemetry.rs" },
-  { id: "go", label: "Go", file: "telemetry.go" },
+  { id: "go", label: "Go (devpulse-go)", file: "telemetry.go" },
+  { id: "dotnet", label: "C# / .NET", file: "Program.cs" },
+  { id: "java", label: "Java / Kotlin / Android", file: "Telemetry.java" },
+  { id: "php", label: "PHP / Laravel", file: "bootstrap.php" },
+  { id: "swift", label: "Swift / iOS", file: "AppDelegate.swift" },
+  { id: "cpp", label: "C / C++17", file: "telemetry.cpp" },
+  { id: "ruby", label: "Ruby / Rails", file: "config/initializers/devpulse.rb" },
   { id: "desktop", label: "Tauri / Electron", file: "main.ts" },
   { id: "react_native", label: "React Native", file: "App.tsx" },
   { id: "flutter", label: "Flutter", file: "lib/devpulse.dart" },
@@ -53,7 +65,19 @@ function buildLanguageSnippet(tab: LangTabId, apiKey?: string | null): string {
     case "rust":
       return `// packages/devpulse-rs (Cargo.toml: devpulse-rs = "0.2.0")\nuse devpulse_rs::{DevPulseClient, DevPulseConfig};\n\nlet pulse = DevPulseClient::new(DevPulseConfig {\n  api_key: "${key}".into(),\n  release: Some("v1.0.0".into()),\n  scrub_pii: true,\n  ..Default::default()\n});\npulse.clone().install_panic_hook();\npulse.track_metric("active_jobs", 42.0);`;
     case "go":
-      return `// Standard library net/http — zero third-party deps\npayload := []byte(\`{"project":"${key}","metricName":"active_jobs","metricValue":42,"sourceType":"app","os":"linux"}\`)\nhttp.Post("${PUBLIC_APP_URL}/api/v1/analytics", "application/json", bytes.NewBuffer(payload))`;
+      return `// go get github.com/RitualDev-Lab/devpulse-go (net/http, Gin, Fiber, Echo + OTLP)\nimport devpulse "github.com/RitualDev-Lab/devpulse-go"\n\npulse := devpulse.New(devpulse.Config{APIKey: "${key}", Endpoint: "${PUBLIC_APP_URL}", Release: "1.0.0", ScrubPII: true})\npulse.TrackMetric("active_jobs", 42)\nhttp.ListenAndServe(":8080", pulse.RecoverMiddleware(mux))`;
+    case "dotnet":
+      return `// dotnet add package DevPulse.Sdk (ASP.NET Core, Minimal APIs, MAUI, WPF)\nusing DevPulse;\n\nvar pulse = new DevPulseClient(new DevPulseOptions("${key}", "${PUBLIC_APP_URL}", Release: "1.0.0"));\npulse.AttachGlobalHandlers();\nawait pulse.TrackMetricAsync("active_jobs", 42);`;
+    case "java":
+      return `// Maven: in.ritualdev:devpulse-jvm:1.0.0 (Spring Boot, Ktor, Android)\nimport in.ritualdev.devpulse.DevPulseClient;\n\nvar pulse = new DevPulseClient("${key}", "${PUBLIC_APP_URL}", "1.0.0", "proguard-v1", true);\npulse.installUncaughtHandler();\npulse.trackMetric("active_jobs", 42.0);`;
+    case "php":
+      return `<?php\n// composer require ritualdev/devpulse (Laravel, Symfony, Vanilla PHP)\n$pulse = new \\DevPulse\\Client('${key}', '${PUBLIC_APP_URL}', '1.0.0');\n$pulse->registerHandlers();\n$pulse->trackMetric('active_jobs', 42);`;
+    case "swift":
+      return `// SPM: DevPulseSwift (iOS, macOS, tvOS, Vapor)\nimport DevPulseSwift\n\nDevPulseSwift.shared.configure(apiKey: "${key}", endpoint: "${PUBLIC_APP_URL}", release: "1.0.0")\nDevPulseSwift.shared.trackMetric("active_jobs", value: 42)`;
+    case "cpp":
+      return `// Conan / vcpkg: devpulse-cpp (C/C++17)\n#include "devpulse.hpp"\n\ndevpulse::Client pulse({ "${key}", "${PUBLIC_APP_URL}", "1.0.0", true });\npulse.add_breadcrumb("runtime", "info", "Worker ready");`;
+    case "ruby":
+      return `# gem install devpulse-rb (Rails, Sinatra, Sidekiq, Rack)\nrequire "devpulse"\n\npulse = DevPulse::Client.new(api_key: "${key}", endpoint: "${PUBLIC_APP_URL}", release: "1.0.0")\n# Rails/Rack: config.middleware.use DevPulse::RackMiddleware, pulse\npulse.track_metric("active_jobs", 42)`;
     case "desktop":
       return `// Electron Main Process or Tauri Frontend\nawait fetch("${PUBLIC_APP_URL}/api/v1/analytics", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify({\n    project: "${key}",\n    metricName: "active_jobs",\n    metricValue: 42,\n    sourceType: "desktop",\n    os: navigator.platform,\n    appVersion: "2.1.0",\n  }),\n});`;
     case "react_native":

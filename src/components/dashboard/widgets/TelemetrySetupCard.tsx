@@ -6,6 +6,13 @@ import {
   getPythonSnippet,
   getNodeSnippet,
   getRustSnippet,
+  getGoSnippet,
+  getDotnetSnippet,
+  getJvmSnippet,
+  getPhpSnippet,
+  getSwiftSnippet,
+  getCppSnippet,
+  getRubySnippet,
   getCliSnippet,
   getWebAppSnippet,
 } from "@/lib/sdk-generator";
@@ -15,15 +22,17 @@ interface TelemetrySetupCardProps {
   apiKey: string;
 }
 
+type SdkTabId = "web" | "mobile" | "python" | "node" | "rust" | "go" | "dotnet" | "jvm" | "php" | "swift" | "cpp" | "ruby" | "cli";
+
 export function TelemetrySetupCard({ apiKey }: TelemetrySetupCardProps) {
-  const [tab, setTab] = useState<"web" | "mobile" | "python" | "node" | "rust" | "cli">("web");
+  const [tab, setTab] = useState<SdkTabId>("web");
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [revealed, setRevealed] = useState(false);
 
   const visibleKey = displaySnippetKey(apiKey, revealed);
 
-  const buildSnippets = (k: string): Record<"web" | "mobile" | "python" | "node" | "rust" | "cli", { file: string; code: string }> => ({
+  const buildSnippets = (k: string): Record<SdkTabId, { file: string; code: string }> => ({
     web: { file: "devpulse-browser.ts", code: getWebAppSnippet(k) },
     mobile: {
       file: "mobile-telemetry.ts",
@@ -38,6 +47,13 @@ const pulse = new DevPulseClient({
     python: { file: "tracker.py", code: getPythonSnippet(k) },
     node: { file: "tracker.js", code: getNodeSnippet(k) },
     rust: { file: "panic_hook.rs", code: getRustSnippet(k) },
+    go: { file: "telemetry.go", code: getGoSnippet(k) },
+    dotnet: { file: "Program.cs", code: getDotnetSnippet(k) },
+    jvm: { file: "DevPulseInit.java", code: getJvmSnippet(k) },
+    php: { file: "bootstrap.php", code: getPhpSnippet(k) },
+    swift: { file: "AppDelegate.swift", code: getSwiftSnippet(k) },
+    cpp: { file: "telemetry.cpp", code: getCppSnippet(k) },
+    ruby: { file: "devpulse.rb", code: getRubySnippet(k) },
     cli: { file: "beacon.sh", code: getCliSnippet(k) },
   });
 
@@ -71,14 +87,21 @@ const pulse = new DevPulseClient({
               <p className="text-xs text-zinc-400">Zero dependencies &bull; Auto R2 trace offload</p>
             </div>
           </div>
-          <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-[11px]">
+          <div className="flex flex-wrap bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-[10px] gap-0.5">
             {(
               [
-                { id: "web", label: "Web/Desktop", active: "bg-emerald-600 text-white" },
+                { id: "web", label: "Web", active: "bg-emerald-600 text-white" },
                 { id: "mobile", label: "Mobile", active: "bg-indigo-600 text-white" },
                 { id: "python", label: "Python", active: "bg-blue-600 text-white" },
                 { id: "node", label: "Node", active: "bg-red-600 text-white" },
                 { id: "rust", label: "Rust", active: "bg-orange-600 text-white" },
+                { id: "go", label: "Go", active: "bg-cyan-600 text-white" },
+                { id: "dotnet", label: ".NET", active: "bg-purple-600 text-white" },
+                { id: "jvm", label: "JVM", active: "bg-amber-600 text-white" },
+                { id: "php", label: "PHP", active: "bg-indigo-700 text-white" },
+                { id: "swift", label: "Swift", active: "bg-orange-700 text-white" },
+                { id: "cpp", label: "C++", active: "bg-sky-700 text-white" },
+                { id: "ruby", label: "Ruby", active: "bg-rose-700 text-white" },
                 { id: "cli", label: "CLI", active: "bg-zinc-700 text-white" },
               ] as const
             ).map((t) => (

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>DevPulse.Sdk</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>RitualDev Lab</Authors>
+    <Description>Zero-bloat .NET telemetry SDK for ASP.NET Core, Minimal APIs, MAUI, and WPF with breadcrumbs, PII scrubbing, and crash capture.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+</Project>

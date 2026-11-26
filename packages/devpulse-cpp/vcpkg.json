@@ -1,0 +1,7 @@
+{
+  "name": "devpulse-cpp",
+  "version": "1.0.0",
+  "description": "Zero-bloat C++17 telemetry SDK with POSIX/SEH crash hooks, .dwarf.json symbolication support, and libcurl/WinHTTP transport.",
+  "license": "MIT",
+  "supports": "windows | linux | osx"
+}
