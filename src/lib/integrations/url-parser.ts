@@ -13,6 +13,7 @@ export type DetectedConnectorKind =
   | "go"
   | "docker"
   | "vscode"
+  | "mcp"
   | "payment"
   | "uptime"
   | "unknown";
@@ -28,7 +29,8 @@ export interface ParsedConnectorLink {
     | "rustCrate"
     | "goModule"
     | "dockerImage"
-    | "vscodeExtension";
+    | "vscodeExtension"
+    | "mcpServerName";
   value: string;
   label: string;
   normalizedUrl?: string;
@@ -186,6 +188,46 @@ export function parseConnectorInput(rawInput: string): ParsedConnectorLink {
         normalizedUrl: parsed.toString(),
       };
     }
+  }
+
+  // open-vsx.org/extension/<publisher>/<name>
+  if (host === "open-vsx.org" && pathParts[0] === "extension" && pathParts[1] && pathParts[2]) {
+    const extId = `${pathParts[1]}.${pathParts[2]}`;
+    return {
+      raw: rawInput,
+      kind: "vscode",
+      provider: "Open-VSX",
+      field: "vscodeExtension",
+      value: extId,
+      label: `VS Code (${extId})`,
+      normalizedUrl: parsed.toString(),
+    };
+  }
+
+  // smithery.ai/server/<name> or glama.ai/mcp/servers/<slug>
+  if (host === "smithery.ai" && pathParts[0] === "server" && pathParts.length >= 2) {
+    const serverSlug = pathParts.slice(1).join("/");
+    return {
+      raw: rawInput,
+      kind: "mcp",
+      provider: "Smithery MCP",
+      field: "mcpServerName",
+      value: serverSlug,
+      label: `MCP (${serverSlug})`,
+      normalizedUrl: parsed.toString(),
+    };
+  }
+  if (host === "glama.ai" && pathParts[0] === "mcp" && pathParts[1] === "servers" && pathParts[2]) {
+    const serverSlug = pathParts.slice(2).join("/");
+    return {
+      raw: rawInput,
+      kind: "mcp",
+      provider: "Glama MCP",
+      field: "mcpServerName",
+      value: serverSlug,
+      label: `MCP (${serverSlug})`,
+      normalizedUrl: parsed.toString(),
+    };
   }
 
   // Payment provider links

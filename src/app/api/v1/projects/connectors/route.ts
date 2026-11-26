@@ -9,6 +9,8 @@ import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 import { parseMultipleConnectorInputs } from "@/lib/integrations/url-parser";
 import { normalizeStackPreset, STACK_PRESETS } from "@/lib/dashboard/presets";
+import { ECOSYSTEM_WIDGET_DEFS } from "@/lib/dashboard/ecosystem-widgets";
+import { syncEcosystemWidgetsAndSnapshots } from "@/lib/dashboard/snapshots";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { isValidPublicMonitorUrl, runMonitorCheck } from "@/lib/monitors/checker";
 import { fetchNpmOrgPackages } from "@/lib/integrations/npm";
@@ -285,6 +287,23 @@ export async function POST(req: NextRequest) {
       }
 
       await db.update(projects).set(updateFields).where(eq(projects.id, projectId));
+
+      const changedFields = ECOSYSTEM_WIDGET_DEFS
+        .map((d) => d.field)
+        .filter((f) => Object.prototype.hasOwnProperty.call(updateFields, f));
+      if (updateFields.npmTokenEncrypted !== undefined && !changedFields.includes("npmPackage")) {
+        changedFields.push("npmPackage");
+      }
+      if (typeof body.dockerToken === "string" && body.dockerToken.trim() && !changedFields.includes("dockerImage")) {
+        changedFields.push("dockerImage");
+      }
+      if (changedFields.length > 0) {
+        await syncEcosystemWidgetsAndSnapshots({
+          projectId,
+          userIdForOAuth: user.id,
+          changedFields,
+        });
+      }
 
       await recordAuditEvent({
         userId: user.id,

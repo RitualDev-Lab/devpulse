@@ -8,6 +8,8 @@ import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 import { apiError } from "@/lib/security/api-error";
 import { DEVPULSE_MCP_TOOLS } from "@/lib/integrations/mcp-policy";
+import { ECOSYSTEM_WIDGET_DEFS } from "@/lib/dashboard/ecosystem-widgets";
+import { syncEcosystemWidgetsAndSnapshots } from "@/lib/dashboard/snapshots";
 
 export async function POST(req: NextRequest) {
   try {
@@ -93,22 +95,47 @@ export async function POST(req: NextRequest) {
       await recordAuditEvent({ userId: user.id, actorUsername: user.githubUsername, organizationId: access.project.organizationId, workspaceId: access.project.workspaceId, projectId: access.project.id, action: "mcp.policy_updated", resourceType: "mcp_policy", resourceId: access.project.id, headers: req.headers, metadata: { allowedTools: mcpAllowedTools } });
     }
 
+    const previousFields = {
+      githubRepo: access.project.githubRepo || null,
+      npmPackage: access.project.npmPackage || null,
+      pypiPackage: access.project.pypiPackage || null,
+      rustCrate: access.project.rustCrate || null,
+      goModule: access.project.goModule || null,
+      dockerImage: access.project.dockerImage || null,
+      vscodeExtension: access.project.vscodeExtension || null,
+      mcpServerName: access.project.mcpServerName || null,
+    };
+    const nextFields = {
+      githubRepo: cleanGithub,
+      npmPackage: cleanStr(npmPackage),
+      pypiPackage: cleanStr(pypiPackage),
+      rustCrate: cleanStr(rustCrate),
+      goModule: cleanStr(goModule),
+      dockerImage: cleanStr(dockerImage),
+      vscodeExtension: cleanStr(vscodeExtension),
+      mcpServerName: cleanStr(mcpServerName),
+    };
+
     await db
       .update(projects)
       .set({
-        githubRepo: cleanGithub,
-        npmPackage: cleanStr(npmPackage),
-        pypiPackage: cleanStr(pypiPackage),
-        rustCrate: cleanStr(rustCrate),
-        goModule: cleanStr(goModule),
-        dockerImage: cleanStr(dockerImage),
-        vscodeExtension: cleanStr(vscodeExtension),
-        mcpServerName: cleanStr(mcpServerName),
+        ...nextFields,
         ...(mcpAllowedTools !== undefined
           ? { mcpAllowedToolsJson: mcpAllowedTools === null ? null : JSON.stringify(Array.from(new Set(mcpAllowedTools))) }
           : {}),
       })
       .where(eq(projects.id, projectId));
+
+    const changedFields = ECOSYSTEM_WIDGET_DEFS
+      .map((d) => d.field)
+      .filter((field) => previousFields[field] !== nextFields[field]);
+    if (changedFields.length > 0) {
+      await syncEcosystemWidgetsAndSnapshots({
+        projectId,
+        userIdForOAuth: user.id,
+        changedFields,
+      });
+    }
 
     await recordAuditEvent({
       userId: user.id,

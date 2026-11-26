@@ -336,7 +336,7 @@ export async function loadDashboardWorkspace(
           .where(eq(dashboardWidgets.projectId, activeProject.id))
           .catch(() => [])
       : Promise.resolve([]),
-    needGithub || needCrashes
+    needGithub || needCrashes || needPackages
       ? db
           .select()
           .from(projectReleases)
@@ -606,10 +606,16 @@ export async function loadDashboardWorkspace(
       for (const h of npmStats?.dailyHistory || []) {
         ensure(h.date).npm = h.downloads;
       }
+      for (const h of pypiStats?.dailyHistory || []) {
+        ensure(h.date).pypi = h.downloads;
+      }
+      for (const h of rustStats?.dailyHistory || []) {
+        ensure(h.date).crates = h.downloads;
+      }
       for (const m of rawDailyMetrics || []) {
         if (m.source === "npm" && !ensure(m.date).npm) ensure(m.date).npm = m.value;
-        if (m.source === "pypi") ensure(m.date).pypi = m.value;
-        if (m.source === "crates") ensure(m.date).crates = m.value;
+        if (m.source === "pypi" && !ensure(m.date).pypi) ensure(m.date).pypi = m.value;
+        if (m.source === "crates" && !ensure(m.date).crates) ensure(m.date).crates = m.value;
         if (m.source === "docker") ensure(m.date).docker = m.value;
         if (m.source === "go") ensure(m.date).go = m.value;
       }

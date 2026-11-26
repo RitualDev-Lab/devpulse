@@ -1,8 +1,9 @@
 import { db } from "@/db";
-import { projectConnectors, projects, projectSnapshots } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { dashboardWidgets, projectConnectors, projects, projectSnapshots } from "@/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
+import { ECOSYSTEM_WIDGET_DEFS } from "@/lib/dashboard/ecosystem-widgets";
 import { fetchGitHubRepoStats, type GitHubRepoStats } from "@/lib/integrations/github";
 import { fetchNpmStats, type NpmStats } from "@/lib/integrations/npm";
 import { fetchPyPiStats, type PyPiStats } from "@/lib/integrations/pypi";
@@ -304,4 +305,88 @@ export async function refreshAllProjectSnapshots(maxProjects = 25): Promise<{
   }
 
   return { refreshed: projectIds.length, projectIds };
+}
+
+/**
+ * Ensures newly linked package/ecosystem identifiers have visible dashboard cards
+ * and immediately refreshes their cached `project_snapshots` entries (or deletes
+ * stale snapshots for cleared ecosystems) so Git-free package edits render live data.
+ */
+export async function syncEcosystemWidgetsAndSnapshots(params: {
+  projectId: string;
+  userIdForOAuth?: string | null;
+  changedFields?: Array<(typeof ECOSYSTEM_WIDGET_DEFS)[number]["field"]>;
+  skipWidgetCreation?: boolean;
+}): Promise<void> {
+  const [updatedProject] = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.id, params.projectId))
+    .limit(1);
+  if (!updatedProject) return;
+
+  const keysToRefresh: SnapshotKey[] = [];
+
+  if (!params.skipWidgetCreation) {
+    const existingWidgets = await db
+      .select({ widgetType: dashboardWidgets.widgetType, positionY: dashboardWidgets.positionY })
+      .from(dashboardWidgets)
+      .where(eq(dashboardWidgets.projectId, updatedProject.id))
+      .catch(() => []);
+    const existingTypes = new Set(existingWidgets.map((w) => w.widgetType));
+    let nextY = existingWidgets.reduce((max, w) => Math.max(max, (w.positionY || 0) + 1), 0);
+
+    for (const spec of ECOSYSTEM_WIDGET_DEFS) {
+      const value = updatedProject[spec.field];
+      const hasValue = typeof value === "string" && value.trim().length > 0;
+      if (hasValue && !existingTypes.has(spec.widgetId)) {
+        await db
+          .insert(dashboardWidgets)
+          .values({
+            id: `w_${updatedProject.id}_${spec.widgetId}`.slice(0, 128),
+            projectId: updatedProject.id,
+            widgetType: spec.widgetId,
+            title: spec.title,
+            positionX: 0,
+            positionY: nextY++,
+            width: 4,
+            height: 1,
+            isVisible: true,
+          })
+          .onConflictDoNothing()
+          .catch(() => {});
+        existingTypes.add(spec.widgetId);
+      }
+    }
+  }
+
+  const candidateFields = params.changedFields && params.changedFields.length > 0
+    ? params.changedFields
+    : ECOSYSTEM_WIDGET_DEFS.map((d) => d.field);
+
+  for (const field of candidateFields) {
+    const spec = ECOSYSTEM_WIDGET_DEFS.find((d) => d.field === field);
+    if (!spec) continue;
+    const val = updatedProject[spec.field];
+    if (typeof val === "string" && val.trim().length > 0) {
+      keysToRefresh.push(spec.snapshotKey);
+    } else {
+      await db
+        .delete(projectSnapshots)
+        .where(
+          and(
+            eq(projectSnapshots.projectId, updatedProject.id),
+            eq(projectSnapshots.snapshotKey, spec.snapshotKey)
+          )
+        )
+        .catch(() => {});
+    }
+  }
+
+  if (keysToRefresh.length > 0) {
+    await refreshProjectSnapshots(updatedProject, {
+      userIdForOAuth: params.userIdForOAuth || updatedProject.userId,
+      keys: keysToRefresh,
+    }).catch(() => {});
+  }
 }

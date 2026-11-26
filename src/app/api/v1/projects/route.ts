@@ -10,7 +10,9 @@ import { ensurePrimaryKeyHashRecorded } from "@/lib/security/api-keys";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 import { encryptSecret } from "@/lib/security/crypto";
-import { normalizeStackPreset, STACK_PRESETS } from "@/lib/dashboard/presets";
+import { normalizeStackPreset } from "@/lib/dashboard/presets";
+import { buildEcosystemWidgets } from "@/lib/dashboard/ecosystem-widgets";
+import { refreshProjectSnapshots } from "@/lib/dashboard/snapshots";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { isValidPublicMonitorUrl } from "@/lib/monitors/checker";
 import { apiError } from "@/lib/security/api-error";
@@ -170,33 +172,21 @@ export async function POST(request: Request) {
     });
 
     // Seed smart 2D dashboard widgets matching standalone packages / web / OCI apps
-    const presetDefs = STACK_PRESETS[stackPreset].recommendedWidgets;
-    const widgetMap = new Map<
-      string,
-      { id: string; title: string; defaultW: number; defaultH: number }
-    >();
-    const chosenEcosystems = [
-      ...(verifiedGithubRepo ? [{ id: "github_stats", title: "GitHub Repository", defaultW: 4, defaultH: 1 }] : []),
-      ...(cleanOpt(npmPackage) ? [{ id: "npm_downloads", title: "npm Registry", defaultW: 4, defaultH: 1 }] : []),
-      ...(cleanOpt(pypiPackage) ? [{ id: "pypi_downloads", title: "PyPI Package", defaultW: 4, defaultH: 1 }] : []),
-      ...(cleanOpt(rustCrate) ? [{ id: "rust_crates", title: "Rust Crates.io", defaultW: 4, defaultH: 1 }] : []),
-      ...(cleanOpt(dockerImage) ? [{ id: "docker_container", title: "Docker Hub Container", defaultW: 4, defaultH: 1 }] : []),
-      ...(cleanOpt(vscodeExtension) ? [{ id: "vscode_stats", title: "VS Code Extension", defaultW: 4, defaultH: 1 }] : []),
-      ...(cleanOpt(mcpServerName) ? [{ id: "mcp_stats", title: "MCP Server Registry", defaultW: 4, defaultH: 1 }] : []),
-    ];
-    for (const def of [...chosenEcosystems, ...presetDefs]) {
-      // Omit unrelated github/npm preset defaults when creating a standalone workspace without them
-      if (!verifiedGithubRepo && def.id === "github_stats") continue;
-      if (!cleanOpt(npmPackage) && def.id === "npm_downloads") continue;
-      if (!widgetMap.has(def.id)) widgetMap.set(def.id, def);
-    }
-    if (!widgetMap.has("telemetry_setup")) {
-      widgetMap.set("telemetry_setup", { id: "telemetry_setup", title: "SDK Integration", defaultW: 4, defaultH: 1 });
-    }
-    if (!widgetMap.has("bug_report_badge")) {
-      widgetMap.set("bug_report_badge", { id: "bug_report_badge", title: "Public Bug Portal", defaultW: 4, defaultH: 1 });
-    }
-    const layoutItems = buildDefaultLayout(Array.from(widgetMap.values()));
+    const layoutItems = buildDefaultLayout(
+      buildEcosystemWidgets(
+        {
+          githubRepo: verifiedGithubRepo,
+          npmPackage: cleanOpt(npmPackage),
+          pypiPackage: cleanOpt(pypiPackage),
+          rustCrate: cleanOpt(rustCrate),
+          goModule: cleanOpt(goModule),
+          dockerImage: cleanOpt(dockerImage),
+          vscodeExtension: cleanOpt(vscodeExtension),
+          mcpServerName: cleanOpt(mcpServerName),
+        },
+        stackPreset
+      )
+    );
     if (layoutItems.length > 0) {
       await db.insert(dashboardWidgets).values(
         layoutItems.map((w) => ({
@@ -249,6 +239,9 @@ export async function POST(request: Request) {
     });
 
     const created = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+    if (created[0]) {
+      await refreshProjectSnapshots(created[0], { userIdForOAuth: user.id }).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, project: created[0] });
   } catch (error: any) {
