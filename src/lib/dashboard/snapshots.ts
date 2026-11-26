@@ -13,6 +13,13 @@ import { fetchDockerRepoStats, type DockerRepoStats } from "@/lib/integrations/d
 import { fetchVsCodeStats, type VsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats, type McpServerStats } from "@/lib/integrations/mcp";
 import { fetchRevenueStats, type RevenueStats } from "@/lib/integrations/revenue";
+import { fetchDepsDevSummary, type DepsDevAdvisorySummary, type DepsDevSystem } from "@/lib/integrations/deps-dev";
+import {
+  REGISTRY_ADAPTERS,
+  normalizeRegistryProvider,
+  securitySummaryKey,
+  type ExtraPackageSnapshot,
+} from "@/lib/integrations/registry-adapter";
 
 export const SNAPSHOT_TTL_MS = 5 * 60 * 1000; // 5 minutes fresh threshold
 
@@ -25,7 +32,9 @@ export type SnapshotKey =
   | "docker"
   | "vscode"
   | "mcp"
-  | "revenue";
+  | "revenue"
+  | "security"
+  | "package_connectors";
 
 export interface ProjectSnapshotBundle {
   githubStats: GitHubRepoStats | null;
@@ -37,6 +46,8 @@ export interface ProjectSnapshotBundle {
   vscodeStats: VsCodeStats | null;
   mcpStats: McpServerStats | null;
   revenueStats: RevenueStats | null;
+  packageSecurity: Record<string, DepsDevAdvisorySummary>;
+  extraPackages: ExtraPackageSnapshot[];
   snapshotUpdatedAt: string | null;
   isStale: boolean;
   presentKeys: Set<SnapshotKey>;
@@ -63,6 +74,8 @@ export async function readProjectSnapshots(projectId: string): Promise<ProjectSn
     vscodeStats: null,
     mcpStats: null,
     revenueStats: null,
+    packageSecurity: {},
+    extraPackages: [],
     snapshotUpdatedAt: null,
     isStale: true,
     presentKeys: new Set<SnapshotKey>(),
@@ -96,6 +109,11 @@ export async function readProjectSnapshots(projectId: string): Promise<ProjectSn
     else if (key === "vscode") bundle.vscodeStats = parsed;
     else if (key === "mcp") bundle.mcpStats = parsed;
     else if (key === "revenue") bundle.revenueStats = parsed;
+    else if (key === "security" && parsed && typeof parsed === "object") {
+      bundle.packageSecurity = parsed as Record<string, DepsDevAdvisorySummary>;
+    } else if (key === "package_connectors" && Array.isArray(parsed)) {
+      bundle.extraPackages = parsed as ExtraPackageSnapshot[];
+    }
   }
 
   bundle.isStale = latestMs === 0 || Date.now() - latestMs > SNAPSHOT_TTL_MS;
@@ -153,7 +171,7 @@ export async function refreshProjectSnapshots(
     want("npm") ? decryptSecret(projectRow.npmTokenEncrypted).catch(() => null) : Promise.resolve(null),
     want("revenue") ? decryptSecret(projectRow.stripeApiKey).catch(() => null) : Promise.resolve(null),
     want("revenue") ? decryptSecret(projectRow.dodoPaymentsApiKey).catch(() => null) : Promise.resolve(null),
-    want("revenue") || want("docker")
+    want("revenue") || want("docker") || want("package_connectors")
       ? db
           .select()
           .from(projectConnectors)
@@ -245,6 +263,171 @@ export async function refreshProjectSnapshots(
       : Promise.resolve(null),
   ]);
 
+  const existingBundle = await readProjectSnapshots(projectRow.id).catch(() => null);
+  const existingSecurity = { ...(existingBundle?.packageSecurity || {}) };
+  let extraPackages: ExtraPackageSnapshot[] = existingBundle?.extraPackages || [];
+
+  const securityTargets: Array<{ system: DepsDevSystem; name: string }> = [];
+  if (want("security") || want("npm")) {
+    if (projectRow.npmPackage) securityTargets.push({ system: "NPM", name: projectRow.npmPackage });
+  }
+  if (want("security") || want("pypi")) {
+    if (projectRow.pypiPackage) securityTargets.push({ system: "PYPI", name: projectRow.pypiPackage });
+  }
+  if (want("security") || want("crates")) {
+    if (projectRow.rustCrate) securityTargets.push({ system: "CARGO", name: projectRow.rustCrate });
+  }
+  if (want("security") || want("go")) {
+    if (projectRow.goModule) securityTargets.push({ system: "GO", name: projectRow.goModule });
+  }
+
+  const pkgConnectors = want("package_connectors")
+    ? rawConnectors
+        .map((c) => ({
+          row: c,
+          provider: normalizeRegistryProvider(c.provider),
+          identifier: (c.identifier || "").trim(),
+        }))
+        .filter(
+          (item): item is { row: (typeof rawConnectors)[number]; provider: NonNullable<ReturnType<typeof normalizeRegistryProvider>>; identifier: string } =>
+            item.row.category === "package" && Boolean(item.provider) && item.identifier.length > 0
+        )
+    : [];
+
+  for (const item of pkgConnectors) {
+    const sys = REGISTRY_ADAPTERS[item.provider].depsDevSystem;
+    if (sys) securityTargets.push({ system: sys, name: item.identifier });
+  }
+
+  const dedupedSecurityTargets = Array.from(
+    new Map(securityTargets.map((t) => [securitySummaryKey(t.system, t.name), t])).values()
+  );
+
+  const [securityResults, fetchedExtraPackages] = await Promise.all([
+    dedupedSecurityTargets.length > 0
+      ? Promise.all(
+          dedupedSecurityTargets.map(async (t) => ({
+            key: securitySummaryKey(t.system, t.name),
+            summary: await cap(fetchDepsDevSummary(t.system, t.name), 3500),
+          }))
+        )
+      : Promise.resolve([]),
+    want("package_connectors")
+      ? Promise.all(
+          pkgConnectors.slice(0, 12).map(async ({ row, provider, identifier }): Promise<ExtraPackageSnapshot | null> => {
+            const meta = REGISTRY_ADAPTERS[provider];
+            if (provider === "npm") {
+              const s = await cap(fetchNpmStats(identifier, decryptedNpmToken));
+              return {
+                connectorId: row.id,
+                provider,
+                label: row.label,
+                identifier,
+                latestVersion: s?.latestVersion || null,
+                metricLabel: "30d downloads",
+                metricValue: s?.downloadsLastMonth ?? null,
+                url: row.targetUrl || meta.buildUrl(identifier),
+              };
+            }
+            if (provider === "pypi") {
+              const s = await cap(fetchPyPiStats(identifier));
+              return {
+                connectorId: row.id,
+                provider,
+                label: row.label,
+                identifier,
+                latestVersion: s?.latestVersion || null,
+                metricLabel: "30d downloads",
+                metricValue: s?.downloadsLastMonth ?? null,
+                url: row.targetUrl || meta.buildUrl(identifier),
+              };
+            }
+            if (provider === "crates") {
+              const s = await cap(fetchRustCrateStats(identifier));
+              return {
+                connectorId: row.id,
+                provider,
+                label: row.label,
+                identifier,
+                latestVersion: s?.maxVersion || null,
+                metricLabel: "total downloads",
+                metricValue: s?.totalDownloads ?? null,
+                url: row.targetUrl || meta.buildUrl(identifier),
+              };
+            }
+            if (provider === "go") {
+              const s = await cap(fetchGoModuleStats(identifier));
+              return {
+                connectorId: row.id,
+                provider,
+                label: row.label,
+                identifier,
+                latestVersion: s?.latestVersion || null,
+                metricLabel: "versions",
+                metricValue: s?.versionCount ?? null,
+                url: row.targetUrl || meta.buildUrl(identifier),
+              };
+            }
+            if (provider === "docker") {
+              const s = await cap(fetchDockerRepoStats(identifier, decryptedDockerToken));
+              return {
+                connectorId: row.id,
+                provider,
+                label: row.label,
+                identifier,
+                latestVersion: s?.tags?.[0]?.name || null,
+                metricLabel: "pulls",
+                metricValue: s?.pullCount ?? null,
+                url: row.targetUrl || meta.buildUrl(identifier),
+              };
+            }
+            if (provider === "vscode") {
+              const s = await cap(fetchVsCodeStats(identifier));
+              return {
+                connectorId: row.id,
+                provider,
+                label: row.label,
+                identifier,
+                latestVersion: s?.version || null,
+                metricLabel: "installs",
+                metricValue: s?.installs ?? null,
+                url: row.targetUrl || meta.buildUrl(identifier),
+              };
+            }
+            const s = await cap(fetchMcpStats(identifier, projectRow.githubRepo));
+            return {
+              connectorId: row.id,
+              provider,
+              label: row.label,
+              identifier,
+              latestVersion: s?.protocolVersion || null,
+              metricLabel: "tools",
+              metricValue: s?.toolsCount ?? null,
+              url: row.targetUrl || meta.buildUrl(identifier),
+            };
+          })
+        )
+      : Promise.resolve(null),
+  ]);
+
+  for (const res of securityResults) {
+    if (res.summary) {
+      existingSecurity[res.key] = res.summary;
+    }
+  }
+
+  if (fetchedExtraPackages) {
+    extraPackages = fetchedExtraPackages
+      .filter((x): x is ExtraPackageSnapshot => Boolean(x))
+      .map((item) => {
+        const sys = REGISTRY_ADAPTERS[item.provider].depsDevSystem;
+        return {
+          ...item,
+          security: sys ? existingSecurity[securitySummaryKey(sys, item.identifier)] || null : null,
+        };
+      });
+  }
+
   await Promise.all([
     upsertSnapshot(projectRow.id, "github", githubStats),
     upsertSnapshot(projectRow.id, "npm", npmStats),
@@ -255,6 +438,12 @@ export async function refreshProjectSnapshots(
     upsertSnapshot(projectRow.id, "vscode", vscodeStats),
     upsertSnapshot(projectRow.id, "mcp", mcpStats),
     upsertSnapshot(projectRow.id, "revenue", revenueStats),
+    Object.keys(existingSecurity).length > 0
+      ? upsertSnapshot(projectRow.id, "security", existingSecurity)
+      : Promise.resolve(),
+    want("package_connectors")
+      ? upsertSnapshot(projectRow.id, "package_connectors", extraPackages)
+      : Promise.resolve(),
   ]);
 
   const nowIso = new Date().toISOString();
@@ -268,6 +457,8 @@ export async function refreshProjectSnapshots(
   if (vscodeStats) presentKeys.add("vscode");
   if (mcpStats) presentKeys.add("mcp");
   if (revenueStats) presentKeys.add("revenue");
+  if (Object.keys(existingSecurity).length > 0) presentKeys.add("security");
+  if (extraPackages.length > 0) presentKeys.add("package_connectors");
 
   return {
     githubStats,
@@ -279,6 +470,8 @@ export async function refreshProjectSnapshots(
     vscodeStats,
     mcpStats,
     revenueStats,
+    packageSecurity: existingSecurity,
+    extraPackages,
     snapshotUpdatedAt: nowIso,
     isStale: false,
     presentKeys,

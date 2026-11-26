@@ -11,6 +11,9 @@ import { fetchVsCodeStats } from "@/lib/integrations/vscode";
 import { fetchMcpStats } from "@/lib/integrations/mcp";
 import { decryptSecret } from "@/lib/security/crypto";
 import { getUserGitHubAccessToken } from "@/lib/security/github-ownership";
+import { fetchDepsDevSummary, type DepsDevSystem } from "@/lib/integrations/deps-dev";
+import { resolveDecryptedWebhookConfig, dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export interface SyncResult {
   projectId: string;
@@ -391,6 +394,45 @@ async function syncSingleProject(
   }
 
   await Promise.allSettled(tasks);
+
+  // Check deps.dev for newly discovered security advisories across linked packages
+  const securityChecks: Array<{ system: DepsDevSystem; pkg: string; label: string }> = [];
+  if (proj.npmPackage) securityChecks.push({ system: "NPM", pkg: proj.npmPackage, label: "npm" });
+  if (proj.pypiPackage) securityChecks.push({ system: "PYPI", pkg: proj.pypiPackage, label: "PyPI" });
+  if (proj.rustCrate) securityChecks.push({ system: "CARGO", pkg: proj.rustCrate, label: "Crates.io" });
+  if (proj.goModule) securityChecks.push({ system: "GO", pkg: proj.goModule, label: "Go" });
+
+  if (securityChecks.length > 0) {
+    try {
+      const summaries = await Promise.all(
+        securityChecks.map(async (item) => ({
+          ...item,
+          summary: await fetchDepsDevSummary(item.system, item.pkg).catch(() => null),
+        }))
+      );
+      const flagged = summaries.filter((s) => s.summary && s.summary.advisoryCount > 0);
+      if (flagged.length > 0) {
+        const webhookCfg = await resolveDecryptedWebhookConfig(proj).catch(() => null);
+        if (webhookCfg) {
+          const details = flagged
+            .map((f) => `${f.pkg} (${f.label}): ${f.summary!.advisoryCount} CVE advisory(ies)`)
+            .join("; ");
+          await dispatchCrashAlerts(webhookCfg, {
+            projectName: proj.name,
+            projectSlug: proj.slug,
+            errorName: "SecurityAdvisoryCVE",
+            message: `deps.dev flagged security advisories during sync: ${details}`,
+            runtime: "security-scanner",
+            version: flagged[0].summary?.defaultVersion || "latest",
+            dashboardUrl: `${PUBLIC_APP_URL}/dashboard/packages?project=${encodeURIComponent(proj.slug)}`,
+          }).catch(() => {});
+        }
+        syncedSources.push("security");
+      }
+    } catch {
+      // Non-blocking security advisory check
+    }
+  }
 
   try {
     await refreshDailyDeltas(proj.id);

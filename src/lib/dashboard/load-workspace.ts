@@ -63,6 +63,8 @@ export interface LoadedWorkspaceReady {
       hasCredentials: boolean;
       lastSyncedAt: string | null;
     }>;
+    packageSecurity?: Record<string, import("@/lib/integrations/deps-dev").DepsDevAdvisorySummary>;
+    extraPackages?: import("@/lib/integrations/registry-adapter").ExtraPackageSnapshot[];
     customMetrics?: Array<{
       metricName: string;
       latestValue: number;
@@ -403,6 +405,8 @@ export async function loadDashboardWorkspace(
   const vscodeStats = needPackages ? snapshotBundle?.vscodeStats ?? null : null;
   const mcpStats = needPackages ? snapshotBundle?.mcpStats ?? null : null;
   const revenueStats = needRevenue ? snapshotBundle?.revenueStats ?? null : null;
+  const packageSecurity = needPackages ? snapshotBundle?.packageSecurity ?? {} : {};
+  const extraPackages = needPackages ? snapshotBundle?.extraPackages ?? [] : [];
   const staleSnapshots = Boolean(needExternal && snapshotBundle?.isStale);
   const snapshotUpdatedAt = snapshotBundle?.snapshotUpdatedAt ?? null;
 
@@ -547,6 +551,8 @@ export async function loadDashboardWorkspace(
     vscodeStats,
     mcpStats,
     revenueStats,
+    packageSecurity,
+    extraPackages,
     staleSnapshots,
     snapshotUpdatedAt,
     analyticsSummary,

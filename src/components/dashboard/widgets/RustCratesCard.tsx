@@ -3,14 +3,17 @@
 import React from "react";
 import { Download, ExternalLink, Box, Tag, BookOpen, Layers, GitFork, TrendingUp } from "lucide-react";
 import type { RustCrateStats } from "@/lib/integrations/crates";
+import type { DepsDevAdvisorySummary } from "@/lib/integrations/deps-dev";
+import { PackageSecurityBadge } from "./PackageSecurityBadge";
 import { formatNumber, formatCompactNumber } from "@/lib/utils/format";
 
 interface RustCratesCardProps {
   stats: RustCrateStats | null;
   crateName: string;
+  security?: DepsDevAdvisorySummary | null;
 }
 
-export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
+export function RustCratesCard({ stats, crateName, security }: RustCratesCardProps) {
   if (!stats) {
     return (
       <div className="flex flex-col h-full justify-between p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg shadow-black/40">
@@ -166,6 +169,11 @@ export function RustCratesCard({ stats, crateName }: RustCratesCardProps) {
             </span>
           )}
         </div>
+        {security && (
+          <div className="mt-3">
+            <PackageSecurityBadge summary={security} />
+          </div>
+        )}
       </div>
 
       {/* Footer */}

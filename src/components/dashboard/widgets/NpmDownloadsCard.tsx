@@ -1,14 +1,17 @@
 import React from "react";
 import { Download, TrendingUp, ExternalLink, ShieldCheck, GitCommit, Box } from "lucide-react";
 import type { NpmStats } from "@/lib/integrations/npm";
+import type { DepsDevAdvisorySummary } from "@/lib/integrations/deps-dev";
+import { PackageSecurityBadge } from "./PackageSecurityBadge";
 import { formatNumber } from "@/lib/utils/format";
 
 interface NpmDownloadsCardProps {
   stats: NpmStats | null;
   packageName: string;
+  security?: DepsDevAdvisorySummary | null;
 }
 
-export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) {
+export function NpmDownloadsCard({ stats, packageName, security }: NpmDownloadsCardProps) {
   if (!stats) {
     return (
       <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-zinc-400">
@@ -124,6 +127,11 @@ export function NpmDownloadsCard({ stats, packageName }: NpmDownloadsCardProps) 
             </span>
           )}
         </div>
+        {security && (
+          <div className="mb-3">
+            <PackageSecurityBadge summary={security} />
+          </div>
+        )}
 
         {/* Sparkline Chart */}
         <div className="mt-2">

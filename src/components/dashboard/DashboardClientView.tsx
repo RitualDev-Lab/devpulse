@@ -6,6 +6,7 @@ import { Sliders, Palette, RefreshCw } from "lucide-react";
 import { WorkspaceShell } from "./WorkspaceShell";
 import { useWorkspaceData } from "./WorkspaceCacheContext";
 import { DragDropGrid, type DashboardData } from "./DragDropGrid";
+import { SnapshotSyncBar } from "./SnapshotSyncBar";
 import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
 import { IntegrationsModal } from "./IntegrationsModal";
@@ -189,7 +190,12 @@ export function DashboardClientView({
                 Modular 2D workspace &bull; Use the Left Sidebar for full-page GitHub PRs, Packages, Daily Users, Crashes &amp; Revenue
               </p>
             </div>
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <SnapshotSyncBar
+                projectId={data.project.id}
+                snapshotUpdatedAt={data.snapshotUpdatedAt}
+                isDemo={isDemo}
+              />
               <Link
                 href={isDemo ? "/dashboard/github?demo=1" : `/dashboard/github?project=${encodeURIComponent(data.project.slug)}`}
                 className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-medium transition"

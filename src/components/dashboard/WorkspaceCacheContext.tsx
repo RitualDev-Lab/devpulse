@@ -19,6 +19,8 @@ export type WorkspaceInitialData = (
   staleSnapshots?: boolean;
   snapshotUpdatedAt?: string | null;
   connectors?: LoadedWorkspaceReady["initialData"]["connectors"];
+  packageSecurity?: LoadedWorkspaceReady["initialData"]["packageSecurity"];
+  extraPackages?: LoadedWorkspaceReady["initialData"]["extraPackages"];
   customMetrics?: LoadedWorkspaceReady["initialData"]["customMetrics"];
   sourceMaps?: LoadedWorkspaceReady["initialData"]["sourceMaps"];
   githubHistory?: LoadedWorkspaceReady["initialData"]["githubHistory"];
@@ -67,6 +69,14 @@ function mergeWorkspaceSlices(
     vscodeStats: next.vscodeStats ?? prev.vscodeStats,
     mcpStats: next.mcpStats ?? prev.mcpStats,
     revenueStats: next.revenueStats ?? prev.revenueStats,
+    packageSecurity:
+      next.packageSecurity && Object.keys(next.packageSecurity).length > 0
+        ? next.packageSecurity
+        : prev.packageSecurity ?? next.packageSecurity,
+    extraPackages:
+      next.extraPackages && next.extraPackages.length > 0
+        ? next.extraPackages
+        : prev.extraPackages ?? next.extraPackages,
     analyticsSummary:
       next.analyticsSummary && next.analyticsSummary.totalPageviews > 0
         ? next.analyticsSummary
@@ -172,6 +182,8 @@ export function WorkspaceCacheProvider({
               vscodeStats: fresh.vscodeStats ?? existing.vscodeStats,
               mcpStats: fresh.mcpStats ?? existing.mcpStats,
               revenueStats: fresh.revenueStats ?? existing.revenueStats,
+              packageSecurity: fresh.packageSecurity ?? existing.packageSecurity,
+              extraPackages: fresh.extraPackages ?? existing.extraPackages,
               snapshotUpdatedAt: fresh.snapshotUpdatedAt ?? existing.snapshotUpdatedAt,
               staleSnapshots: false,
             },

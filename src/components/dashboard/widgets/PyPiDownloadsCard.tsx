@@ -1,14 +1,17 @@
 import React from "react";
 import { TrendingUp, ExternalLink, GitCommit, Layers, Terminal } from "lucide-react";
 import type { PyPiStats } from "@/lib/integrations/pypi";
+import type { DepsDevAdvisorySummary } from "@/lib/integrations/deps-dev";
+import { PackageSecurityBadge } from "./PackageSecurityBadge";
 import { formatNumber, formatCompactNumber } from "@/lib/utils/format";
 
 interface PyPiDownloadsCardProps {
   stats: PyPiStats | null;
   packageName: string;
+  security?: DepsDevAdvisorySummary | null;
 }
 
-export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps) {
+export function PyPiDownloadsCard({ stats, packageName, security }: PyPiDownloadsCardProps) {
   if (!stats) {
     return (
       <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-zinc-400">
@@ -130,6 +133,11 @@ export function PyPiDownloadsCard({ stats, packageName }: PyPiDownloadsCardProps
             </div>
           )}
         </div>
+        {security && (
+          <div className="mb-3">
+            <PackageSecurityBadge summary={security} />
+          </div>
+        )}
 
         {/* Sparkline Chart */}
         <div className="mt-1">

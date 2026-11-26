@@ -10,7 +10,8 @@ import { verifyGitHubRepoOwnership } from "@/lib/security/github-ownership";
 import { parseMultipleConnectorInputs } from "@/lib/integrations/url-parser";
 import { normalizeStackPreset, STACK_PRESETS } from "@/lib/dashboard/presets";
 import { ECOSYSTEM_WIDGET_DEFS } from "@/lib/dashboard/ecosystem-widgets";
-import { syncEcosystemWidgetsAndSnapshots } from "@/lib/dashboard/snapshots";
+import { refreshProjectSnapshots, syncEcosystemWidgetsAndSnapshots } from "@/lib/dashboard/snapshots";
+import { normalizeRegistryProvider, REGISTRY_ADAPTERS } from "@/lib/integrations/registry-adapter";
 import { buildDefaultLayout } from "@/lib/layout/grid-engine";
 import { isValidPublicMonitorUrl, runMonitorCheck } from "@/lib/monitors/checker";
 import { fetchNpmOrgPackages } from "@/lib/integrations/npm";
@@ -463,6 +464,132 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, connectorId: id, metadata }, { status: 201 });
     }
 
+    if (action === "add_package_connector") {
+      if (!access.canWrite) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      const providerId = normalizeRegistryProvider(String(body.provider || ""));
+      const identifier = String(body.identifier || "").trim().slice(0, 200);
+      if (!providerId || !identifier) {
+        return NextResponse.json({ error: "Valid registry provider and package identifier required" }, { status: 400 });
+      }
+
+      const meta = REGISTRY_ADAPTERS[providerId];
+      const label = String(body.label || `${meta.label}: ${identifier}`).trim().slice(0, 120);
+      const rawUrl = String(body.targetUrl || "").trim();
+      const validatedUrl = rawUrl ? validatePublicUrl(rawUrl) : null;
+      const targetUrl = validatedUrl?.valid && validatedUrl.normalized
+        ? validatedUrl.normalized
+        : meta.buildUrl(identifier);
+
+      const primaryValue = access.project[meta.projectField];
+      if (!primaryValue || !String(primaryValue).trim()) {
+        const updatePayload: Record<string, unknown> = {
+          [meta.projectField]: identifier,
+          updatedAt: new Date().toISOString(),
+        };
+        await db.update(projects).set(updatePayload).where(eq(projects.id, projectId));
+        await syncEcosystemWidgetsAndSnapshots({
+          projectId,
+          userIdForOAuth: user.id,
+          changedFields: [meta.projectField],
+        });
+        await refreshProjectSnapshots(
+          { ...access.project, [meta.projectField]: identifier },
+          { userIdForOAuth: user.id, keys: ["security"] }
+        ).catch(() => {});
+
+        await recordAuditEvent({
+          userId: user.id,
+          actorUsername: user.githubUsername,
+          organizationId: access.project.organizationId,
+          projectId,
+          action: "project.package_attached",
+          resourceType: "project",
+          resourceId: projectId,
+          headers: req.headers,
+          metadata: { provider: meta.id, identifier, mode: "primary" },
+        });
+
+        return NextResponse.json({
+          success: true,
+          mode: "primary",
+          provider: meta.id,
+          identifier,
+        });
+      }
+
+      if (String(primaryValue).trim().toLowerCase() === identifier.toLowerCase()) {
+        return NextResponse.json({
+          success: true,
+          mode: "already_tracked",
+          provider: meta.id,
+          identifier,
+        });
+      }
+
+      const existingConn = await db
+        .select({ id: projectConnectors.id })
+        .from(projectConnectors)
+        .where(
+          and(
+            eq(projectConnectors.projectId, projectId),
+            eq(projectConnectors.category, "package"),
+            eq(projectConnectors.provider, meta.id),
+            eq(projectConnectors.identifier, identifier)
+          )
+        )
+        .limit(1);
+
+      if (existingConn.length > 0) {
+        return NextResponse.json({
+          success: true,
+          mode: "already_tracked",
+          connectorId: existingConn[0].id,
+          provider: meta.id,
+          identifier,
+        });
+      }
+
+      const rawSecret = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+      const encrypted = rawSecret ? await encryptSecret(rawSecret) : null;
+      const id = `con_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+      await db.insert(projectConnectors).values({
+        id,
+        projectId,
+        category: "package",
+        provider: meta.id,
+        label,
+        targetUrl,
+        identifier,
+        credentialsEncrypted: encrypted,
+        lastSyncedAt: new Date().toISOString(),
+      });
+
+      await refreshProjectSnapshots(access.project, {
+        userIdForOAuth: user.id,
+        keys: ["package_connectors", "security"],
+      }).catch(() => {});
+
+      await recordAuditEvent({
+        userId: user.id,
+        actorUsername: user.githubUsername,
+        organizationId: access.project.organizationId,
+        projectId,
+        action: "connector.added",
+        resourceType: "project_connector",
+        resourceId: id,
+        headers: req.headers,
+        metadata: { category: "package", provider: meta.id, identifier },
+      });
+
+      return NextResponse.json(
+        { success: true, mode: "connector", connectorId: id, provider: meta.id, identifier },
+        { status: 201 }
+      );
+    }
+
     if (action === "sync_connector") {
       const connectorId = String(body.connectorId || "");
       const [conn] = await db
@@ -503,10 +630,27 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "delete_connector") {
+      if (!access.canWrite) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
       const connectorId = String(body.connectorId || "");
+      const [existing] = await db
+        .select({ id: projectConnectors.id, category: projectConnectors.category })
+        .from(projectConnectors)
+        .where(and(eq(projectConnectors.id, connectorId), eq(projectConnectors.projectId, projectId)))
+        .limit(1);
+
       await db
         .delete(projectConnectors)
         .where(and(eq(projectConnectors.id, connectorId), eq(projectConnectors.projectId, projectId)));
+
+      if (existing?.category === "package") {
+        await refreshProjectSnapshots(access.project, {
+          userIdForOAuth: user.id,
+          keys: ["package_connectors"],
+        }).catch(() => {});
+      }
+
       return NextResponse.json({ success: true });
     }
 

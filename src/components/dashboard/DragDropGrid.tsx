@@ -47,6 +47,8 @@ import type { DockerRepoStats } from "@/lib/integrations/docker";
 import type { VsCodeStats } from "@/lib/integrations/vscode";
 import type { McpServerStats } from "@/lib/integrations/mcp";
 import type { RevenueStats } from "@/lib/integrations/revenue";
+import type { DepsDevAdvisorySummary } from "@/lib/integrations/deps-dev";
+import { securitySummaryKey, type ExtraPackageSnapshot } from "@/lib/integrations/registry-adapter";
 
 export interface DashboardData {
   project: {
@@ -100,6 +102,9 @@ export interface DashboardData {
   analyticsSummary?: AnalyticsSummary | null;
   revenueStats?: RevenueStats | null;
   uptimeSummary?: UptimeSummaryPayload | null;
+  packageSecurity?: Record<string, DepsDevAdvisorySummary>;
+  extraPackages?: ExtraPackageSnapshot[];
+  snapshotUpdatedAt?: string | null;
   errors: ErrorEventItem[];
   releases?: ReleaseHealthItem[];
   initialLayout?: GridWidgetItem[];
@@ -438,6 +443,11 @@ export function DragDropGrid({
           <NpmDownloadsCard
             stats={data.npmStats}
             packageName={data.project.npmPackage || "npm package"}
+            security={
+              data.project.npmPackage
+                ? data.packageSecurity?.[securitySummaryKey("NPM", data.project.npmPackage)] || null
+                : null
+            }
           />
         );
       case "pypi_downloads":
@@ -445,6 +455,11 @@ export function DragDropGrid({
           <PyPiDownloadsCard
             stats={data.pypiStats}
             packageName={data.project.pypiPackage || "PyPI package"}
+            security={
+              data.project.pypiPackage
+                ? data.packageSecurity?.[securitySummaryKey("PYPI", data.project.pypiPackage)] || null
+                : null
+            }
           />
         );
       case "rust_crates":
@@ -452,6 +467,11 @@ export function DragDropGrid({
           <RustCratesCard
             stats={data.rustStats}
             crateName={data.project.rustCrate || "Rust crate"}
+            security={
+              data.project.rustCrate
+                ? data.packageSecurity?.[securitySummaryKey("CARGO", data.project.rustCrate)] || null
+                : null
+            }
           />
         );
       case "go_module":
@@ -459,6 +479,11 @@ export function DragDropGrid({
           <GoModuleCard
             stats={data.goStats || null}
             modulePath={data.project.goModule || "Go module"}
+            security={
+              data.project.goModule
+                ? data.packageSecurity?.[securitySummaryKey("GO", data.project.goModule)] || null
+                : null
+            }
           />
         );
       case "docker_container":

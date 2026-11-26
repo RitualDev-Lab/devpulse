@@ -1,14 +1,17 @@
 import React from "react";
 import { Box, Tag, ExternalLink, Clock, Layers } from "lucide-react";
 import type { GoModuleStats } from "@/lib/integrations/go";
+import type { DepsDevAdvisorySummary } from "@/lib/integrations/deps-dev";
+import { PackageSecurityBadge } from "./PackageSecurityBadge";
 import { formatDate } from "@/lib/utils/format";
 
 interface GoModuleCardProps {
   stats: GoModuleStats | null;
   modulePath: string;
+  security?: DepsDevAdvisorySummary | null;
 }
 
-export function GoModuleCard({ stats, modulePath }: GoModuleCardProps) {
+export function GoModuleCard({ stats, modulePath, security }: GoModuleCardProps) {
   if (!stats) {
     return (
       <div className="flex flex-col h-full justify-between p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-zinc-400">
@@ -90,6 +93,11 @@ export function GoModuleCard({ stats, modulePath }: GoModuleCardProps) {
                 </span>
               ))}
             </div>
+          </div>
+        )}
+        {security && (
+          <div className="mt-3">
+            <PackageSecurityBadge summary={security} />
           </div>
         )}
       </div>

@@ -20,8 +20,11 @@ import { GoModuleCard } from "../widgets/GoModuleCard";
 import { DockerContainerCard } from "../widgets/DockerContainerCard";
 import { VsCodeStatsCard } from "../widgets/VsCodeStatsCard";
 import { McpStatsCard } from "../widgets/McpStatsCard";
+import { PackageSecurityBadge } from "../widgets/PackageSecurityBadge";
+import { SnapshotSyncBar } from "../SnapshotSyncBar";
 import { QuickConnectPanel } from "../QuickConnectPanel";
 import { PackageSearchPicker } from "../PackageSearchPicker";
+import { securitySummaryKey } from "@/lib/integrations/registry-adapter";
 
 export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { projects, customDomain, storageTier, isDemo } = workspace;
@@ -101,12 +104,19 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
               Paste any npm/PyPI/Crates/Docker/VS Code URL or supply an optional npm Read Token for private packages.
             </p>
           </div>
-          {project.hasNpmToken && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium">
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>Encrypted npm Token Active</span>
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <SnapshotSyncBar
+              projectId={project.id}
+              snapshotUpdatedAt={initialData.snapshotUpdatedAt}
+              isDemo={isDemo}
+            />
+            {project.hasNpmToken && (
+              <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium">
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Encrypted npm Token Active</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Side-by-Side Daily Download Charts across npm, PyPI, Crates, Go, Docker, VS Code */}
@@ -251,16 +261,32 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
         {hasAnyPackage && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {project.npmPackage && (
-              <NpmDownloadsCard stats={initialData.npmStats} packageName={project.npmPackage} />
+              <NpmDownloadsCard
+                stats={initialData.npmStats}
+                packageName={project.npmPackage}
+                security={initialData.packageSecurity?.[securitySummaryKey("NPM", project.npmPackage)] || null}
+              />
             )}
             {project.pypiPackage && (
-              <PyPiDownloadsCard stats={initialData.pypiStats} packageName={project.pypiPackage} />
+              <PyPiDownloadsCard
+                stats={initialData.pypiStats}
+                packageName={project.pypiPackage}
+                security={initialData.packageSecurity?.[securitySummaryKey("PYPI", project.pypiPackage)] || null}
+              />
             )}
             {project.rustCrate && (
-              <RustCratesCard stats={initialData.rustStats} crateName={project.rustCrate} />
+              <RustCratesCard
+                stats={initialData.rustStats}
+                crateName={project.rustCrate}
+                security={initialData.packageSecurity?.[securitySummaryKey("CARGO", project.rustCrate)] || null}
+              />
             )}
             {project.goModule && (
-              <GoModuleCard stats={initialData.goStats || null} modulePath={project.goModule} />
+              <GoModuleCard
+                stats={initialData.goStats || null}
+                modulePath={project.goModule}
+                security={initialData.packageSecurity?.[securitySummaryKey("GO", project.goModule)] || null}
+              />
             )}
             {project.dockerImage && (
               <DockerContainerCard stats={initialData.dockerStats || null} imageName={project.dockerImage} />
@@ -274,6 +300,77 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
           </div>
         )}
 
+        {/* Additional Monorepo / Multi-Package Trackers */}
+        {(initialData.extraPackages || []).length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <Download className="w-4 h-4 text-indigo-400" />
+                <span>Tracked Monorepo &amp; Secondary Packages</span>
+              </h2>
+              <span className="text-[11px] text-zinc-400">
+                {(initialData.extraPackages || []).length} extra packages synced via RegistryAdapter
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(initialData.extraPackages || []).map((pkg) => (
+                <div
+                  key={pkg.connectorId}
+                  className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-2.5 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                        {pkg.provider}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {pkg.latestVersion && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-300">
+                            v{pkg.latestVersion}
+                          </span>
+                        )}
+                        <a
+                          href={pkg.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-zinc-400 hover:text-white p-1"
+                          title="Open in registry"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                        {!isDemo && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePackageConnector(pkg.connectorId)}
+                            className="p-1 text-zinc-500 hover:text-red-300"
+                            title="Remove tracked package"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-sm font-bold text-white font-mono mt-1.5 truncate" title={pkg.identifier}>
+                      {pkg.identifier}
+                    </div>
+                    <div className="mt-2 flex items-baseline justify-between text-xs">
+                      <span className="text-zinc-400">{pkg.metricLabel}</span>
+                      <span className="font-mono font-bold text-white">
+                        {pkg.metricValue !== null ? pkg.metricValue.toLocaleString() : "—"}
+                      </span>
+                    </div>
+                  </div>
+                  {pkg.security && (
+                    <div className="pt-2 border-t border-zinc-800/70">
+                      <PackageSecurityBadge summary={pkg.security} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 1-Click Search & Add Package / Extension / Container */}
         <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
           <div>
@@ -282,7 +379,7 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
               <span>Search &amp; Add Package, Extension, Container or MCP Server</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Browse live registries (npm, PyPI, Crates.io, VS Code / Open-VSX, Docker Hub, MCP, Go) and attach in 1 click without a Git repo.
+              Browse live registries (npm, PyPI, Crates.io, VS Code / Open-VSX, Docker Hub, MCP, Go) and attach in 1 click without a Git repo — supports multiple packages per project.
             </p>
           </div>
           <PackageSearchPicker
@@ -299,9 +396,12 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  action: "quick_connect",
+                  action: "add_package_connector",
                   projectId: project.id,
-                  linksText: item.url,
+                  provider: item.ecosystem,
+                  identifier: item.name,
+                  label: `${item.ecosystem}: ${item.name}`,
+                  targetUrl: item.url,
                 }),
               });
               if (res.ok) window.location.reload();

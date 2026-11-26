@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { featureRequests, featureVotes, projects, deployments } from "@/db/schema";
+import { featureRequests, featureVotes, projects, deployments, statusSubscribers } from "@/db/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   checkRateLimit,
@@ -12,6 +12,10 @@ import { resolveProjectAccess } from "@/lib/security/rbac";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { apiError } from "@/lib/security/api-error";
 import { verifyTelemetryApiKey } from "@/lib/security/api-keys";
+import { resolveDecryptedWebhookConfig, dispatchCrashAlerts } from "@/lib/alerts/webhook";
+import { sendTransactionalEmail } from "@/lib/alerts/email";
+import { decryptSecret } from "@/lib/security/crypto";
+import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export const dynamic = "force-dynamic";
 
@@ -340,6 +344,16 @@ export async function PATCH(req: NextRequest) {
 
     if (Object.keys(updates).length === 0) return NextResponse.json({ error: "No valid feedback updates provided" }, { status: 400 });
 
+    const [existingFeature] = await db
+      .select()
+      .from(featureRequests)
+      .where(and(eq(featureRequests.id, featureId), eq(featureRequests.projectId, projectId)))
+      .limit(1);
+
+    if (!existingFeature) {
+      return NextResponse.json({ error: "Feature request not found" }, { status: 404 });
+    }
+
     await db
       .update(featureRequests)
       .set(updates)
@@ -357,6 +371,78 @@ export async function PATCH(req: NextRequest) {
       headers: req.headers,
       metadata: updates,
     });
+
+    const justShipped = existingFeature.status !== "shipped" && updates.status === "shipped";
+    if (justShipped) {
+      try {
+        const [projRow] = await db
+          .select()
+          .from(projects)
+          .where(eq(projects.id, projectId))
+          .limit(1);
+
+        if (projRow) {
+          const shippedVersion = updates.targetVersion ?? existingFeature.targetVersion ?? "latest";
+          const shippedReleaseUrl =
+            updates.releaseUrl ??
+            existingFeature.releaseUrl ??
+            `${PUBLIC_APP_URL}/report/${encodeURIComponent(projRow.slug)}`;
+
+          const webhookCfg = await resolveDecryptedWebhookConfig(projRow).catch(() => null);
+          if (webhookCfg) {
+            await dispatchCrashAlerts(webhookCfg, {
+              projectName: projRow.name,
+              projectSlug: projRow.slug,
+              errorName: "FeatureShipped",
+              message: `Shipped "${existingFeature.title}" (${shippedVersion}) — ${shippedReleaseUrl}`,
+              runtime: "roadmap",
+              version: shippedVersion,
+              dashboardUrl: shippedReleaseUrl,
+            }).catch(() => {});
+          }
+
+          const subscribers = await db
+            .select({ email: statusSubscribers.email })
+            .from(statusSubscribers)
+            .where(and(eq(statusSubscribers.projectId, projectId), eq(statusSubscribers.isActive, true)))
+            .limit(20)
+            .catch(() => []);
+
+          const recipients = new Set<string>();
+          if (existingFeature.authorEmail) recipients.add(existingFeature.authorEmail.trim().toLowerCase());
+          if (projRow.notificationEmail) recipients.add(projRow.notificationEmail.trim().toLowerCase());
+          for (const sub of subscribers) {
+            if (sub.email) recipients.add(sub.email.trim().toLowerCase());
+          }
+
+          if (recipients.size > 0) {
+            const emailApiKey = projRow.emailApiKeyEncrypted
+              ? await decryptSecret(projRow.emailApiKeyEncrypted).catch(() => null)
+              : null;
+            const subject = `[${projRow.name}] Shipped: ${existingFeature.title}`;
+            const text = `${existingFeature.title} has shipped${shippedVersion ? ` in ${shippedVersion}` : ""}. Details: ${shippedReleaseUrl}`;
+            const html = `<p><strong>${projRow.name}</strong> shipped a requested feature:</p><p><strong>${existingFeature.title}</strong> (${shippedVersion})</p><p><a href="${shippedReleaseUrl}">View release &amp; feedback portal</a></p>`;
+
+            await Promise.allSettled(
+              Array.from(recipients)
+                .slice(0, 25)
+                .map((to) =>
+                  sendTransactionalEmail({
+                    to,
+                    subject,
+                    text,
+                    html,
+                    provider: (projRow.emailProvider as any) || undefined,
+                    apiKey: emailApiKey || undefined,
+                  })
+                )
+            );
+          }
+        }
+      } catch {
+        // Non-blocking shipped notification dispatch
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -61,6 +61,8 @@ export async function GET(req: NextRequest) {
         vscodeStats: existing.vscodeStats,
         mcpStats: existing.mcpStats,
         revenueStats: existing.revenueStats,
+        packageSecurity: existing.packageSecurity,
+        extraPackages: existing.extraPackages,
         snapshotUpdatedAt: existing.snapshotUpdatedAt,
         refreshed: false,
       });
@@ -77,6 +79,8 @@ export async function GET(req: NextRequest) {
       vscodeStats: fresh.vscodeStats,
       mcpStats: fresh.mcpStats,
       revenueStats: fresh.revenueStats,
+      packageSecurity: fresh.packageSecurity,
+      extraPackages: fresh.extraPackages,
       snapshotUpdatedAt: fresh.snapshotUpdatedAt,
       refreshed: true,
     });
