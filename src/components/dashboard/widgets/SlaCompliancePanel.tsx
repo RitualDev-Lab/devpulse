@@ -80,7 +80,8 @@ export function SlaCompliancePanel({
   const [editStatus, setEditStatus] = useState<IncidentItem["status"]>("resolved");
   const [editRca, setEditRca] = useState("");
   const [editIsPublic, setEditIsPublic] = useState(true);
-  const [rcaPreviewMode, setRcaPreviewMode] = useState(false);
+  const [rcaPreviewMode, setRcaPreviewMode] = useState<"edit" | "split" | "preview">("split");
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
 
   const loadSla = useCallback(async () => {
     setLoading(true);
@@ -194,6 +195,11 @@ export function SlaCompliancePanel({
         }),
       });
       setEditingId(null);
+      setPublishNotice(
+        editIsPublic
+          ? "Saved incident update & published RCA to your Public Status Portal."
+          : "Saved internal incident update (hidden from public portal)."
+      );
       await loadSla();
     } finally {
       setBusy(false);
@@ -503,7 +509,7 @@ export function SlaCompliancePanel({
                           setEditStatus(inc.status);
                           setEditRca(inc.rcaText || "");
                           setEditIsPublic(inc.isPublic);
-                          setRcaPreviewMode(false);
+                          setRcaPreviewMode("split");
                         }}
                         className="text-[11px] text-indigo-400 hover:underline"
                       >
@@ -512,6 +518,12 @@ export function SlaCompliancePanel({
                     </div>
                   )}
                 </div>
+
+                {publishNotice && (
+                  <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-300">
+                    {publishNotice}
+                  </div>
+                )}
 
                 {inc.rcaText && editingId !== inc.id && (
                   <div className="text-xs text-zinc-300 bg-zinc-900/70 p-2.5 rounded-lg border-l-2 border-indigo-500">
@@ -533,39 +545,45 @@ export function SlaCompliancePanel({
                         <option value="resolved">Resolved</option>
                       </select>
                       <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-[10px]">
-                        <button
-                          type="button"
-                          onClick={() => setRcaPreviewMode(false)}
-                          className={`px-2 py-1 rounded-md font-semibold ${
-                            !rcaPreviewMode ? "bg-indigo-600 text-white" : "text-zinc-400"
-                          }`}
-                        >
-                          Markdown
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRcaPreviewMode(true)}
-                          className={`px-2 py-1 rounded-md font-semibold ${
-                            rcaPreviewMode ? "bg-indigo-600 text-white" : "text-zinc-400"
-                          }`}
-                        >
-                          Preview
-                        </button>
+                        {(
+                          [
+                            { id: "edit", label: "Markdown" },
+                            { id: "split", label: "Side-by-Side" },
+                            { id: "preview", label: "Preview" },
+                          ] as const
+                        ).map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setRcaPreviewMode(m.id)}
+                            className={`px-2 py-1 rounded-md font-semibold ${
+                              rcaPreviewMode === m.id ? "bg-indigo-600 text-white" : "text-zinc-400"
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                    {!rcaPreviewMode ? (
-                      <textarea
-                        rows={4}
-                        value={editRca}
-                        onChange={(e) => setEditRca(e.target.value)}
-                        placeholder="Write Root Cause Analysis (RCA)..."
-                        className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white font-mono"
-                      />
-                    ) : (
-                      <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 space-y-1.5 whitespace-pre-wrap">
-                        {editRca.trim() || "Nothing drafted yet."}
-                      </div>
-                    )}
+                    <div className={rcaPreviewMode === "split" ? "grid grid-cols-1 md:grid-cols-2 gap-2.5" : ""}>
+                      {rcaPreviewMode !== "preview" && (
+                        <textarea
+                          rows={4}
+                          value={editRca}
+                          onChange={(e) => setEditRca(e.target.value)}
+                          placeholder="Write Root Cause Analysis (RCA)..."
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white font-mono"
+                        />
+                      )}
+                      {rcaPreviewMode !== "edit" && (
+                        <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 space-y-1.5 whitespace-pre-wrap">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                            Status Portal Preview
+                          </div>
+                          <div>{editRca.trim() || "Nothing drafted yet."}</div>
+                        </div>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <label className="inline-flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
                         <input

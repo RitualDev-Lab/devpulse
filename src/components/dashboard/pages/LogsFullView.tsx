@@ -98,7 +98,17 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
   const [timeWindow, setTimeWindow] = useState<"all" | "15m" | "1h" | "24h" | "7d">("all");
   const [liveTail, setLiveTail] = useState(false);
   const [tailHoverPaused, setTailHoverPaused] = useState(false);
+  const [piiScrubEnabled, setPiiScrubEnabled] = useState(true);
   const [saveName, setSaveName] = useState("");
+
+  useEffect(() => {
+    try {
+      const savedPii = localStorage.getItem(`devpulse_pii_${project.id}`);
+      if (savedPii === "false") setPiiScrubEnabled(false);
+    } catch {
+      // ignore
+    }
+  }, [project.id]);
   const [showSaveBox, setShowSaveBox] = useState(false);
   const [loading, setLoading] = useState(false);
   const [emitting, setEmitting] = useState(false);
@@ -491,17 +501,22 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
                       </span>
                       <span className="text-zinc-200 flex-1 break-all min-w-0">
                         {(() => {
+                          const displayMsg = piiScrubEnabled
+                            ? l.message
+                                .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[email-redacted]")
+                                .replace(/\b(sk_live|sk_test|ghp_|gho_|dp_live_)[A-Za-z0-9_-]{6,}/g, "$1***")
+                            : l.message;
                           const qTrim = query.trim();
-                          if (!qTrim) return l.message;
-                          const idx = l.message.toLowerCase().indexOf(qTrim.toLowerCase());
-                          if (idx === -1) return l.message;
+                          if (!qTrim) return displayMsg;
+                          const idx = displayMsg.toLowerCase().indexOf(qTrim.toLowerCase());
+                          if (idx === -1) return displayMsg;
                           return (
                             <>
-                              {l.message.slice(0, idx)}
+                              {displayMsg.slice(0, idx)}
                               <mark className="bg-amber-500/30 text-amber-200 rounded px-0.5">
-                                {l.message.slice(idx, idx + qTrim.length)}
+                                {displayMsg.slice(idx, idx + qTrim.length)}
                               </mark>
-                              {l.message.slice(idx + qTrim.length)}
+                              {displayMsg.slice(idx + qTrim.length)}
                             </>
                           );
                         })()}

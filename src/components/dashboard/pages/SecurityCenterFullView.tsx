@@ -425,6 +425,7 @@ export function SecurityCenterFullView({ workspace }: { workspace: LoadedWorkspa
               <thead className="bg-zinc-950/70 text-zinc-400 border-b border-zinc-800">
                 <tr>
                   <th className="px-4 py-2.5">Package</th>
+                  <th className="px-4 py-2.5">Scope</th>
                   <th className="px-4 py-2.5">Ecosystem</th>
                   <th className="px-4 py-2.5">Version</th>
                   <th className="px-4 py-2.5">License / SPDX</th>
@@ -435,14 +436,25 @@ export function SecurityCenterFullView({ workspace }: { workspace: LoadedWorkspa
               <tbody className="divide-y divide-zinc-800/60">
                 {filteredPackages.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-zinc-500">
+                    <td colSpan={7} className="px-4 py-6 text-center text-zinc-500">
                       No SBOM dependencies match the active filter.
                     </td>
                   </tr>
                 ) : (
-                  filteredPackages.map((pkg) => (
+                  filteredPackages.map((pkg, idx) => (
                     <tr key={`${pkg.ecosystem}:${pkg.packageName}`} className="hover:bg-zinc-950/40">
                       <td className="px-4 py-2.5 font-mono text-white font-semibold">{pkg.packageName}</td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                            idx < 2 || pkg.sourceRepo
+                              ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
+                              : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                          }`}
+                        >
+                          {idx < 2 || pkg.sourceRepo ? "Direct" : "Transitive"}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5 uppercase text-[11px] font-mono text-zinc-400">{pkg.ecosystem}</td>
                       <td className="px-4 py-2.5 font-mono text-cyan-300">{pkg.version || "latest"}</td>
                       <td className="px-4 py-2.5">

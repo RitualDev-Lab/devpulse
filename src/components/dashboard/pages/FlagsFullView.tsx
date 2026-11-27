@@ -223,7 +223,21 @@ export function FlagsFullView({ workspace }: { workspace: LoadedWorkspaceReady }
   };
 
   const handleUpdateRollout = async (flag: FlagRow, nextPct: number, nextEnabled: boolean) => {
-    if (isDemo) return;
+    if (isDemo) {
+      setFlags((prev) =>
+        prev.map((row) =>
+          row.id === flag.id
+            ? {
+                ...row,
+                rolloutPercent: nextPct,
+                isEnabled: nextEnabled,
+                status: nextEnabled ? "active" : "paused",
+              }
+            : row
+        )
+      );
+      return;
+    }
     setBusy(true);
     try {
       await fetch("/api/v1/flags", {
@@ -437,38 +451,38 @@ if (await pulse.flag("new-checkout", { userId: "usr_123" })) {
                     )}
                   </div>
 
-                  {!isDemo && (
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 text-xs font-mono">
-                        <span className="text-zinc-400">Rollout: {f.rolloutPercent}%</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={f.rolloutPercent}
-                          onChange={(e) =>
-                            handleUpdateRollout(f, Number(e.target.value), f.isEnabled)
-                          }
-                          className="w-24 accent-indigo-500"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleUpdateRollout(
-                            f,
-                            f.isEnabled ? f.rolloutPercent : Math.max(25, f.rolloutPercent),
-                            !f.isEnabled
-                          )
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 text-xs font-mono">
+                      <span className="text-zinc-400">Rollout: {f.rolloutPercent}%</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={f.rolloutPercent}
+                        onChange={(e) =>
+                          handleUpdateRollout(f, Number(e.target.value), f.isEnabled)
                         }
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
-                          f.isEnabled
-                            ? "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                            : "bg-emerald-600 text-white hover:bg-emerald-500"
-                        }`}
-                      >
-                        {f.isEnabled ? "Pause" : f.status === "rolled_back" ? "Restore" : "Enable"}
-                      </button>
+                        className="w-24 accent-indigo-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleUpdateRollout(
+                          f,
+                          f.isEnabled ? f.rolloutPercent : Math.max(25, f.rolloutPercent),
+                          !f.isEnabled
+                        )
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                        f.isEnabled
+                          ? "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                          : "bg-emerald-600 text-white hover:bg-emerald-500"
+                      }`}
+                    >
+                      {f.isEnabled ? "Pause" : f.status === "rolled_back" ? "Restore" : "Enable"}
+                    </button>
+                    {!isDemo && (
                       <button
                         type="button"
                         onClick={async () => {
@@ -487,8 +501,8 @@ if (await pulse.flag("new-checkout", { userId: "usr_123" })) {
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {/* A/B Variant Performance (distinct users, 30-day window) */}

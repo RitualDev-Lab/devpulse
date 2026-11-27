@@ -17,6 +17,35 @@ interface CronHeartbeatItem {
   nextDueAt: string | null;
 }
 
+const DEMO_HEARTBEATS: CronHeartbeatItem[] = [
+  {
+    id: "demo_hb_1",
+    name: "Nightly Turso Replica Snapshot",
+    monitorKey: "hb_demo_turso_snapshot",
+    pingUrl: "https://devpulse.ritualdev.in/api/v1/ping/hb_demo_turso_snapshot",
+    intervalMinutes: 1440,
+    graceMinutes: 15,
+    maxDurationSeconds: 180,
+    state: "up",
+    lastPingAt: "2026-11-26T22:00:00Z",
+    lastDurationMs: 418,
+    nextDueAt: "2026-11-27T22:00:00Z",
+  },
+  {
+    id: "demo_hb_2",
+    name: "23-Registry Hourly Metrics Sync",
+    monitorKey: "hb_demo_registry_sync",
+    pingUrl: "https://devpulse.ritualdev.in/api/v1/ping/hb_demo_registry_sync",
+    intervalMinutes: 60,
+    graceMinutes: 5,
+    maxDurationSeconds: 90,
+    state: "up",
+    lastPingAt: "2026-11-26T23:00:00Z",
+    lastDurationMs: 294,
+    nextDueAt: "2026-11-27T00:00:00Z",
+  },
+];
+
 export function CronHeartbeatsPanel({
   projectId,
   isDemo = false,
@@ -24,8 +53,8 @@ export function CronHeartbeatsPanel({
   projectId: string;
   isDemo?: boolean;
 }) {
-  const [items, setItems] = useState<CronHeartbeatItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<CronHeartbeatItem[]>(isDemo ? DEMO_HEARTBEATS : []);
+  const [loading, setLoading] = useState(!isDemo);
   const [name, setName] = useState("");
   const [intervalMinutes, setIntervalMinutes] = useState("60");
   const [graceMinutes, setGraceMinutes] = useState("5");
@@ -36,6 +65,11 @@ export function CronHeartbeatsPanel({
   const [pingNotice, setPingNotice] = useState<string | null>(null);
 
   const loadHeartbeats = useCallback(async () => {
+    if (isDemo) {
+      setItems((prev) => (prev.length > 0 ? prev : DEMO_HEARTBEATS));
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/v1/monitors/heartbeats?projectId=${encodeURIComponent(projectId)}`);
       if (res.ok) {
@@ -45,7 +79,7 @@ export function CronHeartbeatsPanel({
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, isDemo]);
 
   useEffect(() => {
     void loadHeartbeats();

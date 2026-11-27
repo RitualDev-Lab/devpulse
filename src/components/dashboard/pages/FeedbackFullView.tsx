@@ -193,7 +193,9 @@ export function FeedbackFullView({ workspace }: { workspace: LoadedWorkspaceRead
                           <div className="text-xs font-semibold text-white leading-snug">{item.title}</div>
                           <p className="text-[11px] text-zinc-400 line-clamp-2">{item.description}</p>
                           <div className="flex items-center justify-between gap-2 pt-1 text-[10px] font-mono">
-                            <span className="text-indigo-300">{item.voteCount} votes</span>
+                            <span className="text-indigo-300">
+                              {item.voteCount} {item.status === "shipped" ? "subscribers notified" : "subscribers queued"}
+                            </span>
                             {item.targetVersion && (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">
                                 {item.targetVersion}

@@ -14,7 +14,6 @@ import {
   Plus,
   HardDrive,
   Globe,
-  FolderGit2,
   RefreshCw,
 } from "lucide-react";
 import { ModalShell } from "./ModalShell";
@@ -60,12 +59,6 @@ interface BillingProfile {
     invoiceUrl: string | null;
     createdAt: string;
   }>;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  if (bytes >= 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`;
-  return `${Math.round(bytes / 1024)} KB`;
 }
 
 export function BillingModal({

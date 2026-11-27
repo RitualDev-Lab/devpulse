@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Sliders, RefreshCw } from "lucide-react";
 import { WorkspaceShell } from "./WorkspaceShell";
 import { useWorkspaceData } from "./WorkspaceCacheContext";
@@ -32,6 +33,7 @@ export function DashboardClientView({
   accessRole = "owner",
   isDemo = false,
 }: DashboardClientViewProps) {
+  const router = useRouter();
   const data = useWorkspaceData(initialData);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
@@ -53,12 +55,21 @@ export function DashboardClientView({
         if (upgradeParam === "pro" || upgradeParam === "team" || upgradeParam === "extra_domain" || upgradeParam === "extra_storage") {
           setIsBillingOpen(true);
         }
+        const landedKey = `dp_landed_${data.project.id}`;
+        if (!sessionStorage.getItem(landedKey)) {
+          sessionStorage.setItem(landedKey, "1");
+          const savedTab = localStorage.getItem(`devpulse_default_tab_${data.project.id}`);
+          if (savedTab && savedTab !== "/dashboard" && savedTab.startsWith("/dashboard/")) {
+            const qs = new URLSearchParams(window.location.search);
+            router.replace(`${savedTab}${qs.toString() ? `?${qs.toString()}` : ""}`);
+          }
+        }
       } catch {
         // ignore
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [data.project.id, router]);
 
   const handleResetLayout = async () => {
     try {
