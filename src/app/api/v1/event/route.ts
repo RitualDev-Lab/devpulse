@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { crashIssues, deployments, errorEvents, otelTraces, projectReleases, projects, workspaces } from "@/db/schema";
-import { eq, and, desc, gt, or, sql } from "drizzle-orm";
+import { eq, and, desc, gt, lt, or, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { dispatchCrashAlerts, resolveDecryptedWebhookConfig } from "@/lib/alerts/webhook";
 import { evaluateProjectAlertRules } from "@/lib/alerts/smart-engine";
@@ -26,6 +26,7 @@ import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 import { buildFatalCrashEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
 import { apiError } from "@/lib/security/api-error";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { getMaxEventBytes, validateEventIngestPayload } from "@/lib/validation/event-ingest";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096; // Offload payloads > 4KB (e.g. 100KB+ traces & terminal dumps) to R2
 const MAX_TURSO_PREVIEW_CHARS = 2000;
@@ -147,48 +148,106 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const maxBytes = getMaxEventBytes();
+    const contentLengthHeader = req.headers.get("content-length");
+    if (contentLengthHeader) {
+      const declaredBytes = Number(contentLengthHeader);
+      if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+        return NextResponse.json(
+          { error: `Payload exceeds maximum allowed size (${maxBytes} bytes). Upload oversized logs via /api/v1/storage/presign.` },
+          { status: 413 }
+        );
+      }
+    }
+
     const authHeader = req.headers.get("authorization");
+    const headerApiKey = authHeader?.replace(/^Bearer\s+/i, "").trim() || "";
+
+    // Enforce API-key rate limit BEFORE reading/parsing JSON when Authorization header is provided
+    let headerRl: Awaited<ReturnType<typeof checkRateLimit>> | null = null;
+    if (headerApiKey) {
+      const keyHashPrefix = (await hashApiKey(headerApiKey)).slice(0, 16);
+      headerRl = await checkRateLimit({
+        key: `event:${keyHashPrefix}`,
+        limit: 500,
+        windowSeconds: 60,
+      });
+      if (!headerRl.allowed) {
+        return NextResponse.json(
+          {
+            error: "Telemetry rate limit exceeded (max 500 beacons/min per API key).",
+            code: "RATE_LIMIT_EXCEEDED",
+            retryAfterSeconds: headerRl.retryAfterSeconds,
+          },
+          {
+            status: 429,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Retry-After": String(headerRl.retryAfterSeconds),
+              "X-RateLimit-Limit": String(headerRl.limit),
+              "X-RateLimit-Remaining": "0",
+              "X-RateLimit-Reset": String(headerRl.resetAtEpoch),
+            },
+          }
+        );
+      }
+    }
+
+    const rawText = await req.text();
+    if (new TextEncoder().encode(rawText).byteLength > maxBytes) {
+      return NextResponse.json(
+        { error: `Payload exceeds maximum allowed size (${maxBytes} bytes).` },
+        { status: 413 }
+      );
+    }
+
     let body: any = {};
     try {
-      body = await req.json();
+      body = rawText ? JSON.parse(rawText) : {};
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    // Extract API key either from Authorization header or body
-    const apiKey = authHeader?.replace(/^Bearer\s+/i, "") || body.apiKey || body.key || body.api_key;
+    const validatedSchema = validateEventIngestPayload(body);
+    if (!validatedSchema.ok) {
+      return NextResponse.json({ error: validatedSchema.error }, { status: 400 });
+    }
+
+    // Extract API key either from Authorization header or body fallback
+    const apiKey = headerApiKey || body.apiKey || body.key || body.api_key;
     if (!apiKey) {
       return NextResponse.json({ error: "Missing telemetry apiKey" }, { status: 401 });
     }
 
     const rawKeyStr = String(apiKey);
-    const keyHashPrefix = (await hashApiKey(rawKeyStr)).slice(0, 16);
+    let rl = headerRl;
+    if (!rl) {
+      const keyHashPrefix = (await hashApiKey(rawKeyStr)).slice(0, 16);
+      rl = await checkRateLimit({
+        key: `event:${keyHashPrefix}`,
+        limit: 500,
+        windowSeconds: 60,
+      });
 
-    // Rate limit: max 500 telemetry beacons / min per API key
-    const rl = await checkRateLimit({
-      key: `event:${keyHashPrefix}`,
-      limit: 500,
-      windowSeconds: 60,
-    });
-
-    if (!rl.allowed) {
-      return NextResponse.json(
-        {
-          error: "Telemetry rate limit exceeded (max 500 beacons/min per API key).",
-          code: "RATE_LIMIT_EXCEEDED",
-          retryAfterSeconds: rl.retryAfterSeconds,
-        },
-        {
-          status: 429,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Retry-After": String(rl.retryAfterSeconds),
-            "X-RateLimit-Limit": String(rl.limit),
-            "X-RateLimit-Remaining": "0",
-            "X-RateLimit-Reset": String(rl.resetAtEpoch),
+      if (!rl.allowed) {
+        return NextResponse.json(
+          {
+            error: "Telemetry rate limit exceeded (max 500 beacons/min per API key).",
+            code: "RATE_LIMIT_EXCEEDED",
+            retryAfterSeconds: rl.retryAfterSeconds,
           },
-        }
-      );
+          {
+            status: 429,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Retry-After": String(rl.retryAfterSeconds),
+              "X-RateLimit-Limit": String(rl.limit),
+              "X-RateLimit-Remaining": "0",
+              "X-RateLimit-Reset": String(rl.resetAtEpoch),
+            },
+          }
+        );
+      }
     }
 
     // Verify project via SHA-256 key hash lookup (rejects rotated/revoked keys)
@@ -201,27 +260,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Enforce Workspace Monthly Event Cap when assigned to an Organization Workspace
+    // Enforce Workspace Monthly Event Cap atomically (awaited conditional increment prevents concurrency race)
     if (project.workspaceId) {
-      const [ws] = await db
-        .select()
-        .from(workspaces)
-        .where(eq(workspaces.id, project.workspaceId))
-        .limit(1);
-      if (ws && ws.monthlyEventsUsed >= ws.monthlyEventLimit) {
-        return NextResponse.json(
-          {
-            error: `Workspace '${ws.name}' monthly event cap (${ws.monthlyEventLimit.toLocaleString()}) exceeded.`,
-            code: "WORKSPACE_EVENT_CAP_EXCEEDED",
-          },
-          { status: 429 }
-        );
-      }
-      if (ws) {
-        db.update(workspaces)
-          .set({ monthlyEventsUsed: sql`${workspaces.monthlyEventsUsed} + 1` })
-          .where(eq(workspaces.id, ws.id))
-          .catch(() => {});
+      const [incremented] = await db
+        .update(workspaces)
+        .set({ monthlyEventsUsed: sql`${workspaces.monthlyEventsUsed} + 1` })
+        .where(
+          and(
+            eq(workspaces.id, project.workspaceId),
+            lt(workspaces.monthlyEventsUsed, workspaces.monthlyEventLimit)
+          )
+        )
+        .returning({ id: workspaces.id });
+
+      if (!incremented) {
+        const [ws] = await db
+          .select({ name: workspaces.name, monthlyEventLimit: workspaces.monthlyEventLimit })
+          .from(workspaces)
+          .where(eq(workspaces.id, project.workspaceId))
+          .limit(1);
+        if (ws) {
+          return NextResponse.json(
+            {
+              error: `Workspace '${ws.name}' monthly event cap (${ws.monthlyEventLimit.toLocaleString()}) exceeded.`,
+              code: "WORKSPACE_EVENT_CAP_EXCEEDED",
+            },
+            { status: 429 }
+          );
+        }
       }
     }
 
@@ -232,14 +298,12 @@ export async function POST(req: NextRequest) {
     const message = scrubTelemetryText(
       String(body.message || "An unexpected error occurred").slice(0, 2000)
     );
-    const rawStack =
-      body.stackTrace || body.stack_trace || body.stack
-        ? scrubTelemetryText(String(body.stackTrace || body.stack_trace || body.stack))
-        : "";
-    const rawLogs =
-      body.terminalLogs || body.terminal_logs || body.logs
-        ? scrubTelemetryText(String(body.terminalLogs || body.terminal_logs || body.logs))
-        : "";
+    const rawStack = validatedSchema.value.rawStack
+      ? scrubTelemetryText(validatedSchema.value.rawStack)
+      : "";
+    const rawLogs = validatedSchema.value.rawLogs
+      ? scrubTelemetryText(validatedSchema.value.rawLogs)
+      : "";
     const runtime = String(body.runtime || "node").slice(0, 50);
     const version = (body.version || body.release) ? String(body.version || body.release).slice(0, 50) : null;
     const os = body.os ? String(body.os).slice(0, 100) : null;
@@ -261,15 +325,15 @@ export async function POST(req: NextRequest) {
     }
 
     const rawBreadcrumbs = Array.isArray(body.breadcrumbs) ? scrubBreadcrumbs(body.breadcrumbs.slice(-50)) : [];
-    const rawReplay = Array.isArray(body.replayTimeline) ? body.replayTimeline.slice(-80) : [];
-    const replayBreadcrumbs = rawReplay.map((f: any) => ({
-      timestamp: typeof f?.t === "number" ? new Date(f.t).toISOString() : new Date().toISOString(),
+    const rawReplay = validatedSchema.value.replayFrames;
+    const replayBreadcrumbs = rawReplay.map((f) => ({
+      timestamp: f.tIso,
       category: "replay",
-      level: typeof f?.kind === "string" ? f.kind.slice(0, 16) : "dom",
-      message: scrubTelemetryText(String(f?.label || "event")).slice(0, 200),
+      level: f.kind,
+      message: scrubTelemetryText(f.label),
       data: {
-        offsetMs: typeof f?.offsetMs === "number" ? f.offsetMs : 0,
-        detail: f?.detail ? scrubTelemetryText(String(f.detail)).slice(0, 240) : undefined,
+        offsetMs: f.offsetMs,
+        detail: f.detail ? scrubTelemetryText(f.detail) : undefined,
       },
     }));
     const mergedTimeline = [...rawBreadcrumbs, ...replayBreadcrumbs];
@@ -291,7 +355,7 @@ export async function POST(req: NextRequest) {
       flagKey: flagKey || "",
       userId: body.flagUserId ? String(body.flagUserId) : null,
     });
-    const affectedUsersCount = Math.max(1, Number(body.affectedUsersCount || body.usersAffected || 1));
+    const affectedUsersCount = validatedSchema.value.affectedUsersCount;
     const countryCode = extractCountryCode(req.headers, body);
     const aiGroupKey = computeSemanticGroupKey(errorName, message, rawStack);
     const impact = computeBusinessImpact({
