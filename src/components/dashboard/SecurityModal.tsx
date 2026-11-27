@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { OrgRole } from "@/lib/security/rbac";
 import { SsoScimPanel } from "./SsoScimPanel";
+import { ModalShell } from "./ModalShell";
 
 interface SecurityModalProps {
   isOpen: boolean;
@@ -387,8 +388,7 @@ export function SecurityModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-4xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[92vh] flex flex-col">
+    <ModalShell isOpen={isOpen} onClose={onClose} maxWidthClass="max-w-4xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-3">
@@ -971,7 +971,6 @@ export function SecurityModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { X, Plug, CheckCircle2, Box, Package, Cpu, HelpCircle, GitBranch, ShieldCheck } from "lucide-react";
 import { DEVPULSE_MCP_TOOLS } from "@/lib/integrations/mcp-policy";
+import { ModalShell } from "./ModalShell";
 
 interface IntegrationsModalProps {
   isOpen: boolean;
@@ -87,8 +88,7 @@ export function IntegrationsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <ModalShell isOpen={isOpen} onClose={onClose} maxWidthClass="max-w-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/50">
           <div className="flex items-center gap-2.5">
@@ -270,7 +270,6 @@ export function IntegrationsModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

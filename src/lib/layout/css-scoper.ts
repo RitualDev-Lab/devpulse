@@ -367,6 +367,44 @@ export function getPresetThemeCss(themeId: string): string {
           border-color: #cbd5e1 !important;
           color: #0f172a !important;
         }
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace pre,
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace .recharts-default-tooltip {
+          background-color: #f8fafc !important;
+          border-color: #cbd5e1 !important;
+          color: #0f172a !important;
+        }
+        [data-theme="minimal_white"] .devpulse-modal-panel {
+          background-color: #ffffff !important;
+          border-color: #cbd5e1 !important;
+          color: #0f172a !important;
+        }
+        [data-theme="minimal_white"] .devpulse-modal-panel .text-white,
+        [data-theme="minimal_white"] .devpulse-modal-panel [class*="text-zinc-100"],
+        [data-theme="minimal_white"] .devpulse-modal-panel [class*="text-zinc-200"] {
+          color: #0f172a !important;
+        }
+        [data-theme="minimal_white"] .devpulse-modal-panel [class*="text-zinc-300"],
+        [data-theme="minimal_white"] .devpulse-modal-panel [class*="text-zinc-400"],
+        [data-theme="minimal_white"] .devpulse-modal-panel [class*="text-zinc-500"] {
+          color: #475569 !important;
+        }
+        [data-theme="minimal_white"] .devpulse-modal-panel [class*="bg-zinc-950"],
+        [data-theme="minimal_white"] .devpulse-modal-panel [class*="bg-zinc-900"],
+        [data-theme="minimal_white"] .devpulse-modal-panel [class*="bg-zinc-800"],
+        [data-theme="minimal_white"] .devpulse-modal-panel input,
+        [data-theme="minimal_white"] .devpulse-modal-panel select,
+        [data-theme="minimal_white"] .devpulse-modal-panel textarea {
+          background-color: #f8fafc !important;
+          border-color: #cbd5e1 !important;
+          color: #0f172a !important;
+        }
+        [data-theme="minimal_white"] .devpulse-modal-panel button.bg-indigo-600,
+        [data-theme="minimal_white"] .devpulse-modal-panel button.bg-emerald-600,
+        [data-theme="minimal_white"] .devpulse-modal-panel button.bg-cyan-600,
+        [data-theme="minimal_white"] .devpulse-modal-panel button.bg-purple-600,
+        [data-theme="minimal_white"] .devpulse-modal-panel button.bg-red-600 {
+          color: #ffffff !important;
+        }
       `;
     case "obsidian":
     default:

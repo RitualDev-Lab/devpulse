@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, createContext, useContext, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
   LayoutGrid,
@@ -26,6 +26,8 @@ import {
   ShieldAlert,
   Bot,
   Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 import {
@@ -38,6 +40,8 @@ import { CommandPalette } from "./CommandPalette";
 import { BillingModal } from "./BillingModal";
 import { PackageSearchPicker } from "./PackageSearchPicker";
 import { CustomCssModal } from "./CustomCssModal";
+import { ModalShell } from "./ModalShell";
+import { useToast } from "./ToastContext";
 import {
   DEFAULT_APPEARANCE_PREFS,
   getAppearancePrefsCss,
@@ -89,21 +93,44 @@ export function useWorkspaceAppearance() {
   return useContext(WorkspaceShellContext);
 }
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Overview", icon: LayoutGrid, exact: true },
-  { href: "/dashboard/github", label: "Git & PRs", icon: GitBranch },
-  { href: "/dashboard/packages", label: "Packages", icon: Package },
-  { href: "/dashboard/analytics", label: "Daily Users", icon: BarChart3 },
-  { href: "/dashboard/crashes", label: "Crashes & Maps", icon: Bug },
-  { href: "/dashboard/security", label: "Security & SBOM", icon: ShieldAlert },
-  { href: "/dashboard/mcp", label: "MCP & AI Agents", icon: Bot },
-  { href: "/dashboard/traces", label: "Traces (OTEL)", icon: Workflow },
-  { href: "/dashboard/logs", label: "Logs (Loki)", icon: ScrollText },
-  { href: "/dashboard/flags", label: "Flags & A/B", icon: Flag },
-  { href: "/dashboard/feedback", label: "Feedback & Releases", icon: MessageSquare },
-  { href: "/dashboard/uptime", label: "Uptime & P95", icon: HeartPulse },
-  { href: "/dashboard/revenue", label: "Revenue & Plan", icon: CreditCard },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+const NAV_GROUPS: Array<{
+  title: string;
+  items: Array<{ href: string; label: string; icon: React.ComponentType<{ className?: string }>; exact?: boolean }>;
+}> = [
+  {
+    title: "Core",
+    items: [
+      { href: "/dashboard", label: "Overview", icon: LayoutGrid, exact: true },
+      { href: "/dashboard/github", label: "Git & PRs", icon: GitBranch },
+      { href: "/dashboard/packages", label: "Packages", icon: Package },
+      { href: "/dashboard/analytics", label: "Daily Users", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "Observability",
+    items: [
+      { href: "/dashboard/crashes", label: "Crashes & Maps", icon: Bug },
+      { href: "/dashboard/traces", label: "Traces (OTEL)", icon: Workflow },
+      { href: "/dashboard/logs", label: "Logs (Loki)", icon: ScrollText },
+      { href: "/dashboard/uptime", label: "Uptime & P95", icon: HeartPulse },
+    ],
+  },
+  {
+    title: "Security & AI",
+    items: [
+      { href: "/dashboard/security", label: "Security & SBOM", icon: ShieldAlert },
+      { href: "/dashboard/mcp", label: "MCP & AI Agents", icon: Bot },
+      { href: "/dashboard/flags", label: "Flags & A/B", icon: Flag },
+      { href: "/dashboard/feedback", label: "Feedback & Releases", icon: MessageSquare },
+    ],
+  },
+  {
+    title: "Platform",
+    items: [
+      { href: "/dashboard/revenue", label: "Revenue & Plan", icon: CreditCard },
+      { href: "/dashboard/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 export function WorkspaceShell({
@@ -116,10 +143,13 @@ export function WorkspaceShell({
   children,
 }: WorkspaceShellProps) {
   const { isInsideShell, setHeaderActions } = useContext(WorkspaceShellContext);
+  const router = useRouter();
+  const { showToast } = useToast();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [childHeaderActions, setChildHeaderActions] = useState<React.ReactNode>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isQuickConnectOpen, setIsQuickConnectOpen] = useState(false);
   const [isPackageAdderOpen, setIsPackageAdderOpen] = useState(false);
@@ -132,6 +162,20 @@ export function WorkspaceShell({
   const [appearancePrefs, setAppearancePrefs] = useState<AppearancePreferences>(
     DEFAULT_APPEARANCE_PREFS
   );
+
+  useEffect(() => {
+    if (isInsideShell) return;
+    try {
+      setCollapsed(localStorage.getItem("devpulse_sidebar_collapsed") === "1");
+    } catch {
+      // ignore
+    }
+  }, [isInsideShell]);
+
+  useEffect(() => {
+    if (isInsideShell || typeof document === "undefined") return;
+    document.documentElement.setAttribute("data-theme", normalizeThemeId(liveTheme));
+  }, [liveTheme, isInsideShell]);
 
   // Sync project theme when switching workspaces cleanly
   useEffect(() => {
@@ -218,32 +262,56 @@ export function WorkspaceShell({
     return query ? `${baseHref}?${query}` : baseHref;
   };
 
-  const renderNavLinks = (onClick?: () => void) => (
-    <nav className="space-y-1 px-3">
-      {NAV_ITEMS.map((item) => {
-        const Icon = item.icon;
-        const active = item.exact
-          ? pathname === item.href
-          : pathname.startsWith(item.href);
+  const toggleCollapse = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("devpulse_sidebar_collapsed", next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
-        return (
-          <Link
-            key={item.href}
-            href={buildNavHref(item.href)}
-            aria-current={active ? "page" : undefined}
-            onClick={onClick}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition ${
-              active
-                ? "devpulse-nav-active bg-indigo-600/20 text-white border border-indigo-500/40 shadow-sm shadow-indigo-500/10"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent"
-            }`}
-          >
-            <Icon className={`w-4 h-4 shrink-0 ${active ? "text-indigo-400" : "text-zinc-500"}`} />
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
+  const renderNavLinks = (onClick?: () => void, isRail = false) => (
+    <div className="space-y-3.5 px-2.5">
+      {NAV_GROUPS.map((group) => (
+        <div key={group.title} className="space-y-1">
+          {!isRail && (
+            <div className="px-2.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+              {group.title}
+            </div>
+          )}
+          <nav className="space-y-0.5">
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const active = item.exact
+                ? pathname === item.href
+                : pathname.startsWith(item.href);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={buildNavHref(item.href)}
+                  aria-current={active ? "page" : undefined}
+                  title={isRail ? item.label : undefined}
+                  onClick={onClick}
+                  className={`flex items-center ${isRail ? "justify-center px-2" : "gap-2.5 px-3"} py-2 rounded-xl text-xs font-medium transition ${
+                    active
+                      ? "devpulse-nav-active bg-indigo-600/20 text-white border border-indigo-500/40 shadow-sm shadow-indigo-500/10"
+                      : "text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent"
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${active ? "text-indigo-400" : "text-zinc-500"}`} />
+                  {!isRail && <span className="truncate">{item.label}</span>}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      ))}
+    </div>
   );
 
   const effectiveRightActions = rightActions ?? childHeaderActions;
@@ -257,76 +325,106 @@ export function WorkspaceShell({
       {combinedDynamicCss && <style dangerouslySetInnerHTML={{ __html: combinedDynamicCss }} />}
 
       {/* Desktop Left Sidebar */}
-      <aside className="devpulse-sidebar hidden lg:flex lg:w-60 lg:flex-col lg:fixed lg:inset-y-0 border-r border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl z-40">
-        <div className="h-14 px-4 flex items-center justify-between border-b border-zinc-800/80">
+      <aside
+        className={`devpulse-sidebar hidden lg:flex ${
+          collapsed ? "lg:w-16" : "lg:w-60"
+        } lg:flex-col lg:fixed lg:inset-y-0 border-r border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl z-40 transition-all duration-200`}
+      >
+        <div className={`h-14 ${collapsed ? "px-2 justify-center" : "px-4 justify-between"} flex items-center border-b border-zinc-800/80`}>
           <Link href="/" className="flex items-center gap-2.5 group min-w-0">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-[1px] shadow-lg shadow-indigo-500/20 shrink-0">
               <div className="w-full h-full bg-zinc-950 rounded-[11px] flex items-center justify-center">
                 <Activity className="w-4 h-4 text-indigo-400" />
               </div>
             </div>
-            <span className="font-extrabold text-white text-base tracking-tight truncate">DevPulse</span>
+            {!collapsed && (
+              <span className="font-extrabold text-white text-base tracking-tight truncate">DevPulse</span>
+            )}
           </Link>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              title="Collapse sidebar rail"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        <div className="p-3 border-b border-zinc-800/60 space-y-2">
+        <div className="p-2.5 border-b border-zinc-800/60 space-y-2">
+          {collapsed && (
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              title="Expand sidebar"
+              className="w-full flex items-center justify-center p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition"
+            >
+              <PanelLeftOpen className="w-4 h-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setIsQuickConnectOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition"
+            title="Quick Connect Link"
+            className="w-full flex items-center justify-center gap-2 px-2.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition"
           >
-            <Wand2 className="w-3.5 h-3.5" />
-            <span>Quick Connect Link</span>
+            <Wand2 className="w-3.5 h-3.5 shrink-0" />
+            {!collapsed && <span>Quick Connect Link</span>}
           </button>
           <button
             type="button"
             onClick={() => setIsPackageAdderOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-semibold transition"
+            title="Add Package / Extension"
+            className="w-full flex items-center justify-center gap-2 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-semibold transition"
           >
-            <Package className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Add Package / Extension</span>
+            <Package className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            {!collapsed && <span>Add Package / Extension</span>}
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto py-3">
-          <div className="px-4 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-            Workspace Views
-          </div>
-          {renderNavLinks()}
+          {renderNavLinks(undefined, collapsed)}
         </div>
 
-        <div className="p-3 border-t border-zinc-800/80 space-y-2 text-xs">
+        <div className="p-2.5 border-t border-zinc-800/80 space-y-2 text-xs">
           <button
             type="button"
             onClick={() => setIsStylingOpen(true)}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition text-[11px]"
+            title="Theme & Appearance"
+            className={`w-full flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-3"} py-2 rounded-xl bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition text-[11px]`}
           >
             <span className="flex items-center gap-1.5">
-              <Palette className="w-3.5 h-3.5 text-purple-400" />
-              <span>Theme &amp; Appearance</span>
+              <Palette className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              {!collapsed && <span>Theme &amp; Appearance</span>}
             </span>
-            <span className="text-[10px] font-mono text-zinc-400 capitalize">{activeThemeId.replace("_", " ")}</span>
+            {!collapsed && (
+              <span className="text-[10px] font-mono text-zinc-400 capitalize">{activeThemeId.replace("_", " ")}</span>
+            )}
           </button>
           {customDomain ? (
             <a
               href={`https://${customDomain}`}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition"
+              title={customDomain}
+              className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-3"} py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition`}
             >
-              <span className="truncate font-mono text-[11px]">{customDomain}</span>
+              {!collapsed && <span className="truncate font-mono text-[11px]">{customDomain}</span>}
               <ExternalLink className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             </a>
           ) : (
             <Link
               href={buildNavHref("/dashboard/settings")}
-              className="flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-900/70 border border-zinc-800 text-zinc-400 hover:text-white transition text-[11px]"
+              title="Portal & Domain"
+              className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-3"} py-2 rounded-xl bg-zinc-900/70 border border-zinc-800 text-zinc-400 hover:text-white transition text-[11px]`}
             >
               <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Portal &amp; Domain</span>
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                {!collapsed && <span>Portal &amp; Domain</span>}
               </span>
-              <span>Setup</span>
+              {!collapsed && <span>Setup</span>}
             </Link>
           )}
         </div>
@@ -397,7 +495,7 @@ export function WorkspaceShell({
       )}
 
       {/* Main Content Column */}
-      <div className="flex-1 lg:pl-60 flex flex-col min-w-0">
+      <div className={`flex-1 ${collapsed ? "lg:pl-16" : "lg:pl-60"} flex flex-col min-w-0 transition-all duration-200`}>
         {/* Clean Minimal Top Bar */}
         <header className="devpulse-topbar h-14 border-b border-zinc-800/80 bg-zinc-950/75 backdrop-blur-xl sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 overflow-hidden">
@@ -504,73 +602,76 @@ export function WorkspaceShell({
         isDemo={isDemo}
       />
 
-      {isPackageAdderOpen && (
-        <div
-          onClick={() => setIsPackageAdderOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xl rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                  <Package className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-white">
-                    Add Package, Extension, Container or MCP Server
-                  </h3>
-                  <p className="text-xs text-zinc-400">
-                    Search public registries and attach in 1 click to {currentProject.name}
-                  </p>
-                </div>
+      <ModalShell
+        isOpen={isPackageAdderOpen}
+        onClose={() => setIsPackageAdderOpen(false)}
+        maxWidthClass="max-w-xl"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Package className="w-4 h-4" />
               </div>
-              <button
-                type="button"
-                onClick={() => setIsPackageAdderOpen(false)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div>
+                <h3 className="text-base font-semibold text-white">
+                  Add Package, Extension, Container or MCP Server
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Search public registries and attach in 1 click to {currentProject.name}
+                </p>
+              </div>
             </div>
-            <PackageSearchPicker
-              selectedValues={{
-                npmPackage: currentProject.npmPackage,
-                pypiPackage: currentProject.pypiPackage,
-                rustCrate: currentProject.rustCrate,
-                goModule: currentProject.goModule,
-                dockerImage: currentProject.dockerImage,
-              }}
-              onSelectItem={async (item) => {
-                if (isDemo) return;
-                const res = await fetch("/api/v1/projects/connectors", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "add_package_connector",
-                    projectId: currentProject.id,
-                    provider: item.ecosystem,
-                    identifier: item.name,
-                    label: `${item.ecosystem}: ${item.name}`,
-                    targetUrl: item.url,
-                  }),
-                });
-                if (res.ok) {
-                  setIsPackageAdderOpen(false);
-                  window.location.reload();
-                }
-              }}
-            />
-            {isDemo && (
-              <p className="text-[11px] text-amber-300">
-                Sign in with GitHub to attach packages or extensions to a live workspace.
-              </p>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsPackageAdderOpen(false)}
+              className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800"
+              aria-label="Close modal"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
+          <PackageSearchPicker
+            selectedValues={{
+              npmPackage: currentProject.npmPackage,
+              pypiPackage: currentProject.pypiPackage,
+              rustCrate: currentProject.rustCrate,
+              goModule: currentProject.goModule,
+              dockerImage: currentProject.dockerImage,
+            }}
+            onSelectItem={async (item) => {
+              if (isDemo) {
+                showToast(`Demo preview: ${item.name} (${item.ecosystem}) selected`, "info");
+                return;
+              }
+              const res = await fetch("/api/v1/projects/connectors", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "add_package_connector",
+                  projectId: currentProject.id,
+                  provider: item.ecosystem,
+                  identifier: item.name,
+                  label: `${item.ecosystem}: ${item.name}`,
+                  targetUrl: item.url,
+                }),
+              });
+              if (res.ok) {
+                setIsPackageAdderOpen(false);
+                showToast(`Attached ${item.name} (${item.ecosystem})`, "success");
+                router.refresh();
+              } else {
+                showToast("Failed to attach package", "error");
+              }
+            }}
+          />
+          {isDemo && (
+            <p className="text-[11px] text-amber-300">
+              Sign in with GitHub to attach packages or extensions to a live workspace.
+            </p>
+          )}
         </div>
-      )}
+      </ModalShell>
 
       <CommandPalette
         isOpen={isPaletteOpen}
@@ -580,28 +681,32 @@ export function WorkspaceShell({
         isDemo={isDemo}
         onOpenQuickConnect={() => setIsQuickConnectOpen(true)}
         onOpenImport={() => setIsImportOpen(true)}
+        onOpenThemeStudio={() => setIsStylingOpen(true)}
       />
 
-      {isQuickConnectOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto">
-            <QuickConnectPanel
-              projectId={currentProject.id}
-              projectSlug={currentProject.slug}
-              telemetryApiKey={currentProject.telemetryApiKey}
-              initialPreset={currentProject.stackPreset}
-              hasNpmToken={currentProject.hasNpmToken}
-              hasGithubToken={currentProject.hasGithubToken}
-              isDemo={isDemo}
-              onClose={() => setIsQuickConnectOpen(false)}
-              onSuccess={() => {
-                setIsQuickConnectOpen(false);
-                window.location.reload();
-              }}
-            />
-          </div>
+      <ModalShell
+        isOpen={isQuickConnectOpen}
+        onClose={() => setIsQuickConnectOpen(false)}
+        maxWidthClass="max-w-3xl"
+      >
+        <div className="flex-1 overflow-y-auto pr-1">
+          <QuickConnectPanel
+            projectId={currentProject.id}
+            projectSlug={currentProject.slug}
+            telemetryApiKey={currentProject.telemetryApiKey}
+            initialPreset={currentProject.stackPreset}
+            hasNpmToken={currentProject.hasNpmToken}
+            hasGithubToken={currentProject.hasGithubToken}
+            isDemo={isDemo}
+            onClose={() => setIsQuickConnectOpen(false)}
+            onSuccess={() => {
+              setIsQuickConnectOpen(false);
+              showToast("Quick Connect integrations updated", "success");
+              router.refresh();
+            }}
+          />
         </div>
-      )}
+      </ModalShell>
     </div>
     </WorkspaceShellContext.Provider>
   );

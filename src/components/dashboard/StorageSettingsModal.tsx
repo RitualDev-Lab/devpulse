@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Loader2,
 } from "lucide-react";
+import { ModalShell } from "./ModalShell";
 
 interface StorageSettingsModalProps {
   isOpen: boolean;
@@ -142,8 +143,7 @@ export function StorageSettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[90vh] flex flex-col">
+    <ModalShell isOpen={isOpen} onClose={onClose} maxWidthClass="max-w-xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
@@ -382,7 +382,6 @@ export function StorageSettingsModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

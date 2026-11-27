@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -21,6 +22,10 @@ import {
   Workflow,
   ScrollText,
   Flag,
+  ShieldAlert,
+  Bot,
+  MessageSquare,
+  Palette,
 } from "lucide-react";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
 
@@ -41,6 +46,7 @@ interface CommandPaletteProps {
   isDemo?: boolean;
   onOpenQuickConnect: () => void;
   onOpenImport: () => void;
+  onOpenThemeStudio?: () => void;
 }
 
 export function CommandPalette({
@@ -51,6 +57,7 @@ export function CommandPalette({
   isDemo = false,
   onOpenQuickConnect,
   onOpenImport,
+  onOpenThemeStudio,
 }: CommandPaletteProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -112,13 +119,28 @@ export function CommandPalette({
       { id: "nav-packages", group: "Workspace Pages", label: "Packages & Daily Downloads", sublabel: "/dashboard/packages", icon: Package, action: () => router.push(`/dashboard/packages${qs}`) },
       { id: "nav-analytics", group: "Workspace Pages", label: "Daily Users & Telemetry", sublabel: "/dashboard/analytics", icon: BarChart3, action: () => router.push(`/dashboard/analytics${qs}`) },
       { id: "nav-crashes", group: "Workspace Pages", label: "Crash Stream & Source Maps", sublabel: "/dashboard/crashes", icon: Bug, action: () => router.push(`/dashboard/crashes${qs}`) },
+      { id: "nav-security", group: "Workspace Pages", label: "Security & SBOM Vulnerability Center", sublabel: "/dashboard/security", icon: ShieldAlert, action: () => router.push(`/dashboard/security${qs}`) },
+      { id: "nav-mcp", group: "Workspace Pages", label: "MCP & AI Agent Analytics", sublabel: "/dashboard/mcp", icon: Bot, action: () => router.push(`/dashboard/mcp${qs}`) },
       { id: "nav-traces", group: "Workspace Pages", label: "Distributed Traces (OpenTelemetry)", sublabel: "/dashboard/traces", icon: Workflow, action: () => router.push(`/dashboard/traces${qs}`) },
-      { id: "nav-logs", group: "Workspace Pages", label: "Log Explorer (Loki & Pre-Crash)", sublabel: "/dashboard/logs", icon: ScrollText, action: () => router.push(`/dashboard/logs${qs}`) },
+      { id: "nav-logs", group: "Workspace Pages", label: "Log Explorer (Loki & Live Tail)", sublabel: "/dashboard/logs", icon: ScrollText, action: () => router.push(`/dashboard/logs${qs}`) },
       { id: "nav-flags", group: "Workspace Pages", label: "Feature Flags & A/B Rollouts", sublabel: "/dashboard/flags", icon: Flag, action: () => router.push(`/dashboard/flags${qs}`) },
-      { id: "nav-uptime", group: "Workspace Pages", label: "Uptime & P95 Latency", sublabel: "/dashboard/uptime", icon: HeartPulse, action: () => router.push(`/dashboard/uptime${qs}`) },
+      { id: "nav-feedback", group: "Workspace Pages", label: "Feedback & Changelog Loop", sublabel: "/dashboard/feedback", icon: MessageSquare, action: () => router.push(`/dashboard/feedback${qs}`) },
+      { id: "nav-uptime", group: "Workspace Pages", label: "Uptime, Heartbeats & SLA", sublabel: "/dashboard/uptime", icon: HeartPulse, action: () => router.push(`/dashboard/uptime${qs}`) },
       { id: "nav-revenue", group: "Workspace Pages", label: "Revenue, Payments & Plan", sublabel: "/dashboard/revenue", icon: CreditCard, action: () => router.push(`/dashboard/revenue${qs}`) },
-      { id: "nav-settings", group: "Workspace Pages", label: "Settings, Quick Connect & Embeds", sublabel: "/dashboard/settings", icon: Settings, action: () => router.push(`/dashboard/settings${qs}`) },
+      { id: "nav-settings", group: "Workspace Pages", label: "Settings, Appearance & Embeds", sublabel: "/dashboard/settings", icon: Settings, action: () => router.push(`/dashboard/settings${qs}`) },
 
+      ...(onOpenThemeStudio
+        ? [
+            {
+              id: "act-theme",
+              group: "Quick Actions",
+              label: "Open Theme, Appearance & CSS Studio",
+              sublabel: "Switch presets, accent colors, density & corner radius",
+              icon: Palette,
+              action: () => onOpenThemeStudio(),
+            },
+          ]
+        : []),
       { id: "act-quick", group: "Quick Actions", label: "Open 1-Screen Quick Connect Wizard", sublabel: "Paste any URL or add npm/GitHub tokens", icon: Wand2, action: () => onOpenQuickConnect() },
       { id: "act-import", group: "Quick Actions", label: "Import GitHub Repository", sublabel: "Auto-scan manifests & preset", icon: FolderGit2, action: () => onOpenImport() },
       {
@@ -180,13 +202,13 @@ export function CommandPalette({
         (it.sublabel || "").toLowerCase().includes(q) ||
         it.group.toLowerCase().includes(q)
     );
-  }, [query, qs, projects, ghMatches, currentProject.id, currentProject.slug, router, onOpenQuickConnect, onOpenImport]);
+  }, [query, qs, projects, ghMatches, currentProject.id, currentProject.slug, router, onOpenQuickConnect, onOpenImport, onOpenThemeStudio]);
 
   useEffect(() => {
     setSelectedIndex(0);
   }, [items.length, query]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -204,13 +226,18 @@ export function CommandPalette({
     }
   };
 
-  return (
+  const activeTheme = document.documentElement.getAttribute("data-theme") || "obsidian";
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] px-4 bg-black/75 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      data-theme={activeTheme}
+      className="fixed inset-0 z-[125] flex items-start justify-center pt-[12vh] px-4 bg-black/75 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl overflow-hidden"
+        className="devpulse-modal-panel w-full max-w-xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -280,6 +307,7 @@ export function CommandPalette({
           <span>ESC to close</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

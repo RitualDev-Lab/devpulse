@@ -12,6 +12,7 @@ import {
   AlertCircle,
   SlidersHorizontal,
 } from "lucide-react";
+import { ModalShell } from "./ModalShell";
 import {
   ACCENT_SWATCHES,
   DEFAULT_APPEARANCE_PREFS,
@@ -161,14 +162,7 @@ export function CustomCssModal({
   const scopedRuleCount = scopeCustomCss(cssCode) ? (cssCode.match(/\{/g) || []).length : 0;
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-5 sm:p-6 text-left relative max-h-[90vh] flex flex-col"
-      >
+    <ModalShell isOpen={isOpen} onClose={onClose} maxWidthClass="max-w-2xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
@@ -413,7 +407,6 @@ export function CustomCssModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

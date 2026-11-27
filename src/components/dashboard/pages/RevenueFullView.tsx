@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   CreditCard,
   Plus,
@@ -25,6 +26,7 @@ import { useWorkspaceData } from "../WorkspaceCacheContext";
 import { RevenueStatsCard } from "../widgets/RevenueStatsCard";
 import { BillingModal } from "../BillingModal";
 import { BillingQuotaMeters } from "../widgets/BillingQuotaMeters";
+import { useToast } from "../ToastContext";
 
 const PAYMENT_PROVIDERS = [
   { id: "lemonsqueezy", label: "Lemon Squeezy" },
@@ -38,6 +40,8 @@ const PAYMENT_PROVIDERS = [
 ];
 
 export function RevenueFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
+  const router = useRouter();
+  const { showToast } = useToast();
   const { projects, customDomain, storageTier, isDemo } = workspace;
   const initialData = useWorkspaceData(workspace.initialData);
   const project = initialData.project;
@@ -75,13 +79,15 @@ export function RevenueFullView({ workspace }: { workspace: LoadedWorkspaceReady
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Failed to add payment connector");
-      setFeedback({ ok: true, msg: "Payment connector encrypted & added! Refreshing..." });
+      setFeedback({ ok: true, msg: "Payment connector encrypted & added!" });
+      showToast("Payment connector encrypted & saved", "success");
       setLabel("");
       setTargetUrl("");
       setApiKey("");
-      setTimeout(() => window.location.reload(), 600);
+      router.refresh();
     } catch (err: any) {
       setFeedback({ ok: false, msg: err.message || "Failed to add payment provider" });
+      showToast(err.message || "Failed to add payment provider", "error");
     } finally {
       setSaving(false);
     }
@@ -94,7 +100,8 @@ export function RevenueFullView({ workspace }: { workspace: LoadedWorkspaceReady
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "delete_connector", projectId: project.id, connectorId }),
     });
-    window.location.reload();
+    showToast("Payment connector removed", "info");
+    router.refresh();
   };
 
   return (

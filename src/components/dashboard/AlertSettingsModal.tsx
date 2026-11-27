@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Bell, X, Send, Check, AlertCircle, Mail } from "lucide-react";
+import { ModalShell } from "./ModalShell";
 
 interface AlertSettingsModalProps {
   isOpen: boolean;
@@ -138,8 +139,7 @@ export function AlertSettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[90vh] flex flex-col">
+    <ModalShell isOpen={isOpen} onClose={onClose} maxWidthClass="max-w-lg">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-red-950 border border-red-800 flex items-center justify-center text-red-400">
@@ -392,7 +392,6 @@ export function AlertSettingsModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

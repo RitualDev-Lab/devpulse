@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell, useWorkspaceAppearance } from "../WorkspaceShell";
+import { useToast } from "../ToastContext";
 import {
   ACCENT_SWATCHES,
   DEFAULT_APPEARANCE_PREFS,
@@ -39,6 +40,7 @@ import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 
 export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const { initialData, projects, customDomain, storageTier, accessRole, isDemo } = workspace;
   const project = initialData.project;
   const {
@@ -215,7 +217,10 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
           hasNpmToken={project.hasNpmToken}
           hasGithubToken={project.hasGithubToken}
           isDemo={isDemo}
-          onSuccess={() => window.location.reload()}
+          onSuccess={() => {
+            showToast("Quick Connect settings applied", "success");
+            router.refresh();
+          }}
         />
 
         {/* Weekly PDF/CSV Export & Public Metrics Embed Cards (Notion / Docs / README) */}
