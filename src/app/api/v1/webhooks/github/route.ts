@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { errorEvents, projects, projectReleases } from "@/db/schema";
+import { deployments, errorEvents, projects, projectReleases } from "@/db/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/security/audit";
 import { verifyGitHubSignature } from "@/lib/security/github-webhook";
+import { classifyGitHubWebhookEvent } from "@/lib/github/webhook-events";
 
 export const dynamic = "force-dynamic";
 
@@ -48,14 +49,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, ignored: "No DevPulse project linked to repo" });
     }
 
+    const classified = classifyGitHubWebhookEvent(ghEvent, payload);
+
     for (const proj of matchedProjects) {
-      if (ghEvent === "release" && payload.release?.tag_name) {
-        const version = String(payload.release.tag_name).slice(0, 64);
-        const commitSha = payload.release.target_commitish
-          ? String(payload.release.target_commitish).slice(0, 64)
-          : null;
-        const author = payload.release.author?.login || payload.sender?.login || null;
-        const message = payload.release.name || payload.release.body?.slice(0, 200) || null;
+      if (classified.kind === "formal_release" || classified.kind === "tag_release") {
+        const version = classified.version;
+        const releaseSource = classified.kind === "formal_release" ? "github_release" : "github_tag";
 
         const [existing] = await db
           .select()
@@ -68,69 +67,65 @@ export async function POST(req: NextRequest) {
             id: `rel_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
             projectId: proj.id,
             version,
-            commitSha,
-            commitAuthor: author,
-            commitMessage: message,
-            source: "github_release",
+            commitSha: classified.commitSha,
+            commitAuthor: classified.author,
+            commitMessage: classified.message,
+            source: releaseSource,
             totalSessions: 0,
             crashCount: 0,
-            releasedAt: payload.release.published_at || new Date().toISOString(),
+            releasedAt: classified.releasedAt,
           });
         } else {
           await db
             .update(projectReleases)
             .set({
-              commitSha: commitSha || existing.commitSha,
-              commitAuthor: author || existing.commitAuthor,
-              commitMessage: message || existing.commitMessage,
-              source: "github_release",
+              commitSha: classified.commitSha || existing.commitSha,
+              commitAuthor: classified.author || existing.commitAuthor,
+              commitMessage: classified.message || existing.commitMessage,
+              source: existing.source === "github_release" ? "github_release" : releaseSource,
             })
             .where(eq(projectReleases.id, existing.id));
         }
 
         await recordAuditEvent({
           userId: proj.userId,
-          actorUsername: author || "github-webhook",
+          actorUsername: classified.author || "github-webhook",
           projectId: proj.id,
-          action: "release.published",
+          action: classified.kind === "formal_release" ? "release.published" : "release.tag_pushed",
           resourceType: "project_release",
           resourceId: version,
           headers: req.headers,
-          metadata: { commitSha, repo: repoFullName },
+          metadata: { commitSha: classified.commitSha, repo: repoFullName },
         });
-      } else if (ghEvent === "push" && payload.head_commit?.id) {
-        const ref = String(payload.ref || "");
-        const branch = ref.replace(/^refs\/heads\//, "").replace(/^refs\/tags\//, "");
-        const sha = String(payload.head_commit.id);
-        const version = ref.startsWith("refs/tags/") ? branch : `sha-${sha.slice(0, 7)}`;
-        const author =
-          payload.head_commit.author?.username ||
-          payload.head_commit.author?.name ||
-          payload.pusher?.name ||
-          null;
-        const message = String(payload.head_commit.message || "").split("\n")[0].slice(0, 200);
-
-        const [existing] = await db
-          .select()
-          .from(projectReleases)
-          .where(and(eq(projectReleases.projectId, proj.id), eq(projectReleases.version, version)))
-          .limit(1);
-
-        if (!existing) {
-          await db.insert(projectReleases).values({
-            id: `rel_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
-            projectId: proj.id,
-            version,
-            commitSha: sha,
-            commitAuthor: author,
-            commitMessage: message,
-            branch,
-            source: "github_push",
-            totalSessions: 0,
-            crashCount: 0,
-            releasedAt: payload.head_commit.timestamp || new Date().toISOString(),
-          });
-        }
+      } else if (classified.kind === "branch_commit") {
+        // Branch pushes are recorded as commit events, keeping formal project_releases clean
+        await recordAuditEvent({
+          userId: proj.userId,
+          actorUsername: classified.author || "github-webhook",
+          projectId: proj.id,
+          action: "git.commit_pushed",
+          resourceType: "git_commit",
+          resourceId: classified.commitSha,
+          headers: req.headers,
+          metadata: {
+            branch: classified.branch,
+            commitSha: classified.commitSha,
+            message: classified.message,
+            repo: repoFullName,
+          },
+        });
+      } else if (classified.kind === "deployment_status") {
+        await db.insert(deployments).values({
+          id: `dep_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+          projectId: proj.id,
+          provider: "github_actions",
+          version: classified.version,
+          commitSha: classified.commitSha,
+          deployer: classified.deployer,
+          environment: classified.environment,
+          status: classified.status,
+          deploymentUrl: classified.deploymentUrl,
+        });
       } else if (
         ghEvent === "pull_request" &&
         payload.action === "closed" &&

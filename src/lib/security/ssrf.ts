@@ -150,6 +150,72 @@ export function assertSafePublicHttpsUrl(rawUrl: string): string {
   return check.normalized;
 }
 
+export type HostDnsResolver = (hostname: string) => Promise<string[]>;
+
+async function resolveHostnameViaDoH(hostname: string): Promise<string[]> {
+  const ips: string[] = [];
+  for (const recordType of ["A", "AAAA"] as const) {
+    try {
+      const res = await fetch(
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=${recordType}`,
+        {
+          headers: { Accept: "application/dns-json" },
+          signal: AbortSignal.timeout(1500),
+        }
+      );
+      if (!res.ok) continue;
+      const json = (await res.json()) as { Answer?: Array<{ type?: number; data?: string }> };
+      for (const ans of json.Answer || []) {
+        if ((ans.type === 1 || ans.type === 28) && ans.data) {
+          ips.push(ans.data.trim());
+        }
+      }
+    } catch {
+      // DoH best-effort lookup
+    }
+  }
+  return ips;
+}
+
+export function isBlockedIpLiteral(rawIp: string): boolean {
+  const clean = rawIp.trim().replace(/^\[|\]$/g, "").toLowerCase();
+  const v4 = parseIpv4Quad(clean);
+  if (v4) return isBlockedIpv4(v4[0], v4[1], v4[2], v4[3]);
+  return isBlockedIpv6(clean);
+}
+
+/**
+ * Validates URL syntax AND resolves public DNS A/AAAA records to mitigate DNS-rebinding SSRF.
+ */
+export async function validateResolvedPublicUrl(
+  rawUrl: string,
+  options?: { allowHttp?: boolean; resolver?: HostDnsResolver }
+): Promise<{ valid: boolean; reason?: string; normalized?: string }> {
+  const syntaxCheck = validatePublicUrl(rawUrl, { allowHttp: options?.allowHttp });
+  if (!syntaxCheck.valid || !syntaxCheck.normalized) return syntaxCheck;
+
+  const parsed = new URL(syntaxCheck.normalized);
+  const host = parsed.hostname.toLowerCase().replace(/\.+$/, "");
+
+  // If literal IP already passed syntaxCheck, no DNS lookup needed
+  if (parseIpv4Quad(host) || host.includes(":")) {
+    return syntaxCheck;
+  }
+
+  const resolver = options?.resolver || resolveHostnameViaDoH;
+  const resolvedIps = await resolver(host).catch(() => []);
+  for (const ip of resolvedIps) {
+    if (isBlockedIpLiteral(ip)) {
+      return {
+        valid: false,
+        reason: `DNS resolution for ${host} returned blocked private/internal IP (${ip})`,
+      };
+    }
+  }
+
+  return syntaxCheck;
+}
+
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

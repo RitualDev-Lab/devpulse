@@ -1,11 +1,12 @@
 /**
  * DevPulse Instant Alert Dispatcher
- * Sends crash & bug reports to Discord, Slack, and Telegram
+ * Sends crash & bug reports to Discord, Slack, Telegram, PagerDuty, OpsGenie, MS Teams & Generic Webhooks
+ * via centralized safeWebhookPost (SSRF/DNS-rebinding verification, timeouts, redirect blocking, circuit breaker).
  */
 
 import { decryptSecret } from "@/lib/security/crypto";
-import { validatePublicUrl } from "@/lib/security/ssrf";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { safeWebhookPost } from "@/lib/security/safe-http";
 
 export interface AlertPayload {
   eventId?: string;
@@ -147,8 +148,6 @@ export async function dispatchTargetedChannels(
  * Send rich Discord Embed alert
  */
 export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
-  const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
-  if (!urlCheck.valid || !urlCheck.normalized) return false;
   const url = data.dashboardUrl || `${PUBLIC_APP_URL}`;
 
   const body = {
@@ -159,7 +158,7 @@ export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
         title: `🚨 Crash Detected: ${data.projectName}`,
         description: `**${data.errorName}**\n\`\`\`\n${data.message.slice(0, 500)}\n\`\`\``,
         url,
-        color: 0xef4444, // Red
+        color: 0xef4444,
         fields: [
           { name: "Runtime", value: data.runtime, inline: true },
           { name: "Version", value: data.version || "N/A", inline: true },
@@ -176,25 +175,14 @@ export async function sendDiscordAlert(webhookUrl: string, data: AlertPayload) {
     ],
   };
 
-  try {
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("Failed to send Discord alert:", err);
-    return false;
-  }
+  const res = await safeWebhookPost({ url: webhookUrl, body, label: "Discord" });
+  return res.ok;
 }
 
 /**
  * Send Slack Block Kit alert
  */
 export async function sendSlackAlert(webhookUrl: string, data: AlertPayload) {
-  const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
-  if (!urlCheck.valid || !urlCheck.normalized) return false;
   const url = data.dashboardUrl || `${PUBLIC_APP_URL}`;
 
   const body = {
@@ -238,17 +226,8 @@ export async function sendSlackAlert(webhookUrl: string, data: AlertPayload) {
     ],
   };
 
-  try {
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("Failed to send Slack alert:", err);
-    return false;
-  }
+  const res = await safeWebhookPost({ url: webhookUrl, body, label: "Slack" });
+  return res.ok;
 }
 
 /**
@@ -262,34 +241,23 @@ export async function sendTelegramAlert(
   const url = data.dashboardUrl || `${PUBLIC_APP_URL}`;
   const text = `🚨 *DevPulse Crash Alert*\n\n*Project:* ${data.projectName}\n*Error:* \`${data.errorName}\`\n*Runtime:* ${data.runtime} (${data.version || "N/A"})\n*OS:* ${data.os || "Unknown"}\n\n*Message:*\n_${data.message.slice(0, 300)}_\n\n[Open Dashboard](${url})`;
 
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: "Markdown",
-        disable_web_page_preview: false,
-      }),
-      signal: AbortSignal.timeout(3000),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("Failed to send Telegram alert:", err);
-    return false;
-  }
+  const res = await safeWebhookPost({
+    url: `https://api.telegram.org/bot${botToken}/sendMessage`,
+    body: {
+      chat_id: chatId,
+      text,
+      parse_mode: "Markdown",
+      disable_web_page_preview: false,
+    },
+    label: "Telegram",
+  });
+  return res.ok;
 }
 
 /**
  * Send standardized JSON payload to a Generic Webhook endpoint
  */
 export async function sendGenericWebhookAlert(webhookUrl: string, data: AlertPayload) {
-  const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
-  if (!urlCheck.valid || !urlCheck.normalized) {
-    console.warn("Blocked unsafe generic webhook URL:", urlCheck.reason);
-    return false;
-  }
   const url = data.dashboardUrl || `${PUBLIC_APP_URL}/dashboard?project=${data.projectSlug}`;
 
   const body = {
@@ -316,22 +284,16 @@ export async function sendGenericWebhookAlert(webhookUrl: string, data: AlertPay
     dashboardUrl: url,
   };
 
-  try {
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "DevPulse-Alerts/1.0",
-        "X-DevPulse-Event": "crash.created",
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(3000),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("Failed to send Generic Webhook alert:", err);
-    return false;
-  }
+  const res = await safeWebhookPost({
+    url: webhookUrl,
+    body,
+    headers: {
+      "User-Agent": "DevPulse-Alerts/1.0",
+      "X-DevPulse-Event": "crash.created",
+    },
+    label: "Generic Webhook",
+  });
+  return res.ok;
 }
 
 /**
@@ -362,18 +324,12 @@ export async function sendPagerDutyAlert(routingKey: string, data: AlertPayload)
     links: [{ href: url, text: "Open DevPulse Command Center" }],
   };
 
-  try {
-    const res = await fetch("https://events.pagerduty.com/v2/enqueue", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(3000),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("Failed to send PagerDuty alert:", err);
-    return false;
-  }
+  const res = await safeWebhookPost({
+    url: "https://events.pagerduty.com/v2/enqueue",
+    body,
+    label: "PagerDuty",
+  });
+  return res.ok;
 }
 
 /**
@@ -399,29 +355,20 @@ export async function sendOpsGenieAlert(apiKey: string, data: AlertPayload) {
     },
   };
 
-  try {
-    const res = await fetch(`${baseUrl}/v2/alerts`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `GenieKey ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(4000),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("Failed to send OpsGenie alert:", err);
-    return false;
-  }
+  const res = await safeWebhookPost({
+    url: `${baseUrl}/v2/alerts`,
+    body,
+    headers: { Authorization: `GenieKey ${apiKey}` },
+    timeoutMs: 4000,
+    label: "OpsGenie",
+  });
+  return res.ok;
 }
 
 /**
  * Send Microsoft Teams Webhook MessageCard Alert
  */
 export async function sendTeamsAlert(webhookUrl: string, data: AlertPayload) {
-  const urlCheck = validatePublicUrl(webhookUrl, { allowHttp: false });
-  if (!urlCheck.valid || !urlCheck.normalized) return false;
   const url = data.dashboardUrl || `${PUBLIC_APP_URL}/dashboard?project=${data.projectSlug}`;
 
   const body = {
@@ -451,16 +398,11 @@ export async function sendTeamsAlert(webhookUrl: string, data: AlertPayload) {
     ],
   };
 
-  try {
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(4000),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("Failed to send Microsoft Teams alert:", err);
-    return false;
-  }
+  const res = await safeWebhookPost({
+    url: webhookUrl,
+    body,
+    timeoutMs: 4000,
+    label: "Microsoft Teams",
+  });
+  return res.ok;
 }
