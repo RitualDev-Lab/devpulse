@@ -165,8 +165,8 @@ export function SortableCard({
     >
       {/* Dedicated Customization Bar ABOVE card body (never overlaps card headers/buttons) */}
       {isCustomizing && (
-        <div className="flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-t-2xl bg-zinc-900/95 border-b border-indigo-500/30 text-xs shrink-0">
-          <div className="flex items-center gap-1 min-w-0 shrink-0">
+        <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-t-2xl bg-zinc-900/95 border-b border-indigo-500/30 text-xs shrink-0 overflow-hidden">
+          <div className="flex items-center gap-1.5 min-w-0 shrink-0">
             {/* Drag Handle */}
             <div
               {...attributes}
@@ -177,14 +177,16 @@ export function SortableCard({
               <GripVertical className="w-3.5 h-3.5" />
             </div>
             <span className="text-[10px] font-mono text-zinc-400 whitespace-nowrap shrink-0">
-              {w}c &times; {h}r
+              {w}c&times;{h}r
             </span>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 ml-auto">
+          <div className="flex items-center gap-1 shrink-0">
             {onResize && activeCols >= 8 && (
-              <div className="hidden sm:flex items-center gap-0.5 bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 mr-0.5">
-                {COMPACT_WIDTH_OPTIONS.map((opt) => {
+              <div className="hidden sm:flex items-center gap-0.5 bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">
+                {COMPACT_WIDTH_OPTIONS.filter((opt) =>
+                  w <= 4 ? opt.label === "1/3" || opt.label === "1/2" || opt.label === "Full" : true
+                ).map((opt) => {
                   const isSelected = w === opt.w && h === opt.h;
                   return (
                     <button
@@ -192,7 +194,7 @@ export function SortableCard({
                       type="button"
                       onClick={() => onResize(id, opt.w, opt.h, true)}
                       title={`Resize card to ${opt.w} cols × ${opt.h} row(s)`}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition ${
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap transition ${
                         isSelected
                           ? "bg-indigo-600 text-white"
                           : "text-zinc-400 hover:text-zinc-200"

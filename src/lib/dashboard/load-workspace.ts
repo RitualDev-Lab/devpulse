@@ -411,7 +411,33 @@ export async function loadDashboardWorkspace(
   }
 
   const githubStats = needGithub ? snapshotBundle?.githubStats ?? null : null;
-  const npmStats = needPackages ? snapshotBundle?.npmStats ?? null : null;
+  let npmStats = needPackages ? snapshotBundle?.npmStats ?? null : null;
+  if (
+    isDemoView &&
+    needPackages &&
+    activeProject.npmPackage &&
+    (!npmStats || (npmStats.downloadsLastMonth === 0 && npmStats.downloadsLastWeek === 0))
+  ) {
+    const demoDailyCounts = [190, 210, 205, 225, 218, 232, 240, 248, 265, 278, 290, 310, 335, 362];
+    const nowMs = Date.now();
+    const dailyHistory = demoDailyCounts.map((downloads, i) => ({
+      date: new Date(nowMs - (demoDailyCounts.length - 1 - i) * 86_400_000).toISOString().slice(0, 10),
+      downloads,
+    }));
+    npmStats = {
+      packageName: npmStats?.packageName || activeProject.npmPackage,
+      latestVersion: npmStats?.latestVersion || "1.4.2",
+      description: npmStats?.description || "Zero-bloat DevPulse telemetry, RUM, and crash capture SDK",
+      license: npmStats?.license || "MIT",
+      downloadsLastDay: 362,
+      downloadsLastWeek: 2088,
+      downloadsLastMonth: 8940,
+      dailyHistory,
+      totalReleases: npmStats?.totalReleases || 18,
+      daysSinceLastRelease: npmStats?.daysSinceLastRelease ?? 3,
+      dependenciesCount: npmStats?.dependenciesCount ?? 0,
+    };
+  }
   const pypiStats = needPackages ? snapshotBundle?.pypiStats ?? null : null;
   const rustStats = needPackages ? snapshotBundle?.rustStats ?? null : null;
   const goStats = needPackages ? snapshotBundle?.goStats ?? null : null;
