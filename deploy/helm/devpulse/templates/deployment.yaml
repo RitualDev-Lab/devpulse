@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "devpulse.fullname" . }}
+  labels:
+    {{- include "devpulse.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "devpulse.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "devpulse.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: devpulse
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: DEVPULSE_STORAGE_MODE
+              value: {{ .Values.architecture.mode | quote }}
+            - name: DEVPULSE_ENFORCE_PG_RLS
+              value: {{ .Values.database.postgres.enforceRls | quote }}
+            - name: DEVPULSE_AIRGAPPED
+              value: {{ .Values.global.airgapped | quote }}
+            - name: DEVPULSE_AUTH_MODE
+              value: {{ .Values.auth.mode | quote }}
+            - name: OIDC_ISSUER_URL
+              value: {{ .Values.auth.oidcIssuerUrl | quote }}
+            - name: OPENFGA_API_URL
+              value: {{ .Values.auth.openfga.endpoint | quote }}
+          volumeMounts:
+            - name: tmp-runtime
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tmp-runtime
+          emptyDir: {}

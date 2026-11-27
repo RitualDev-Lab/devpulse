@@ -145,8 +145,8 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                     <Download className="w-4 h-4 text-red-400" />
                     <span>npm Daily Downloads ({project.npmPackage})</span>
                   </h2>
-                  <p className="text-xs text-zinc-400">
-                    {initialData.npmStats?.downloadsLastMonth.toLocaleString()} downloads last 30d
+                  <p className="text-xs text-zinc-400" suppressHydrationWarning>
+                    {initialData.npmStats?.downloadsLastMonth.toLocaleString("en-US")} downloads last 30d
                   </p>
                 </div>
               </div>

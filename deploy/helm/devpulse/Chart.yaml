@@ -1,0 +1,18 @@
+apiVersion: v2
+name: devpulse
+description: DevPulse Enterprise Unified Telemetry & Defense Suite Helm Chart (Air-Gapped / Private VPC ready)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - telemetry
+  - observability
+  - open-source
+  - supply-chain
+  - air-gapped
+home: https://devpulse.ritualdev.in
+sources:
+  - https://github.com/RitualDev-Lab/devpulse
+maintainers:
+  - name: RitualDev Lab
+    email: security@ritualdev.in

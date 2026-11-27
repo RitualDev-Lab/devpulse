@@ -1,0 +1,70 @@
+# DevPulse Enterprise Helm Values
+# Supports "lean" (PostgreSQL + TimescaleDB) and "scale" (PostgreSQL + ClickHouse) architectures.
+
+replicaCount: 2
+
+global:
+  # Set to your private OCI registry (e.g. harbor.internal.corp/devpulse) in air-gapped environments
+  imageRegistry: ghcr.io/ritualdev-lab
+  airgapped: true
+
+image:
+  repository: devpulse
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+architecture:
+  # "lean" = PostgreSQL 16 + TimescaleDB | "scale" = PostgreSQL 16 + ClickHouse
+  mode: lean
+
+database:
+  postgres:
+    enforceRls: true
+    sslMode: require
+    existingSecret: devpulse-db-credentials
+  timescaledb:
+    enabled: true
+    retentionDays: 90
+  clickhouse:
+    enabled: false
+    clusterName: devpulse_analytics
+
+auth:
+  mode: oidc # "oidc" | "saml" | "dual"
+  oidcIssuerUrl: "https://keycloak.internal.corp/realms/devpulse"
+  openfga:
+    enabled: true
+    endpoint: "http://openfga.security.svc.cluster.local:8080"
+
+networkPolicy:
+  enabled: true
+  airgappedZeroEgress: true
+  allowedEgressCidrs:
+    - 10.0.0.0/8
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1536Mi

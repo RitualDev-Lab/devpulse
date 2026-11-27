@@ -142,9 +142,9 @@ export function ReleasePulseTimeline({ data }: { data: DashboardData }) {
                   <Clock className="w-3 h-3 text-zinc-500" />
                   {item.daysAgo === null ? "Synced via API" : item.daysAgo === 0 ? "Released today" : `${item.daysAgo}d ago`}
                 </span>
-                <span className="inline-flex items-center gap-1 font-mono text-zinc-200">
+                <span className="inline-flex items-center gap-1 font-mono text-zinc-200" suppressHydrationWarning>
                   <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  {item.downloadsMonthly.toLocaleString()}/mo
+                  {item.downloadsMonthly.toLocaleString("en-US")}/mo
                 </span>
               </div>
             </div>
