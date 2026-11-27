@@ -163,6 +163,8 @@ function toProjectSummary(p: any, includeTelemetryKey = false): ProjectSummary {
     goModule: p.goModule,
     dockerImage: p.dockerImage,
     telemetryApiKey: includeTelemetryKey ? p.telemetryApiKey : null,
+    theme: p.theme ?? "obsidian",
+    customCss: p.customCss ?? "",
   };
 }
 

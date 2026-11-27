@@ -21,13 +21,17 @@ import {
   Loader2,
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
-import { WorkspaceShell } from "../WorkspaceShell";
+import { WorkspaceShell, useWorkspaceAppearance } from "../WorkspaceShell";
+import {
+  ACCENT_SWATCHES,
+  DEFAULT_APPEARANCE_PREFS,
+  PRESET_THEMES,
+} from "@/lib/layout/css-scoper";
 import { QuickConnectPanel } from "../QuickConnectPanel";
 import { AlertSettingsModal } from "../AlertSettingsModal";
 import { SecurityModal } from "../SecurityModal";
 import { DomainSettingsModal } from "../DomainSettingsModal";
 import { StorageSettingsModal } from "../StorageSettingsModal";
-import { CustomCssModal } from "../CustomCssModal";
 import { IntegrationsModal } from "../IntegrationsModal";
 import { SsoScimModal } from "../SsoScimModal";
 import { BillingQuotaMeters } from "../widgets/BillingQuotaMeters";
@@ -37,10 +41,62 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
   const router = useRouter();
   const { initialData, projects, customDomain, storageTier, accessRole, isDemo } = workspace;
   const project = initialData.project;
+  const {
+    theme: liveTheme,
+    setTheme,
+    appearancePrefs,
+    setAppearancePrefs,
+    setCustomCss,
+    openThemeStudio,
+  } = useWorkspaceAppearance();
 
   const [openModal, setOpenModal] = useState<
-    "alerts" | "security" | "sso" | "domains" | "storage" | "styling" | "integrations" | null
+    "alerts" | "security" | "sso" | "domains" | "storage" | "integrations" | null
   >(null);
+  const [defaultTab, setDefaultTab] = useState("/dashboard");
+  const [piiScrubEnabled, setPiiScrubEnabled] = useState(true);
+  const [themeFeedback, setThemeFeedback] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    try {
+      const savedTab = localStorage.getItem(`devpulse_default_tab_${project.id}`);
+      if (savedTab) setDefaultTab(savedTab);
+      const savedPii = localStorage.getItem(`devpulse_pii_${project.id}`);
+      if (savedPii === "false") setPiiScrubEnabled(false);
+    } catch {
+      // ignore
+    }
+  }, [project.id]);
+
+  const applyThemeInline = async (themeId: string) => {
+    setTheme(themeId);
+    setThemeFeedback(null);
+    try {
+      document.cookie = `dp_theme=${encodeURIComponent(themeId)}; path=/; max-age=31536000; SameSite=Lax`;
+      document.documentElement.setAttribute("data-theme", themeId);
+      localStorage.setItem(`devpulse_theme_${project.id}`, themeId);
+    } catch {
+      // ignore
+    }
+    if (!isDemo) {
+      await fetch("/api/v1/projects/styling", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, theme: themeId }),
+      }).catch(() => {});
+    }
+    setThemeFeedback(`Applied theme: ${PRESET_THEMES.find((t) => t.id === themeId)?.name || themeId}`);
+  };
+
+  const updateAppearanceInline = (patch: Partial<typeof appearancePrefs>) => {
+    const next = { ...appearancePrefs, ...patch };
+    setAppearancePrefs(next);
+    try {
+      localStorage.setItem(`devpulse_prefs_${project.id}`, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
   const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -253,7 +309,13 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setOpenModal(c.id)}
+                onClick={() => {
+                  if (c.id === "styling") {
+                    openThemeStudio();
+                  } else {
+                    setOpenModal(c.id);
+                  }
+                }}
                 className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 hover:border-zinc-700 text-left transition flex items-start gap-3 group"
               >
                 <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${c.accent}`}>
@@ -269,6 +331,168 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
             );
           })}
         </div>
+
+        {/* Inline Appearance, Theme & Workspace Preferences Studio */}
+        <section className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <Palette className="w-4 h-4 text-pink-400" />
+                <span>Appearance, Themes &amp; Workspace Preferences</span>
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Live theme switcher, density/radius customization, and workspace defaults applied across every view.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void applyThemeInline("obsidian");
+                  updateAppearanceInline(DEFAULT_APPEARANCE_PREFS);
+                  setCustomCss("");
+                }}
+                className="px-3 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-[11px] text-zinc-300"
+              >
+                Reset Appearance
+              </button>
+              <button
+                type="button"
+                onClick={openThemeStudio}
+                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+              >
+                Open Full CSS Studio
+              </button>
+            </div>
+          </div>
+
+          {themeFeedback && (
+            <div className="px-3 py-2 rounded-lg bg-emerald-950/50 border border-emerald-500/30 text-xs text-emerald-300">
+              {themeFeedback}
+            </div>
+          )}
+
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+              Quick Preset Theme Switcher
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {PRESET_THEMES.map((t) => {
+                const active = liveTheme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => void applyThemeInline(t.id)}
+                    className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2 ${
+                      active
+                        ? "bg-zinc-800 border-indigo-500 text-white"
+                        : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                    }`}
+                  >
+                    <span
+                      className="w-4 h-4 rounded-full border shrink-0"
+                      style={{ backgroundColor: t.previewBg, borderColor: t.accentBorder }}
+                    />
+                    <span className="text-xs font-medium truncate">{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-1">
+            <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+              <div className="text-[11px] text-zinc-400">Accent Color</div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {ACCENT_SWATCHES.map((sw) => (
+                  <button
+                    key={sw.id}
+                    type="button"
+                    onClick={() => updateAppearanceInline({ accent: sw.hex })}
+                    className={`w-5 h-5 rounded-full border-2 ${
+                      appearancePrefs.accent === sw.hex ? "border-white scale-110" : "border-transparent"
+                    }`}
+                    style={{ backgroundColor: sw.hex }}
+                    title={sw.label}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+              <div className="text-[11px] text-zinc-400">Card Corners &amp; Surface</div>
+              <div className="flex gap-1.5">
+                <select
+                  value={appearancePrefs.radius}
+                  onChange={(e) => updateAppearanceInline({ radius: e.target.value as any })}
+                  className="flex-1 px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white"
+                >
+                  <option value="sharp">Sharp</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="pill">Pill</option>
+                </select>
+                <select
+                  value={appearancePrefs.surface}
+                  onChange={(e) => updateAppearanceInline({ surface: e.target.value as any })}
+                  className="flex-1 px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white"
+                >
+                  <option value="matte">Matte</option>
+                  <option value="glass">Glass</option>
+                  <option value="contrast">High Contrast</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+              <div className="text-[11px] text-zinc-400">Layout Density</div>
+              <select
+                value={appearancePrefs.density}
+                onChange={(e) => updateAppearanceInline({ density: e.target.value as any })}
+                className="w-full px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white"
+              >
+                <option value="compact">Compact</option>
+                <option value="comfortable">Comfortable</option>
+                <option value="spacious">Spacious</option>
+              </select>
+            </div>
+
+            <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+              <div className="text-[11px] text-zinc-400">Default Tab &amp; Privacy</div>
+              <select
+                value={defaultTab}
+                onChange={(e) => {
+                  setDefaultTab(e.target.value);
+                  try {
+                    localStorage.setItem(`devpulse_default_tab_${project.id}`, e.target.value);
+                  } catch {}
+                }}
+                className="w-full px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white"
+              >
+                <option value="/dashboard">Overview Grid</option>
+                <option value="/dashboard/packages">Packages &amp; Registries</option>
+                <option value="/dashboard/uptime">Uptime &amp; Heartbeats</option>
+                <option value="/dashboard/crashes">Crashes &amp; Maps</option>
+                <option value="/dashboard/security">Security &amp; SBOM</option>
+                <option value="/dashboard/mcp">MCP &amp; AI Agents</option>
+                <option value="/dashboard/logs">Logs (Loki)</option>
+              </select>
+              <label className="inline-flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={piiScrubEnabled}
+                  onChange={(e) => {
+                    setPiiScrubEnabled(e.target.checked);
+                    try {
+                      localStorage.setItem(`devpulse_pii_${project.id}`, String(e.target.checked));
+                    } catch {}
+                  }}
+                />
+                <span>Scrub emails/tokens in previews</span>
+              </label>
+            </div>
+          </div>
+        </section>
 
         {/* Danger Zone: Remove Project / Repository */}
         {accessRole === "owner" && (
@@ -362,17 +586,6 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
         onClose={() => setOpenModal(null)}
         initialTier={storageTier}
         isDemo={isDemo}
-      />
-
-      <CustomCssModal
-        isOpen={openModal === "styling"}
-        onClose={() => setOpenModal(null)}
-        projectId={project.id}
-        currentTheme={project.theme || "dark"}
-        customCss={project.customCss || ""}
-        isDemo={isDemo}
-        onApplyTheme={() => window.location.reload()}
-        onSaveCustomCss={() => window.location.reload()}
       />
 
       <IntegrationsModal

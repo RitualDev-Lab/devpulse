@@ -2,8 +2,24 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Palette, X, Check, ShieldCheck, Sparkles, Loader2, AlertCircle } from "lucide-react";
-import { PRESET_THEMES, normalizeThemeId, scopeCustomCss } from "@/lib/layout/css-scoper";
+import {
+  Palette,
+  X,
+  Check,
+  ShieldCheck,
+  Sparkles,
+  Loader2,
+  AlertCircle,
+  SlidersHorizontal,
+} from "lucide-react";
+import {
+  ACCENT_SWATCHES,
+  DEFAULT_APPEARANCE_PREFS,
+  PRESET_THEMES,
+  normalizeThemeId,
+  scopeCustomCss,
+  type AppearancePreferences,
+} from "@/lib/layout/css-scoper";
 
 interface CustomCssModalProps {
   isOpen: boolean;
@@ -13,6 +29,8 @@ interface CustomCssModalProps {
   onApplyTheme: (theme: string) => void;
   customCss: string;
   onSaveCustomCss: (css: string) => void;
+  appearancePrefs?: AppearancePreferences;
+  onSaveAppearancePrefs?: (prefs: AppearancePreferences) => void;
   isDemo?: boolean;
 }
 
@@ -26,8 +44,12 @@ const CSS_SNIPPETS = [
     css: `.devpulse-card > div {\n  border-radius: 2rem !important;\n}`,
   },
   {
+    label: "Gradient Hero Cards",
+    css: `.rounded-2xl {\n  background-image: linear-gradient(145deg, rgba(99,102,241,0.06), transparent 60%) !important;\n}`,
+  },
+  {
     label: "Mono Headings",
-    css: `h3 {\n  font-family: ui-monospace, monospace !important;\n  letter-spacing: -0.03em !important;\n}`,
+    css: `h1, h2, h3 {\n  font-family: ui-monospace, monospace !important;\n  letter-spacing: -0.03em !important;\n}`,
   },
 ];
 
@@ -39,11 +61,14 @@ export function CustomCssModal({
   onApplyTheme,
   customCss,
   onSaveCustomCss,
+  appearancePrefs = DEFAULT_APPEARANCE_PREFS,
+  onSaveAppearancePrefs,
   isDemo = false,
 }: CustomCssModalProps) {
   const router = useRouter();
   const [cssCode, setCssCode] = useState(customCss);
   const [selectedTheme, setSelectedTheme] = useState(normalizeThemeId(currentTheme));
+  const [prefs, setPrefs] = useState<AppearancePreferences>(appearancePrefs);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -51,9 +76,10 @@ export function CustomCssModal({
     if (isOpen) {
       setCssCode(customCss);
       setSelectedTheme(normalizeThemeId(currentTheme));
+      setPrefs(appearancePrefs);
       setErrorMsg(null);
     }
-  }, [isOpen, customCss, currentTheme]);
+  }, [isOpen, customCss, currentTheme, appearancePrefs]);
 
   if (!isOpen) return null;
 
@@ -66,27 +92,43 @@ export function CustomCssModal({
     } catch {
       // ignore
     }
-    onApplyTheme(themeId); // Live preview immediately
+    onApplyTheme(themeId);
+  };
+
+  const handleUpdatePrefs = (patch: Partial<AppearancePreferences>) => {
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    if (onSaveAppearancePrefs) {
+      onSaveAppearancePrefs(next);
+    }
+    try {
+      localStorage.setItem(`devpulse_prefs_${projectId}`, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
   };
 
   const handleCssChange = (val: string) => {
     setCssCode(val);
     setErrorMsg(null);
-    onSaveCustomCss(val); // Live scoped CSS preview immediately
+    onSaveCustomCss(val);
   };
 
   const handleSave = async () => {
     setErrorMsg(null);
     onApplyTheme(selectedTheme);
     onSaveCustomCss(cssCode);
+    if (onSaveAppearancePrefs) onSaveAppearancePrefs(prefs);
+
+    try {
+      localStorage.setItem(`devpulse_theme_${projectId}`, selectedTheme);
+      localStorage.setItem(`devpulse_css_${projectId}`, cssCode);
+      localStorage.setItem(`devpulse_prefs_${projectId}`, JSON.stringify(prefs));
+    } catch {
+      // ignore
+    }
 
     if (isDemo) {
-      try {
-        localStorage.setItem(`devpulse_theme_${projectId}`, selectedTheme);
-        localStorage.setItem(`devpulse_css_${projectId}`, cssCode);
-      } catch {
-        // ignore
-      }
       onClose();
       return;
     }
@@ -119,22 +161,30 @@ export function CustomCssModal({
   const scopedRuleCount = scopeCustomCss(cssCode) ? (cssCode.match(/\{/g) || []).length : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-6 text-left relative max-h-[90vh] flex flex-col">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-5 sm:p-6 text-left relative max-h-[90vh] flex flex-col"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-400">
               <Palette className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-base">Theme Switcher & Scoped CSS Studio</h3>
+              <h3 className="font-bold text-white text-base">Theme, Appearance &amp; CSS Studio</h3>
               <p className="text-xs text-zinc-400">
-                1-click presets & live CSS scoped safely inside <code className="text-indigo-300">.devpulse-workspace</code>
+                10 themes, live accent/density/radius controls &amp; safe CSS scoped to{" "}
+                <code className="text-indigo-300">.devpulse-workspace</code>
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition"
           >
@@ -143,10 +193,10 @@ export function CustomCssModal({
         </div>
 
         <div className="flex-1 overflow-y-auto pr-1 space-y-5">
-          {/* 6 Preset Themes Grid */}
+          {/* 10 Preset Themes Grid */}
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2.5">
-              Preset Themes (6 Built-In)
+              Preset Themes ({PRESET_THEMES.length} Built-In)
             </span>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {PRESET_THEMES.map((theme) => {
@@ -178,12 +228,110 @@ export function CustomCssModal({
                     </div>
                     <div>
                       <div className="text-xs font-semibold">{theme.name}</div>
-                      <div className="text-[10px] text-zinc-500 line-clamp-1">{theme.description}</div>
+                      <div className="text-[10px] text-zinc-400 line-clamp-1">{theme.description}</div>
                     </div>
                   </button>
                 );
               })}
             </div>
+          </div>
+
+          {/* Layout & Visual Tokens */}
+          <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800 space-y-3.5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Workspace Appearance Customization</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <div className="text-[11px] text-zinc-400 mb-1.5">Accent Highlight</div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {ACCENT_SWATCHES.map((sw) => (
+                    <button
+                      key={sw.id}
+                      type="button"
+                      onClick={() => handleUpdatePrefs({ accent: sw.hex })}
+                      title={sw.label}
+                      className={`w-6 h-6 rounded-full border-2 transition ${
+                        prefs.accent === sw.hex ? "border-white scale-110" : "border-transparent opacity-80 hover:opacity-100"
+                      }`}
+                      style={{ backgroundColor: sw.hex }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] text-zinc-400 mb-1.5">Card Corner Radius</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["sharp", "balanced", "pill"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => handleUpdatePrefs({ radius: r })}
+                      className={`px-2 py-1 rounded-lg border capitalize font-medium transition ${
+                        prefs.radius === r
+                          ? "bg-indigo-600 text-white border-indigo-500"
+                          : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] text-zinc-400 mb-1.5">Layout Density</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["compact", "comfortable", "spacious"] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => handleUpdatePrefs({ density: d })}
+                      className={`px-2 py-1 rounded-lg border capitalize font-medium transition ${
+                        prefs.density === d
+                          ? "bg-indigo-600 text-white border-indigo-500"
+                          : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] text-zinc-400 mb-1.5">Card Surface Style</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["matte", "glass", "contrast"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => handleUpdatePrefs({ surface: s })}
+                      className={`px-2 py-1 rounded-lg border capitalize font-medium transition ${
+                        prefs.surface === s
+                          ? "bg-indigo-600 text-white border-indigo-500"
+                          : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <label className="inline-flex items-center gap-2 text-xs text-zinc-300 pt-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={prefs.monoHeadings}
+                onChange={(e) => handleUpdatePrefs({ monoHeadings: e.target.checked })}
+                className="rounded border-zinc-700"
+              />
+              <span>Use monospace typography for dashboard headings</span>
+            </label>
           </div>
 
           {/* Live Scoped Custom CSS Editor */}
@@ -211,14 +359,14 @@ export function CustomCssModal({
               value={cssCode}
               onChange={(e) => handleCssChange(e.target.value)}
               placeholder={`/* Automatically scoped inside .devpulse-workspace */\n.devpulse-card > div {\n  border-radius: 1.5rem;\n}`}
-              className="w-full min-h-[150px] p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 resize-y leading-relaxed"
+              className="w-full min-h-[120px] p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 resize-y leading-relaxed"
             />
 
             <div className="flex items-center justify-between text-[11px] text-zinc-400">
               <span className="flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                 <span>
-                  Auto-scoped to <code className="text-zinc-300">.devpulse-workspace</code> — header &amp; modals are protected.
+                  Auto-scoped to <code className="text-zinc-300">.devpulse-workspace</code> — header &amp; modals stay protected.
                 </span>
               </span>
               <span className="font-mono text-zinc-500">{scopedRuleCount} rules active</span>
@@ -239,6 +387,7 @@ export function CustomCssModal({
             type="button"
             onClick={() => {
               handleSelectTheme("obsidian");
+              handleUpdatePrefs(DEFAULT_APPEARANCE_PREFS);
               handleCssChange("");
             }}
             className="px-3 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs transition"
@@ -259,8 +408,8 @@ export function CustomCssModal({
               disabled={saving}
               className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 disabled:opacity-50"
             >
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{saving ? "Saving..." : "Save & Apply"}</span>
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              <span>{saving ? "Saving..." : isDemo ? "Apply Preview" : "Save Appearance"}</span>
             </button>
           </div>
         </div>

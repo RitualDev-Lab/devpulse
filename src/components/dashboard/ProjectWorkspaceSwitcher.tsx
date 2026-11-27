@@ -30,6 +30,8 @@ export interface ProjectSummary {
   goModule?: string | null;
   dockerImage?: string | null;
   telemetryApiKey?: string | null;
+  theme?: string | null;
+  customCss?: string | null;
 }
 
 interface ProjectWorkspaceSwitcherProps {

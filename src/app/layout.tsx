@@ -1,9 +1,17 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
+import { PRESET_THEMES } from "@/lib/layout/css-scoper";
 import "./globals.css";
 
-const ALLOWED_THEMES = new Set(["dark", "devpulse-dark", "cyber-neon", "tokyo-night", "emerald-matrix"]);
+const ALLOWED_THEMES = new Set([
+  "dark",
+  "devpulse-dark",
+  "cyber-neon",
+  "tokyo-night",
+  "emerald-matrix",
+  ...PRESET_THEMES.map((t) => t.id),
+]);
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

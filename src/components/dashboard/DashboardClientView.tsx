@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Sliders, Palette, RefreshCw } from "lucide-react";
+import { Sliders, RefreshCw } from "lucide-react";
 import { WorkspaceShell } from "./WorkspaceShell";
 import { useWorkspaceData } from "./WorkspaceCacheContext";
 import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { SnapshotSyncBar } from "./SnapshotSyncBar";
-import { CustomCssModal } from "./CustomCssModal";
 import { AlertSettingsModal } from "./AlertSettingsModal";
 import { IntegrationsModal } from "./IntegrationsModal";
 import { StorageSettingsModal } from "./StorageSettingsModal";
@@ -15,11 +14,6 @@ import { DomainSettingsModal } from "./DomainSettingsModal";
 import { BillingModal } from "./BillingModal";
 import { SecurityModal } from "./SecurityModal";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
-import {
-  normalizeThemeId,
-  getPresetThemeCss,
-  scopeCustomCss,
-} from "@/lib/layout/css-scoper";
 
 interface DashboardClientViewProps {
   initialData: DashboardData;
@@ -40,7 +34,6 @@ export function DashboardClientView({
 }: DashboardClientViewProps) {
   const data = useWorkspaceData(initialData);
   const [isCustomizing, setIsCustomizing] = useState(false);
-  const [isStylingOpen, setIsStylingOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [isStorageOpen, setIsStorageOpen] = useState(false);
@@ -48,10 +41,6 @@ export function DashboardClientView({
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [billingSuccessBanner, setBillingSuccessBanner] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState(() =>
-    normalizeThemeId(initialData.project.theme)
-  );
-  const [customCss, setCustomCss] = useState(() => initialData.project.customCss || "");
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -70,22 +59,6 @@ export function DashboardClientView({
     });
     return () => cancelAnimationFrame(frame);
   }, []);
-
-  // In demo mode, restore persisted theme/CSS from localStorage if customized locally
-  useEffect(() => {
-    if (!isDemo) return;
-    const frame = requestAnimationFrame(() => {
-      try {
-        const savedTheme = localStorage.getItem(`devpulse_theme_${data.project.id}`);
-        const savedCss = localStorage.getItem(`devpulse_css_${data.project.id}`);
-        if (savedTheme) setCurrentTheme(normalizeThemeId(savedTheme));
-        if (savedCss !== null) setCustomCss(savedCss);
-      } catch {
-        // ignore
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [data.project.id, isDemo]);
 
   const handleResetLayout = async () => {
     try {
@@ -114,15 +87,9 @@ export function DashboardClientView({
     goModule: data.project.goModule,
     dockerImage: data.project.dockerImage,
     telemetryApiKey: data.project.telemetryApiKey,
+    theme: data.project.theme,
+    customCss: data.project.customCss,
   };
-
-  const activeThemeId = normalizeThemeId(currentTheme);
-  const combinedDynamicCss = [
-    getPresetThemeCss(activeThemeId),
-    scopeCustomCss(customCss, ".devpulse-workspace"),
-  ]
-    .filter(Boolean)
-    .join("\n");
 
   const overviewToolbar = (
     <div className="flex items-center gap-1.5 text-xs">
@@ -148,25 +115,11 @@ export function DashboardClientView({
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       )}
-      <button
-        type="button"
-        onClick={() => setIsStylingOpen(true)}
-        className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium transition"
-      >
-        <Palette className="w-3.5 h-3.5 text-purple-400" />
-        <span>Theme</span>
-      </button>
     </div>
   );
 
   return (
-    <div
-      data-theme={activeThemeId}
-      className="devpulse-shell text-zinc-100 transition-colors duration-300"
-    >
-      {/* Dynamic Preset Theme + Scoped Custom CSS injection */}
-      {combinedDynamicCss && <style dangerouslySetInnerHTML={{ __html: combinedDynamicCss }} />}
-
+    <div className="text-zinc-100 transition-colors duration-300">
       <WorkspaceShell
         currentProject={{
           ...currentProjectSummary,
@@ -180,7 +133,7 @@ export function DashboardClientView({
         isDemo={isDemo}
         rightActions={overviewToolbar}
       >
-        <div className="devpulse-workspace space-y-6">
+        <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
@@ -246,18 +199,6 @@ export function DashboardClientView({
           <DragDropGrid data={data} isCustomizing={isCustomizing} isDemo={isDemo} />
         </div>
       </WorkspaceShell>
-
-      {/* Preset Theme Switcher & Live Scoped Custom CSS Modal */}
-      <CustomCssModal
-        isOpen={isStylingOpen}
-        onClose={() => setIsStylingOpen(false)}
-        projectId={data.project.id}
-        currentTheme={activeThemeId}
-        onApplyTheme={(theme) => setCurrentTheme(theme)}
-        customCss={customCss}
-        onSaveCustomCss={(css) => setCustomCss(css)}
-        isDemo={isDemo}
-      />
 
       {/* Webhook & Instant Crash Alerts Modal */}
       <AlertSettingsModal
