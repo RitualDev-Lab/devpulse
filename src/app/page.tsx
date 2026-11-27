@@ -98,9 +98,9 @@ export default function HomePage() {
           </h1>
 
           <p className="text-base sm:text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-            Stop juggling 8 different tabs. DevPulse brings your GitHub traffic, npm/PyPI downloads,
-            VS Code installs, MCP servers, instant fatal crash telemetry, and Stripe & Dodo Payments
-            revenue into a single, real-time developer headquarters.
+            Stop juggling 8 different tabs. DevPulse brings GitHub, GitLab, Bitbucket &amp; Codeberg PR telemetry,
+            23+ package registries, OpenTelemetry traces, Loki logs, Core Web Vitals RUM, SBOM security, and Stripe &amp; Dodo Payments
+            revenue into one real-time developer headquarters.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
@@ -300,18 +300,18 @@ export default function HomePage() {
           {/* Card 1 */}
           <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
             <Package className="w-6 h-6 text-indigo-400" />
-            <h4 className="font-bold text-white text-sm">Multi-Registry Package Tracking</h4>
+            <h4 className="font-bold text-white text-sm">23+ Ecosystem &amp; Multi-Git Tracking</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Auto-fetches download numbers from npm, PyPI, and VS Code Marketplace with weekly & monthly trendlines.
+              Unifies npm, PyPI, Crates.io, Docker, NuGet, Go, Packagist &amp; Homebrew alongside GitHub, GitLab, Bitbucket &amp; Codeberg PRs.
             </p>
           </div>
 
           {/* Card 2 */}
           <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
             <Cpu className="w-6 h-6 text-cyan-400" />
-            <h4 className="font-bold text-white text-sm">Model Context Protocol (MCP) Tracking</h4>
+            <h4 className="font-bold text-white text-sm">OTEL Tracing, Loki Logs &amp; MCP Analytics</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Track MCP server capabilities, tool counts, and Glama/Smithery registry indexing status for AI agent tools.
+              Flame graph span waterfalls linked directly to crashes, 3s live-tail Loki logs, and per-tool MCP token cost &amp; allowlist governance.
             </p>
           </div>
 
@@ -327,27 +327,27 @@ export default function HomePage() {
           {/* Card 4 */}
           <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
             <Zap className="w-6 h-6 text-amber-400" />
-            <h4 className="font-bold text-white text-sm">Lightweight Telemetry SDK</h4>
+            <h4 className="font-bold text-white text-sm">Crash Replay, RUM &amp; 8 Language SDKs</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Zero dependencies. Drop 5 lines of code in Python or Node.js to stream fatal crashes and breadcrumbs.
+              R2 session replay timelines, p75 Core Web Vitals (LCP/INP/CLS), source map/DWARF symbolication, and zero-bloat SDKs for JS, Python, Go, Rust, JVM, .NET, PHP &amp; Swift.
             </p>
           </div>
 
           {/* Card 5 */}
           <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
             <Globe className="w-6 h-6 text-blue-400" />
-            <h4 className="font-bold text-white text-sm">Cookie-Free Web Analytics</h4>
+            <h4 className="font-bold text-white text-sm">Cookie-Free Analytics, Flags &amp; Heartbeats</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              GDPR-compliant &lt;2KB script. Drop into docs sites to see unique visitors, top referrers, and countries.
+              GDPR &lt;2KB visitor analytics, A/B feature flags with crash-triggered auto-rollback, and dead-man&apos;s-switch cron heartbeats.
             </p>
           </div>
 
           {/* Card 6 */}
           <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
             <ShieldCheck className="w-6 h-6 text-purple-400" />
-            <h4 className="font-bold text-white text-sm">Dynamic SVG README Badges</h4>
+            <h4 className="font-bold text-white text-sm">SBOM CVEs, OSV Fix PRs &amp; SVG Badges</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Embed live dynamic shields like <code className="text-zinc-300">/api/badge/downloads/...svg</code> directly into GitHub READMEs.
+              Live OSV.dev advisory scanning, SPDX license matrix, 1-click GitHub Fix PRs, and dynamic shields like <code className="text-zinc-300">/api/badge/downloads/...svg</code>.
             </p>
           </div>
         </div>

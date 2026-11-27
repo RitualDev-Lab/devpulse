@@ -245,6 +245,8 @@ export async function POST(req: NextRequest) {
             body.impactSummary !== undefined
               ? String(body.impactSummary || "").slice(0, 500) || null
               : existing.impactSummary,
+          isPublic:
+            body.isPublic !== undefined ? Boolean(body.isPublic) : existing.isPublic,
           resolvedAt,
           durationMinutes,
           updatedAt: nowIso,

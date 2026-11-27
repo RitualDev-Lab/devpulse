@@ -18,6 +18,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { ModalShell } from "./ModalShell";
+import { BillingQuotaMeters } from "./widgets/BillingQuotaMeters";
 
 interface BillingModalProps {
   isOpen: boolean;
@@ -286,103 +287,8 @@ export function BillingModal({
         )}
 
         <div className="space-y-6 flex-1 overflow-y-auto pr-1">
-          {/* Live Quota Overview */}
-          {loading ? (
-            <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center gap-2 text-xs text-zinc-400">
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-              <span>Syncing workspace usage & Dodo Payments subscription...</span>
-            </div>
-          ) : profile ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
-                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <FolderGit2 className="w-3.5 h-3.5 text-indigo-400" />
-                    Projects
-                  </span>
-                  <span className="font-mono text-zinc-200 font-semibold">
-                    {profile.usage.projectCount} /{" "}
-                    {profile.entitlements.maxProjects === null
-                      ? "∞"
-                      : profile.entitlements.maxProjects}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                  <div
-                    className="h-full bg-indigo-500 transition-all"
-                    style={{
-                      width: `${
-                        profile.entitlements.maxProjects
-                          ? Math.min(
-                              100,
-                              (profile.usage.projectCount /
-                                profile.entitlements.maxProjects) *
-                                100
-                            )
-                          : 15
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
-                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                    Custom Domains
-                  </span>
-                  <span className="font-mono text-zinc-200 font-semibold">
-                    {profile.usage.customDomainCount} /{" "}
-                    {profile.entitlements.maxCustomDomains}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                  <div
-                    className="h-full bg-cyan-500 transition-all"
-                    style={{
-                      width: `${
-                        profile.entitlements.maxCustomDomains > 0
-                          ? Math.min(
-                              100,
-                              (profile.usage.customDomainCount /
-                                profile.entitlements.maxCustomDomains) *
-                                100
-                            )
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
-                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <HardDrive className="w-3.5 h-3.5 text-purple-400" />
-                    R2 Storage ({profile.entitlements.historyDays}d history)
-                  </span>
-                  <span className="font-mono text-zinc-200 font-semibold">
-                    {formatBytes(profile.usage.storageUsedBytes)} /{" "}
-                    {formatBytes(profile.entitlements.storageLimitBytes)}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                  <div
-                    className="h-full bg-purple-500 transition-all"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (profile.usage.storageUsedBytes /
-                          Math.max(1, profile.entitlements.storageLimitBytes)) *
-                          100
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : null}
+          {/* Unified Live Quota Overview */}
+          <BillingQuotaMeters isDemo={isDemo} />
 
           {/* Subscription Tiers */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

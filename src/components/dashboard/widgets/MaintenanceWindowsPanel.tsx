@@ -192,7 +192,36 @@ export function MaintenanceWindowsPanel({
           No scheduled maintenance windows configured.
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {/* Upcoming 7-Day Visual Maintenance Timeline Strip */}
+          <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+            <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono">
+              <span>Upcoming 7-Day Suppression Timeline</span>
+              <span>{windows.filter((w) => w.isActiveNow || w.isUpcoming).length} active/upcoming</span>
+            </div>
+            <div className="grid grid-cols-7 gap-1.5">
+              {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
+                const dayMs = Date.now() + offset * 86_400_000;
+                const dayIso = new Date(dayMs).toISOString().slice(0, 10);
+                const hasWindow = windows.some((w) => w.startsAt.slice(0, 10) === dayIso || w.isActiveNow);
+                return (
+                  <div
+                    key={offset}
+                    className={`p-1.5 rounded-lg border text-center font-mono text-[10px] ${
+                      hasWindow
+                        ? "bg-amber-500/20 border-amber-500/40 text-amber-200 font-bold"
+                        : "bg-zinc-900/70 border-zinc-800 text-zinc-500"
+                    }`}
+                    title={hasWindow ? `Scheduled maintenance on ${dayIso}` : `Clear on ${dayIso}`}
+                  >
+                    <div>{offset === 0 ? "Today" : `+${offset}d`}</div>
+                    <div className={`h-1 mt-1 rounded-full ${hasWindow ? "bg-amber-400" : "bg-zinc-800"}`} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-2">
           {windows.map((w) => (
             <div
               key={w.id}
@@ -236,6 +265,7 @@ export function MaintenanceWindowsPanel({
               )}
             </div>
           ))}
+          </div>
         </div>
       )}
     </section>

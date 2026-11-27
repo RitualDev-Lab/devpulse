@@ -30,7 +30,18 @@ export function BugReportClientForm({
   const [runtime, setRuntime] = useState("node");
   const [reporterEmail, setReporterEmail] = useState("");
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+
+  useEffect(() => {
+    if (!attachmentFile || !attachmentFile.type.startsWith("image/")) {
+      setAttachmentPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(attachmentFile);
+    setAttachmentPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [attachmentFile]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -50,9 +61,10 @@ export function BugReportClientForm({
           // ignore
         }
       }
+      const themeAttr = document.documentElement.getAttribute("data-theme");
       widgetIdRef.current = window.turnstile.render(turnstileContainerRef.current, {
         sitekey: turnstileSiteKey,
-        theme: "dark",
+        theme: themeAttr === "minimal_white" ? "light" : "dark",
         callback: (token: string) => setTurnstileToken(token),
         "expired-callback": () => setTurnstileToken(""),
         "error-callback": () => setTurnstileToken(""),
@@ -199,7 +211,26 @@ export function BugReportClientForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      onPaste={(e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              const ext = file.type.split("/")[1] || "png";
+              setAttachmentFile(
+                new File([file], `pasted-screenshot.${ext}`, { type: file.type })
+              );
+              break;
+            }
+          }
+        }
+      }}
+      className="space-y-4"
+    >
       {errorMessage && (
         <div className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-2">
           <AlertOctagon className="w-4 h-4 shrink-0" />
@@ -289,28 +320,42 @@ export function BugReportClientForm({
           <span>Screenshot or Log Attachment (Optional &bull; Direct Cloudflare R2 Upload)</span>
         </label>
         {attachmentFile ? (
-          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-950 border border-cyan-500/40 text-xs text-zinc-200">
-            <span className="truncate font-mono">
-              {attachmentFile.name} ({Math.max(1, Math.round(attachmentFile.size / 1024))} KB)
-            </span>
-            <button
-              type="button"
-              onClick={() => setAttachmentFile(null)}
-              className="text-zinc-400 hover:text-white p-1"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+          <div className="space-y-2 p-2.5 rounded-xl bg-zinc-950 border border-cyan-500/40 text-xs text-zinc-200">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-mono">
+                {attachmentFile.name} ({Math.max(1, Math.round(attachmentFile.size / 1024))} KB)
+              </span>
+              <button
+                type="button"
+                onClick={() => setAttachmentFile(null)}
+                className="text-zinc-400 hover:text-white p-1"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {attachmentPreviewUrl && (
+              <img
+                src={attachmentPreviewUrl}
+                alt="Attached screenshot preview"
+                className="max-h-40 rounded-lg border border-zinc-800 object-contain"
+              />
+            )}
           </div>
         ) : (
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,.txt,.log,.json"
-            onChange={(e) => {
-              const f = e.target.files?.[0] || null;
-              setAttachmentFile(f);
-            }}
-            className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200 hover:file:bg-zinc-700 cursor-pointer"
-          />
+          <div className="p-2.5 rounded-xl bg-zinc-950/70 border border-dashed border-zinc-800 space-y-1.5">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,.txt,.log,.json"
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                setAttachmentFile(f);
+              }}
+              className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200 hover:file:bg-zinc-700 cursor-pointer"
+            />
+            <p className="text-[11px] text-zinc-500">
+              Tip: Press <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">Ctrl+V</kbd> anywhere in this form to attach a screenshot from clipboard.
+            </p>
+          </div>
         )}
       </div>
 

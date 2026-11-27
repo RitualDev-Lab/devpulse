@@ -79,6 +79,8 @@ export function SlaCompliancePanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<IncidentItem["status"]>("resolved");
   const [editRca, setEditRca] = useState("");
+  const [editIsPublic, setEditIsPublic] = useState(true);
+  const [rcaPreviewMode, setRcaPreviewMode] = useState(false);
 
   const loadSla = useCallback(async () => {
     setLoading(true);
@@ -188,6 +190,7 @@ export function SlaCompliancePanel({
           incidentId,
           status: editStatus,
           rcaText: editRca,
+          isPublic: editIsPublic,
         }),
       });
       setEditingId(null);
@@ -499,6 +502,8 @@ export function SlaCompliancePanel({
                           setEditingId(editingId === inc.id ? null : inc.id);
                           setEditStatus(inc.status);
                           setEditRca(inc.rcaText || "");
+                          setEditIsPublic(inc.isPublic);
+                          setRcaPreviewMode(false);
                         }}
                         className="text-[11px] text-indigo-400 hover:underline"
                       >
@@ -515,32 +520,71 @@ export function SlaCompliancePanel({
                 )}
 
                 {editingId === inc.id && (
-                  <div className="space-y-2 pt-1">
-                    <select
-                      value={editStatus}
-                      onChange={(e) => setEditStatus(e.target.value as any)}
-                      className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white"
-                    >
-                      <option value="investigating">Investigating</option>
-                      <option value="identified">Identified</option>
-                      <option value="monitoring">Monitoring</option>
-                      <option value="resolved">Resolved</option>
-                    </select>
-                    <textarea
-                      rows={3}
-                      value={editRca}
-                      onChange={(e) => setEditRca(e.target.value)}
-                      placeholder="Write Root Cause Analysis (RCA)..."
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white"
-                    />
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => handleSaveRca(inc.id)}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
-                    >
-                      Save Incident Update
-                    </button>
+                  <div className="space-y-2.5 pt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <select
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value as any)}
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white"
+                      >
+                        <option value="investigating">Investigating</option>
+                        <option value="identified">Identified</option>
+                        <option value="monitoring">Monitoring</option>
+                        <option value="resolved">Resolved</option>
+                      </select>
+                      <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setRcaPreviewMode(false)}
+                          className={`px-2 py-1 rounded-md font-semibold ${
+                            !rcaPreviewMode ? "bg-indigo-600 text-white" : "text-zinc-400"
+                          }`}
+                        >
+                          Markdown
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRcaPreviewMode(true)}
+                          className={`px-2 py-1 rounded-md font-semibold ${
+                            rcaPreviewMode ? "bg-indigo-600 text-white" : "text-zinc-400"
+                          }`}
+                        >
+                          Preview
+                        </button>
+                      </div>
+                    </div>
+                    {!rcaPreviewMode ? (
+                      <textarea
+                        rows={4}
+                        value={editRca}
+                        onChange={(e) => setEditRca(e.target.value)}
+                        placeholder="Write Root Cause Analysis (RCA)..."
+                        className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white font-mono"
+                      />
+                    ) : (
+                      <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 space-y-1.5 whitespace-pre-wrap">
+                        {editRca.trim() || "Nothing drafted yet."}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="inline-flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editIsPublic}
+                          onChange={(e) => setEditIsPublic(e.target.checked)}
+                          className="rounded border-zinc-700"
+                        />
+                        <span>Publish to Public Status Portal</span>
+                      </label>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleSaveRca(inc.id)}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
+                      >
+                        Save Incident Update
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

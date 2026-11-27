@@ -45,6 +45,101 @@ const EXPERIMENT_STATUS_LABEL: Record<AbStat["status"], string> = {
   inconclusive: "no clear difference",
 };
 
+const DEMO_FLAGS: FlagRow[] = [
+  {
+    id: "demo_flag_1",
+    key: "checkout_one_click_v3",
+    description: "Streamlined Stripe Payment Element checkout with instant Apple/Google Pay",
+    isEnabled: true,
+    rolloutPercent: 50,
+    autoRollbackEnabled: true,
+    crashRateThresholdPercent: 3,
+    status: "active",
+    rollbackReason: null,
+    totalExposures: 4820,
+    totalCrashes: 3,
+    experiment: {
+      available: true,
+      reason: null,
+      controlVariant: "control",
+      minUsersPerArm: 500,
+      excludedCrossVariantUsers: 14,
+    },
+    abStats: [
+      {
+        variant: "control",
+        weight: 50,
+        exposures: 2410,
+        conversions: 506,
+        conversionRate: 21.0,
+        crashes: 2,
+        status: "control",
+        differencePoints: null,
+        ciLowerPoints: null,
+        ciUpperPoints: null,
+      },
+      {
+        variant: "treatment",
+        weight: 50,
+        exposures: 2410,
+        conversions: 612,
+        conversionRate: 25.4,
+        crashes: 1,
+        status: "significant_positive",
+        differencePoints: 4.4,
+        ciLowerPoints: 1.9,
+        ciUpperPoints: 6.9,
+      },
+    ],
+  },
+  {
+    id: "demo_flag_2",
+    key: "ai_stack_clustering_v2",
+    description: "Semantic embeddings grouping for multi-frame async Node.js stack traces",
+    isEnabled: true,
+    rolloutPercent: 25,
+    autoRollbackEnabled: true,
+    crashRateThresholdPercent: 2,
+    status: "active",
+    rollbackReason: null,
+    totalExposures: 1120,
+    totalCrashes: 0,
+    experiment: {
+      available: false,
+      reason: "Collecting 500 distinct users per arm for statistical power.",
+      controlVariant: "control",
+      minUsersPerArm: 500,
+      excludedCrossVariantUsers: 2,
+    },
+    abStats: [
+      {
+        variant: "control",
+        weight: 75,
+        exposures: 840,
+        conversions: 689,
+        conversionRate: 82.0,
+        crashes: 0,
+        status: "control",
+        differencePoints: null,
+        ciLowerPoints: null,
+        ciUpperPoints: null,
+      },
+      {
+        variant: "treatment",
+        weight: 25,
+        exposures: 280,
+        conversions: 244,
+        conversionRate: 87.1,
+        crashes: 0,
+        status: "insufficient_data",
+        differencePoints: 5.1,
+        ciLowerPoints: -1.4,
+        ciUpperPoints: 11.6,
+      },
+    ],
+  },
+];
+
 interface FlagRow {
   id: string;
   key: string;
@@ -79,6 +174,10 @@ export function FlagsFullView({ workspace }: { workspace: LoadedWorkspaceReady }
   const [autoRollback, setAutoRollback] = useState(true);
 
   const loadFlags = useCallback(async () => {
+    if (isDemo) {
+      setFlags(DEMO_FLAGS);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/flags?projectId=${encodeURIComponent(project.id)}`);
@@ -87,7 +186,7 @@ export function FlagsFullView({ workspace }: { workspace: LoadedWorkspaceReady }
     } finally {
       setLoading(false);
     }
-  }, [project.id]);
+  }, [project.id, isDemo]);
 
   useEffect(() => {
     loadFlags();
@@ -411,11 +510,32 @@ if (await pulse.flag("new-checkout", { userId: "usr_123" })) {
                         <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
                           {ab.exposures} users • {ab.conversions} converted ({ab.conversionRate}%)
                         </div>
-                        {ab.differencePoints !== null && ab.ciLowerPoints !== null && ab.ciUpperPoints !== null && (
-                          <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                            {ab.differencePoints >= 0 ? "+" : ""}{ab.differencePoints} pp vs control (adjusted CI {ab.ciLowerPoints} to {ab.ciUpperPoints})
-                          </div>
-                        )}
+                        {ab.differencePoints !== null && ab.ciLowerPoints !== null && ab.ciUpperPoints !== null && (() => {
+                          const lo = Math.max(-15, ab.ciLowerPoints);
+                          const hi = Math.min(15, ab.ciUpperPoints);
+                          const leftPct = ((lo + 15) / 30) * 100;
+                          const widthPct = Math.max(4, ((hi - lo) / 30) * 100);
+                          return (
+                            <div className="mt-1.5 space-y-1">
+                              <div className="text-[11px] text-zinc-400 font-mono">
+                                {ab.differencePoints >= 0 ? "+" : ""}{ab.differencePoints} pp vs control (adjusted CI {ab.ciLowerPoints} to {ab.ciUpperPoints})
+                              </div>
+                              <div className="relative h-2 rounded-full bg-zinc-900 border border-zinc-800 w-44 overflow-hidden">
+                                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-zinc-600" />
+                                <div
+                                  style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                                  className={`absolute top-0.5 bottom-0.5 rounded-full ${
+                                    ab.ciLowerPoints > 0
+                                      ? "bg-emerald-500"
+                                      : ab.ciUpperPoints < 0
+                                      ? "bg-red-500"
+                                      : "bg-amber-400"
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })()}
                         <div className="text-[10px] text-zinc-500 mt-0.5">{EXPERIMENT_STATUS_LABEL[ab.status]}</div>
                       </div>
                       <span

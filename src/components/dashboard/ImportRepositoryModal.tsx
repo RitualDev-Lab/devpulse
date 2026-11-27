@@ -88,6 +88,15 @@ export function ImportRepositoryModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     setLoadingRepos(true);
     setError(null);
     fetch("/api/v1/github/repos")
@@ -242,7 +251,7 @@ export function ImportRepositoryModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-xl rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 overflow-hidden max-h-[90vh] flex flex-col"
+        className="devpulse-modal-panel relative w-full max-w-xl rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 overflow-hidden max-h-[90vh] flex flex-col"
       >
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80 mb-4">
           <div className="flex items-center gap-2.5">
@@ -264,6 +273,22 @@ export function ImportRepositoryModal({
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+
+        {/* 3-Step Visual Onboarding Progress Bar */}
+        <div className="grid grid-cols-3 gap-2 mb-3 text-[11px] font-mono shrink-0">
+          <div className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${selectedPreset ? "bg-indigo-600/15 border-indigo-500/40 text-indigo-200" : "bg-zinc-950 border-zinc-800 text-zinc-400"}`}>
+            <span className="font-bold">1.</span>
+            <span className="truncate">Stack Preset</span>
+          </div>
+          <div className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${!isScanning && !scanResult ? "bg-cyan-600/15 border-cyan-500/40 text-cyan-200" : "bg-zinc-950 border-zinc-800 text-zinc-400"}`}>
+            <span className="font-bold">2.</span>
+            <span className="truncate">{mode === "github" ? "Select Repo" : "Bind Package"}</span>
+          </div>
+          <div className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${isScanning || scanResult ? "bg-emerald-600/15 border-emerald-500/40 text-emerald-200" : "bg-zinc-950 border-zinc-800 text-zinc-400"}`}>
+            <span className="font-bold">3.</span>
+            <span className="truncate">{scanResult ? "Ready!" : "Auto Sync & SDK"}</span>
+          </div>
         </div>
 
         {/* Mode Switcher */}

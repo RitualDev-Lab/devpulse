@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Bot, RefreshCw, ShieldCheck, ShieldOff, DollarSign, Clock, AlertTriangle } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Bot, RefreshCw, ShieldCheck, ShieldOff, DollarSign, Clock, AlertTriangle, Play } from "lucide-react";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import type { AggregatedMcpToolMetric } from "@/lib/integrations/mcp-analytics";
 import { DEVPULSE_MCP_TOOLS } from "@/lib/integrations/mcp-policy";
@@ -61,6 +61,9 @@ export function McpAnalyticsFullView({ workspace }: { workspace: LoadedWorkspace
   const [data, setData] = useState<McpAnalyticsPayload>(DEMO_MCP_ANALYTICS);
   const [loading, setLoading] = useState(false);
   const [policyBusy, setPolicyBusy] = useState<string | null>(null);
+  const [budgetUsd, setBudgetUsd] = useState<number>(5);
+  const [simTool, setSimTool] = useState<string>(DEVPULSE_MCP_TOOLS[0]);
+  const [simOutput, setSimOutput] = useState<string | null>(null);
 
   const loadMcp = useCallback(async () => {
     if (isDemo) {
@@ -171,27 +174,140 @@ export function McpAnalyticsFullView({ workspace }: { workspace: LoadedWorkspace
           </div>
         </div>
 
-        {/* Daily MCP Tool Volume Chart */}
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
-          <div>
-            <h2 className="text-sm font-bold text-white">Daily Agent Tool Calls</h2>
-            <p className="text-xs text-zinc-400">Invocation velocity across authorized MCP clients</p>
+        {/* Daily MCP Tool Volume & Per-Tool Cost Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <div>
+              <h2 className="text-sm font-bold text-white">Daily Agent Tool Calls</h2>
+              <p className="text-xs text-zinc-400">Invocation velocity across authorized MCP clients</p>
+            </div>
+            <div className="h-48">
+              {chartSeries.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
+                    <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
+                    <Tooltip contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }} />
+                    <Area type="monotone" dataKey="calls" name="Calls" stroke="#818cf8" fill="#818cf825" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800 flex items-center justify-center text-xs text-zinc-500">
+                  No MCP tool calls recorded yet.
+                </div>
+              )}
+            </div>
           </div>
-          <div className="h-48">
-            {chartSeries.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                  <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
-                  <Tooltip contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }} />
-                  <Area type="monotone" dataKey="calls" name="Calls" stroke="#818cf8" fill="#818cf825" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800 flex items-center justify-center text-xs text-zinc-500">
-                No MCP tool calls recorded yet.
+
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <div>
+              <h2 className="text-sm font-bold text-white">Per-Tool Token Cost Distribution (USD)</h2>
+              <p className="text-xs text-zinc-400">Identify high-spend agent tools for prompt or cache tuning</p>
+            </div>
+            <div className="h-48">
+              {(data.tools || []).length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data.tools.map((t) => ({
+                      tool: t.toolName.replace(/_/g, " "),
+                      costUsd: Number(t.estimatedCostUsd.toFixed(4)),
+                    }))}
+                    margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+                  >
+                    <XAxis dataKey="tool" tick={{ fill: "#71717a", fontSize: 10 }} />
+                    <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={44} />
+                    <Tooltip contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }} />
+                    <Bar dataKey="costUsd" name="Est. Cost ($)" fill="#10b981" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800 flex items-center justify-center text-xs text-zinc-500">
+                  No tool cost breakdown yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Policy Dry-Run Simulator & Monthly Budget Threshold */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <div>
+              <h2 className="text-sm font-bold text-white">Policy Dry-Run Simulator</h2>
+              <p className="text-xs text-zinc-400">Test whether an MCP client request passes your current allowlist policy</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={simTool}
+                onChange={(e) => setSimTool(e.target.value)}
+                className="flex-1 min-w-[180px] px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
+              >
+                {DEVPULSE_MCP_TOOLS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  const allowed = data.policy.allowedTools.includes(simTool);
+                  const row = data.tools.find((t) => t.toolName === simTool);
+                  setSimOutput(
+                    allowed
+                      ? `ALLOW — '${simTool}' permitted by policy (avg p50 ${row?.p50DurationMs ?? 120}ms, ~$${row?.estimatedCostUsd.toFixed(4) ?? "0.0010"}/30d)`
+                      : `DENY (403) — '${simTool}' is blocked by workspace MCP allowlist`
+                  );
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>Simulate Call</span>
+              </button>
+            </div>
+            {simOutput && (
+              <div className={`p-2.5 rounded-xl border text-xs font-mono ${simOutput.startsWith("ALLOW") ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-200" : "bg-red-950/40 border-red-500/30 text-red-200"}`}>
+                {simOutput}
               </div>
             )}
+          </div>
+
+          <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-white">Monthly Token Spend Budget</h2>
+                <p className="text-xs text-zinc-400">Highlight projected overspend against monthly guardrail</p>
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-mono text-zinc-300">
+                <span>Limit $</span>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={budgetUsd}
+                  onChange={(e) => setBudgetUsd(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-20 px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-right"
+                />
+              </label>
+            </div>
+            {(() => {
+              const pct = Math.min(100, Math.round((data.estimatedCostUsd / budgetUsd) * 100));
+              const exceeded = data.estimatedCostUsd >= budgetUsd;
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className={exceeded ? "text-red-300 font-bold" : "text-emerald-300"}>
+                      ${data.estimatedCostUsd.toFixed(2)} used ({pct}%)
+                    </span>
+                    <span className="text-zinc-400">${budgetUsd.toFixed(2)} cap</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-zinc-950 border border-zinc-800 overflow-hidden">
+                    <div
+                      style={{ width: `${Math.max(3, pct)}%` }}
+                      className={`h-full transition-all ${exceeded ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500"}`}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 

@@ -55,6 +55,9 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
   const [openModal, setOpenModal] = useState<
     "alerts" | "security" | "sso" | "domains" | "storage" | "integrations" | null
   >(null);
+  const [activeTab, setActiveTab] = useState<
+    "quick_connect" | "appearance" | "alerts_embeds" | "security_storage" | "billing_danger"
+  >("quick_connect");
   const [defaultTab, setDefaultTab] = useState("/dashboard");
   const [piiScrubEnabled, setPiiScrubEnabled] = useState(true);
   const [themeFeedback, setThemeFeedback] = useState<string | null>(null);
@@ -207,23 +210,54 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
           </p>
         </div>
 
-        <BillingQuotaMeters isDemo={isDemo} />
+        {/* 5 Horizontal Settings Sub-Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 w-fit">
+          {(
+            [
+              { id: "quick_connect", label: "Quick Connect" },
+              { id: "appearance", label: "Appearance & Themes" },
+              { id: "alerts_embeds", label: "Alerts & Embeds" },
+              { id: "security_storage", label: "Security & R2 Storage" },
+              { id: "billing_danger", label: "Billing & Quotas" },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === tab.id
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-        <QuickConnectPanel
-          projectId={project.id}
-          projectSlug={project.slug}
-          telemetryApiKey={project.telemetryApiKey}
-          initialPreset={project.stackPreset}
-          hasNpmToken={project.hasNpmToken}
-          hasGithubToken={project.hasGithubToken}
-          isDemo={isDemo}
-          onSuccess={() => {
-            showToast("Quick Connect settings applied", "success");
-            router.refresh();
-          }}
-        />
+        {activeTab === "billing_danger" && <BillingQuotaMeters isDemo={isDemo} />}
+
+        {activeTab === "quick_connect" && (
+          <div className="space-y-5">
+            <QuickConnectPanel
+              projectId={project.id}
+              projectSlug={project.slug}
+              telemetryApiKey={project.telemetryApiKey}
+              initialPreset={project.stackPreset}
+              hasNpmToken={project.hasNpmToken}
+              hasGithubToken={project.hasGithubToken}
+              isDemo={isDemo}
+              onSuccess={() => {
+                showToast("Quick Connect settings applied", "success");
+                router.refresh();
+              }}
+            />
+          </div>
+        )}
 
         {/* Weekly PDF/CSV Export & Public Metrics Embed Cards (Notion / Docs / README) */}
+        {activeTab === "alerts_embeds" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
@@ -306,9 +340,18 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
             </div>
           </div>
         </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {cards.map((c) => {
+          {cards
+            .filter((c) => {
+              if (activeTab === "quick_connect") return c.id === "integrations";
+              if (activeTab === "appearance") return c.id === "styling";
+              if (activeTab === "alerts_embeds") return c.id === "alerts" || c.id === "domains";
+              if (activeTab === "security_storage") return c.id === "security" || c.id === "sso" || c.id === "storage";
+              return false;
+            })
+            .map((c) => {
             const Icon = c.icon;
             return (
               <button
@@ -338,6 +381,7 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
         </div>
 
         {/* Inline Appearance, Theme & Workspace Preferences Studio */}
+        {activeTab === "appearance" && (
         <section className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -498,9 +542,10 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
             </div>
           </div>
         </section>
+        )}
 
         {/* Danger Zone: Remove Project / Repository */}
-        {accessRole === "owner" && (
+        {activeTab === "billing_danger" && accessRole === "owner" && (
           <div className="p-5 rounded-2xl bg-red-950/20 border border-red-500/30 flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-sm font-bold text-red-200 flex items-center gap-2">

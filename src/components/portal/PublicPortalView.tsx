@@ -6,6 +6,8 @@ import { Activity, Bug, Globe, ShieldCheck } from "lucide-react";
 import {
   normalizeThemeId,
   getPresetThemeCss,
+  getAppearancePrefsCss,
+  type AppearancePreferences,
   scopeCustomCss,
 } from "@/lib/layout/css-scoper";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
@@ -40,8 +42,18 @@ export function PublicPortalView({
 }: PublicPortalViewProps) {
   const activeProject = dashboardData?.project;
   const activeTheme = normalizeThemeId(activeProject?.theme);
+  let parsedPrefs: Partial<AppearancePreferences> | null = null;
+  try {
+    const raw = (activeProject as any)?.appearancePrefsJson;
+    if (typeof raw === "string" && raw.trim()) {
+      parsedPrefs = JSON.parse(raw) as Partial<AppearancePreferences>;
+    }
+  } catch {
+    parsedPrefs = null;
+  }
   const dynamicCss = [
     getPresetThemeCss(activeTheme),
+    getAppearancePrefsCss(parsedPrefs),
     scopeCustomCss(activeProject?.customCss || "", ".devpulse-workspace"),
   ]
     .filter(Boolean)

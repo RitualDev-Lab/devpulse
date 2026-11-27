@@ -33,6 +33,7 @@ export function CronHeartbeatsPanel({
   const [saving, setSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pingingId, setPingingId] = useState<string | null>(null);
+  const [pingNotice, setPingNotice] = useState<string | null>(null);
 
   const loadHeartbeats = useCallback(async () => {
     try {
@@ -87,10 +88,27 @@ export function CronHeartbeatsPanel({
   };
 
   const handleTestPing = async (item: CronHeartbeatItem) => {
-    if (isDemo) return;
     setPingingId(item.id);
+    setPingNotice(null);
+    if (isDemo) {
+      setItems((prev) =>
+        prev.map((row) =>
+          row.id === item.id
+            ? { ...row, state: "up", lastPingAt: new Date().toISOString(), lastDurationMs: 285 }
+            : row
+        )
+      );
+      setPingNotice(`Demo test ping received for "${item.name}" (285ms -> UP).`);
+      setPingingId(null);
+      return;
+    }
     try {
-      await fetch(`/api/v1/ping/${encodeURIComponent(item.monitorKey)}?state=finish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: "finish", durationMs: 420 }) });
+      await fetch(`/api/v1/ping/${encodeURIComponent(item.monitorKey)}?state=finish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: "finish", durationMs: 420 }),
+      });
+      setPingNotice(`Sent finish heartbeat ping for "${item.name}".`);
       await loadHeartbeats();
     } finally {
       setPingingId(null);
@@ -170,6 +188,11 @@ export function CronHeartbeatsPanel({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {pingNotice && (
+            <div className="md:col-span-2 px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-200">
+              {pingNotice}
+            </div>
+          )}
           {items.map((hb) => {
             const badgeColor =
               hb.state === "up"
@@ -195,26 +218,25 @@ export function CronHeartbeatsPanel({
                     <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${badgeColor}`}>
                       {hb.state}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => handleTestPing(hb)}
+                      disabled={pingingId === hb.id}
+                      title="Send test heartbeat ping"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold"
+                    >
+                      {pingingId === hb.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                      <span>Test Ping</span>
+                    </button>
                     {!isDemo && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => handleTestPing(hb)}
-                          disabled={pingingId === hb.id}
-                          title="Send finish ping"
-                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-emerald-300"
-                        >
-                          {pingingId === hb.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(hb.id)}
-                          title="Delete heartbeat"
-                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/50 border border-zinc-800 text-zinc-400 hover:text-red-300"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(hb.id)}
+                        title="Delete heartbeat"
+                        className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/50 border border-zinc-800 text-zinc-400 hover:text-red-300"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     )}
                   </div>
                 </div>
