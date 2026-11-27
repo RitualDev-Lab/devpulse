@@ -77,6 +77,18 @@ export function ReleasePulseTimeline({ data }: { data: DashboardData }) {
     });
   }
 
+  if (data.project.vscodeExtension && data.vscodeStats) {
+    entries.push({
+      id: `vscode:${data.project.vscodeExtension}`,
+      ecosystem: data.vscodeStats.openVsxInstalls > 0 ? "VS Code / Open VSX" : "VS Code",
+      packageName: data.vscodeStats.extensionId,
+      version: data.vscodeStats.version || "latest",
+      daysAgo: null,
+      downloadsMonthly: data.vscodeStats.installs || 0,
+      accentClass: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+    });
+  }
+
   for (const extra of data.extraPackages || []) {
     entries.push({
       id: `extra:${extra.provider}:${extra.identifier}`,
@@ -90,6 +102,9 @@ export function ReleasePulseTimeline({ data }: { data: DashboardData }) {
   }
 
   const sorted = [...entries].sort((a, b) => (a.daysAgo ?? 99) - (b.daysAgo ?? 99));
+  const latestRelHealth = (data.releases || [])[0] || null;
+  const ghTag = data.githubStats?.latestRelease?.tagName || null;
+  const openPrs = data.githubStats?.openPrCount ?? 0;
 
   return (
     <section className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
@@ -100,12 +115,36 @@ export function ReleasePulseTimeline({ data }: { data: DashboardData }) {
             <span>Cross-Registry &ldquo;Release Pulse&rdquo; Timeline</span>
           </h2>
           <p className="text-xs text-zinc-400">
-            Synchronized release cadence, version parity, and monthly velocity across connected ecosystems
+            Correlates GitHub release tags, multi-registry publish parity, session adoption, crash-free rate, and active PRs
           </p>
         </div>
         <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 tabular-nums">
           {sorted.length} Active Stream{sorted.length === 1 ? "" : "s"}
         </span>
+      </div>
+
+      {/* Correlated Release Pipeline Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">GitHub Release Tag</div>
+          <div className="font-mono font-bold text-white mt-0.5 truncate">{ghTag || "Unlinked"}</div>
+        </div>
+        <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Latest Rollout Share</div>
+          <div className="font-mono font-bold text-cyan-300 mt-0.5 tabular-nums">
+            {latestRelHealth?.sessionSharePct != null ? `${latestRelHealth.sessionSharePct}%` : "N/A"}
+          </div>
+        </div>
+        <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Crash-Free Sessions</div>
+          <div className="font-mono font-bold text-emerald-300 mt-0.5 tabular-nums">
+            {latestRelHealth?.crashFreeRate != null ? `${latestRelHealth.crashFreeRate}%` : "100%"}
+          </div>
+        </div>
+        <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Suspect Open PRs</div>
+          <div className="font-mono font-bold text-amber-300 mt-0.5 tabular-nums">{openPrs}</div>
+        </div>
       </div>
 
       {sorted.length === 0 ? (

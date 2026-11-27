@@ -178,6 +178,19 @@ export function DefenseSuiteFullView({ workspace }: { workspace: LoadedWorkspace
             <pre className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-zinc-300 overflow-x-auto leading-relaxed">
               {curlSnippet}
             </pre>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/80 text-[11px] text-zinc-400">
+              <span>
+                Open VSX / VS Code:{" "}
+                <strong className="font-mono text-zinc-200">
+                  {initialData.vscodeStats
+                    ? `${initialData.vscodeStats.extensionId} (${initialData.vscodeStats.openVsxInstalls.toLocaleString("en-US")} Open VSX)`
+                    : "ritualdev-lab namespace tracked"}
+                </strong>
+              </span>
+              <span className="font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                SARIF v2.1.0 Ready
+              </span>
+            </div>
           </div>
         </div>
 
