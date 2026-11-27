@@ -51,3 +51,20 @@ pip install devpulse-sdk
 npx ovsx create-namespace ritualdev-lab -p "$OVSX_PAT"
 npx ovsx publish -p "$OVSX_PAT"
 ```
+
+---
+
+## 4. External Studio Reconciliation Checklist (Outside This Repository)
+
+Because `ritualdev.in`, `devshelf.ritualdev.in`, `mcp.ritualdev.in`, `RitualDev-Lab/.github`, Microsoft Store listings, Open VSX, and external CPA audit portals live outside `RitualDev-Lab/devpulse`, apply the following studio-level updates in their respective repositories and control planes:
+
+1. **Unify Hardcoded DevShelf Catalog Counts (`ritualdev.in` & `devshelf.ritualdev.in`):**
+   - Replace conflicting static counts (`527` vs `565+`..`610+`) with a single live counter sourced from DevPulse project/catalog telemetry or a scheduled build-time sync so hero cards, docs, and directory headers never drift.
+2. **Restore Trust Endpoints & Audit Cloudflare Bot Fight Rules (`ritualdev.in`):**
+   - Restore `ritualdev.in/trust/enterprise-sla.md` (mirroring the Phase 5 SLA matrix above) and verify Cloudflare Bot Fight / WAF rules return HTTP `200` for standard OpenGraph, SEO, and documentation link checkers without interstitial challenges.
+3. **Align SOC 2 / Enterprise Attestation Copy & CPA Engagement (`/enterprise/`, `/trust/`):**
+   - Ensure marketing and trust pages state `"SOC 2 Type II-Aligned Controls & Audit-Ready Evidence Pack; Independent CPA Attestation In Progress"` rather than claiming completed third-party CPA certification until the independent licensed CPA firm Type I / Type II report is issued.
+   - Track evidence collection (access control reviews, incident response drills, tenant RLS verification) with the external CPA auditor.
+4. **Namespace & Storefront Brand Disambiguation:**
+   - Keep **DevPulse by RitualDev** consistent across Microsoft Store listings, `RitualDev-Lab/.github`, npm (`@ritualdev/pulse`), and PyPI (`devpulse-sdk`) so developer telemetry tooling is clearly distinguished from unrelated consumer/storefront apps named DevPulse.
+
