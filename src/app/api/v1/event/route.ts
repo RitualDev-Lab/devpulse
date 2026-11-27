@@ -26,7 +26,12 @@ import { isValidProjectR2ObjectKey } from "@/lib/security/ssrf";
 import { buildFatalCrashEmailHtml, sendTransactionalEmail } from "@/lib/alerts/email";
 import { apiError } from "@/lib/security/api-error";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
-import { getMaxEventBytes, validateEventIngestPayload } from "@/lib/validation/event-ingest";
+import {
+  getMaxEventBytes,
+  readBoundedRequestText,
+  reserveAtomicEventQuotaSlot,
+  validateEventIngestPayload,
+} from "@/lib/validation/event-ingest";
 
 const R2_OFFLOAD_THRESHOLD_BYTES = 4096; // Offload payloads > 4KB (e.g. 100KB+ traces & terminal dumps) to R2
 const MAX_TURSO_PREVIEW_CHARS = 2000;
@@ -193,13 +198,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const rawText = await req.text();
-    if (new TextEncoder().encode(rawText).byteLength > maxBytes) {
-      return NextResponse.json(
-        { error: `Payload exceeds maximum allowed size (${maxBytes} bytes).` },
-        { status: 413 }
-      );
+    const bounded = await readBoundedRequestText(req, maxBytes);
+    if (!bounded.ok) {
+      return NextResponse.json({ error: bounded.error }, { status: bounded.status });
     }
+    const rawText = bounded.text;
 
     let body: any = {};
     try {
@@ -262,22 +265,26 @@ export async function POST(req: NextRequest) {
 
     // Enforce Workspace Monthly Event Cap atomically (awaited conditional increment prevents concurrency race)
     if (project.workspaceId) {
-      const [incremented] = await db
-        .update(workspaces)
-        .set({ monthlyEventsUsed: sql`${workspaces.monthlyEventsUsed} + 1` })
-        .where(
-          and(
-            eq(workspaces.id, project.workspaceId),
-            lt(workspaces.monthlyEventsUsed, workspaces.monthlyEventLimit)
+      const workspaceId = project.workspaceId;
+      const quotaRes = await reserveAtomicEventQuotaSlot(async () => {
+        const [incremented] = await db
+          .update(workspaces)
+          .set({ monthlyEventsUsed: sql`${workspaces.monthlyEventsUsed} + 1` })
+          .where(
+            and(
+              eq(workspaces.id, workspaceId),
+              lt(workspaces.monthlyEventsUsed, workspaces.monthlyEventLimit)
+            )
           )
-        )
-        .returning({ id: workspaces.id });
+          .returning({ id: workspaces.id });
+        return Boolean(incremented);
+      });
 
-      if (!incremented) {
+      if (!quotaRes.allowed) {
         const [ws] = await db
           .select({ name: workspaces.name, monthlyEventLimit: workspaces.monthlyEventLimit })
           .from(workspaces)
-          .where(eq(workspaces.id, project.workspaceId))
+          .where(eq(workspaces.id, workspaceId))
           .limit(1);
         if (ws) {
           return NextResponse.json(

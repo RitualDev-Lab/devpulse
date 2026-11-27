@@ -139,3 +139,80 @@ export function validateEventIngestPayload(
     },
   };
 }
+
+/**
+ * Streams a Request body up to `maxBytes` and cancels reading immediately when exceeded,
+ * preventing unbounded memory buffering on chunked requests without Content-Length.
+ */
+export async function readBoundedRequestText(
+  req: Pick<Request, "headers" | "body" | "text">,
+  maxBytes: number
+): Promise<{ ok: true; text: string } | { ok: false; status: 413; error: string }> {
+  const clHeader = req.headers.get("content-length");
+  if (clHeader) {
+    const declared = Number(clHeader);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      return {
+        ok: false,
+        status: 413,
+        error: `Payload exceeds maximum allowed size (${maxBytes} bytes). Upload oversized logs via /api/v1/storage/presign.`,
+      };
+    }
+  }
+
+  if (!req.body) {
+    const text = await req.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      return {
+        ok: false,
+        status: 413,
+        error: `Payload exceeds maximum allowed size (${maxBytes} bytes).`,
+      };
+    }
+    return { ok: true, text };
+  }
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel().catch(() => {});
+          return {
+            ok: false,
+            status: 413,
+            error: `Payload exceeds maximum allowed size (${maxBytes} bytes).`,
+          };
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return { ok: true, text: new TextDecoder().decode(merged) };
+}
+
+/**
+ * Wraps an atomic conditional workspace quota update (`UPDATE ... WHERE used < limit RETURNING id`).
+ */
+export async function reserveAtomicEventQuotaSlot(
+  conditionalUpdate: () => Promise<boolean>
+): Promise<{ allowed: boolean }> {
+  const allowed = await conditionalUpdate();
+  return { allowed };
+}
