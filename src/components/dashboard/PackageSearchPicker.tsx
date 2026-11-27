@@ -224,6 +224,15 @@ interface PackageSearchPickerProps {
   onlyPrimaryFields?: boolean;
 }
 
+type EcosystemCategory = "all" | "popular" | "backend" | "mobile" | "data";
+
+const CATEGORY_MAP: Record<Exclude<EcosystemCategory, "all">, SearchableEcosystem[]> = {
+  popular: ["npm", "pypi", "crates", "docker", "vscode", "mcp", "go"],
+  backend: ["nuget", "rubygems", "packagist", "jsr", "hex", "maven", "cpp"],
+  mobile: ["pubdev", "swift", "homebrew"],
+  data: ["anaconda", "cran", "hackage", "metacpan", "luarocks", "julia"],
+};
+
 export function PackageSearchPicker({
   onSelectItem,
   actionLabel = "Add",
@@ -232,14 +241,17 @@ export function PackageSearchPicker({
   onlyPrimaryFields = false,
 }: PackageSearchPickerProps) {
   const [ecosystem, setEcosystem] = useState<SearchableEcosystem>("npm");
+  const [category, setCategory] = useState<EcosystemCategory>("all");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<RegistrySearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const visibleEcosystems = onlyPrimaryFields
-    ? REGISTRY_ECOSYSTEMS.filter((e) => e.field !== null)
-    : REGISTRY_ECOSYSTEMS;
+  const visibleEcosystems = (
+    onlyPrimaryFields
+      ? REGISTRY_ECOSYSTEMS.filter((e) => e.field !== null)
+      : REGISTRY_ECOSYSTEMS
+  ).filter((e) => category === "all" || CATEGORY_MAP[category].includes(e.id));
 
   const meta = visibleEcosystems.find((e) => e.id === ecosystem) || visibleEcosystems[0];
   const currentAssigned = meta.field ? selectedValues[meta.field] || null : null;
@@ -256,8 +268,10 @@ export function PackageSearchPicker({
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
+        const isDemoPage =
+          typeof window !== "undefined" && window.location.search.includes("demo=1");
         const res = await fetch(
-          `/api/v1/registries/search?ecosystem=${encodeURIComponent(ecosystem)}&q=${encodeURIComponent(trimmed)}`,
+          `/api/v1/registries/search?ecosystem=${encodeURIComponent(ecosystem)}&q=${encodeURIComponent(trimmed)}${isDemoPage ? "&demo=1" : ""}`,
           { signal: controller.signal }
         );
         if (res.ok) {
@@ -295,6 +309,37 @@ export function PackageSearchPicker({
 
   return (
     <div className="space-y-3">
+      {!onlyPrimaryFields && (
+        <div className="flex flex-wrap items-center gap-1.5 pb-1 border-b border-zinc-800/80">
+          {(
+            [
+              ["all", "All (23)"],
+              ["popular", "Popular"],
+              ["backend", "Backend & Systems"],
+              ["mobile", "Mobile & CLI"],
+              ["data", "Data & Specialty"],
+            ] as const
+          ).map(([catId, label]) => (
+            <button
+              key={catId}
+              type="button"
+              onClick={() => {
+                setCategory(catId);
+                if (catId !== "all" && !CATEGORY_MAP[catId].includes(ecosystem)) {
+                  setEcosystem(CATEGORY_MAP[catId][0]);
+                }
+              }}
+              className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border transition ${
+                category === catId
+                  ? "bg-indigo-600/25 border-indigo-500/50 text-indigo-200"
+                  : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5">
         {visibleEcosystems.map((eco) => (
           <button

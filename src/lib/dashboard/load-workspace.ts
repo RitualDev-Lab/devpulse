@@ -572,7 +572,33 @@ export async function loadDashboardWorkspace(
     vscodeStats,
     mcpStats,
     revenueStats,
-    packageSecurity,
+    packageSecurity: (() => {
+      if (!isDemoView) return packageSecurity;
+      const seeded = { ...(packageSecurity || {}) };
+      if (activeProject.npmPackage && !seeded[`npm:${activeProject.npmPackage}`]) {
+        seeded[`npm:${activeProject.npmPackage}`] = {
+          system: "NPM",
+          packageName: activeProject.npmPackage,
+          defaultVersion: npmStats?.latestVersion || "1.0.0",
+          advisoryCount: 0,
+          licenses: [npmStats?.license || "MIT"],
+          scorecardOverall: 8.4,
+          sourceRepo: "github.com/RitualDev-Lab/devpulse",
+        };
+      }
+      if (activeProject.pypiPackage && !seeded[`pypi:${activeProject.pypiPackage}`]) {
+        seeded[`pypi:${activeProject.pypiPackage}`] = {
+          system: "PYPI",
+          packageName: activeProject.pypiPackage,
+          defaultVersion: pypiStats?.latestVersion || "1.0.0",
+          advisoryCount: 0,
+          licenses: ["Apache-2.0"],
+          scorecardOverall: 7.9,
+          sourceRepo: "github.com/RitualDev-Lab/devpulse",
+        };
+      }
+      return seeded;
+    })(),
     extraPackages,
     staleSnapshots,
     snapshotUpdatedAt,

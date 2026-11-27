@@ -40,6 +40,10 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
   const [pkgUrl, setPkgUrl] = useState("");
   const [pkgToken, setPkgToken] = useState("");
   const [savingPkg, setSavingPkg] = useState(false);
+  const [hiddenSeries, setHiddenSeries] = useState<Record<string, boolean>>({});
+
+  const toggleSeries = (key: string) =>
+    setHiddenSeries((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const handleAddPackageConnector = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,14 +154,41 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
           )}
 
           <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
-            <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
-                <Download className="w-4 h-4 text-indigo-400" />
-                <span>Multi-Registry Historical Velocity (PyPI, Crates, Docker, Go)</span>
-              </h2>
-              <p className="text-xs text-zinc-400">
-                Daily metrics persisted in Turso across package registries
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <Download className="w-4 h-4 text-indigo-400" />
+                  <span>Multi-Registry Historical Velocity (PyPI, Crates, Docker, Go)</span>
+                </h2>
+                <p className="text-xs text-zinc-400">
+                  Daily metrics persisted in Turso across package registries
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                {[
+                  { key: "pypi", label: "PyPI", color: "#3b82f6" },
+                  { key: "crates", label: "Crates", color: "#f97316" },
+                  { key: "docker", label: "Docker", color: "#06b6d4" },
+                  { key: "go", label: "Go", color: "#14b8a6" },
+                ].map((s) => {
+                  const off = Boolean(hiddenSeries[s.key]);
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => toggleSeries(s.key)}
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border transition ${
+                        off
+                          ? "bg-zinc-950 border-zinc-800 text-zinc-500 opacity-60"
+                          : "bg-zinc-950 border-zinc-700 text-zinc-200"
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                      <span>{s.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div className="h-48">
               {(initialData.packageHistory || []).length > 0 ? (
@@ -181,10 +212,10 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                     <Tooltip
                       contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
                     />
-                    <Area type="monotone" dataKey="pypi" name="PyPI" stroke="#3b82f6" fill="#3b82f620" />
-                    <Area type="monotone" dataKey="crates" name="Crates.io" stroke="#f97316" fill="#f9731620" />
-                    <Area type="monotone" dataKey="docker" name="Docker" stroke="#06b6d4" fill="#06b6d420" />
-                    <Area type="monotone" dataKey="go" name="Go" stroke="#14b8a6" fill="#14b8a620" />
+                    {!hiddenSeries.pypi && <Area type="monotone" dataKey="pypi" name="PyPI" stroke="#3b82f6" fill="#3b82f620" />}
+                    {!hiddenSeries.crates && <Area type="monotone" dataKey="crates" name="Crates.io" stroke="#f97316" fill="#f9731620" />}
+                    {!hiddenSeries.docker && <Area type="monotone" dataKey="docker" name="Docker" stroke="#06b6d4" fill="#06b6d420" />}
+                    {!hiddenSeries.go && <Area type="monotone" dataKey="go" name="Go" stroke="#14b8a6" fill="#14b8a620" />}
                     {(initialData.packageHistory || []).some((d) => (d.cran || 0) > 0) && (
                       <Area type="monotone" dataKey="cran" name="CRAN (R)" stroke="#60a5fa" fill="#60a5fa20" />
                     )}

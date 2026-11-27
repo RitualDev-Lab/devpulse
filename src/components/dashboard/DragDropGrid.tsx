@@ -586,6 +586,49 @@ export function DragDropGrid({
               <Sparkles className="w-3 h-3 text-indigo-400" />
               <span>Auto-Pack</span>
             </button>
+            <div className="flex flex-wrap items-center gap-1">
+              {[
+                {
+                  label: "Template: OSS Maintainer",
+                  order: ["github", "npm", "pypi", "rust", "docker", "crashes", "uptime"],
+                },
+                {
+                  label: "Template: Full-Stack SaaS",
+                  order: ["uptime", "crashes", "analytics", "revenue", "github", "release"],
+                },
+                {
+                  label: "Template: AI & MCP",
+                  order: ["mcp", "analytics", "crashes", "github", "pypi", "docker"],
+                },
+              ].map((tpl) => (
+                <button
+                  key={tpl.label}
+                  type="button"
+                  onClick={() => {
+                    const prioritized = [...desktopLayout].sort((a, b) => {
+                      const ia = tpl.order.indexOf(a.id);
+                      const ib = tpl.order.indexOf(b.id);
+                      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+                    });
+                    const packed = packDenseLayout(
+                      prioritized.map((w, idx) => ({
+                        ...w,
+                        hidden: false,
+                        x: (idx * 4) % 12,
+                        y: Math.floor(idx / 3),
+                      })),
+                      12
+                    );
+                    setDesktopLayout(packed);
+                    persistLayout(packed);
+                    setA11yAnnouncement(`Applied layout template: ${tpl.label}`);
+                  }}
+                  className="px-2 py-0.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[11px] text-zinc-300 transition"
+                >
+                  {tpl.label}
+                </button>
+              ))}
+            </div>
             {!isDemo && (
               <span className="flex items-center gap-1 text-[11px] text-zinc-400">
                 <Cloud className={`w-3.5 h-3.5 ${syncStatus === "error" ? "text-red-400" : "text-emerald-400"}`} />

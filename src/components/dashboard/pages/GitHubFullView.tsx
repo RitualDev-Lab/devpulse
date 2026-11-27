@@ -106,6 +106,11 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const [isPatOpen, setIsPatOpen] = useState(false);
   const [showMultiGitForm, setShowMultiGitForm] = useState(false);
+  const [prCheckNumber, setPrCheckNumber] = useState("42");
+  const [prCheckBranch, setPrCheckBranch] = useState("feat/checkout");
+  const [prCheckUrl, setPrCheckUrl] = useState("https://pr-42.pages.dev");
+  const [prCheckLoading, setPrCheckLoading] = useState(false);
+  const [prCheckPreview, setPrCheckPreview] = useState<string | null>(null);
   const [gitProv, setGitProv] = useState<"gitlab" | "bitbucket" | "gitea" | "github">(
     (project.gitProvider as any) || "gitlab"
   );
@@ -318,16 +323,14 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {!isDemo && (
-              <button
-                type="button"
-                onClick={() => setShowMultiGitForm((v) => !v)}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-xs font-semibold text-indigo-200 transition"
-              >
-                <GitBranch className="w-3.5 h-3.5" />
-                <span>Connect GitLab / Bitbucket / Codeberg</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowMultiGitForm((v) => !v)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-xs font-semibold text-indigo-200 transition"
+            >
+              <GitBranch className="w-3.5 h-3.5" />
+              <span>Connect GitLab / Bitbucket / Codeberg</span>
+            </button>
             {!isDemo && (
               <button
                 type="button"
@@ -352,8 +355,21 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
           </div>
         </div>
 
-        {showMultiGitForm && !isDemo && (
-          <form onSubmit={handleSaveMultiGit} className="p-4 rounded-2xl bg-zinc-900/90 border border-indigo-500/30 space-y-3">
+        {showMultiGitForm && (
+          <form
+            onSubmit={
+              isDemo
+                ? (e) => {
+                    e.preventDefault();
+                    setFeedback({
+                      ok: true,
+                      msg: `Demo preview: ${gitProv} repository (${gitSlug || "group/repo"}) configuration validated. Sign in to save.`,
+                    });
+                  }
+                : handleSaveMultiGit
+            }
+            className="p-4 rounded-2xl bg-zinc-900/90 border border-indigo-500/30 space-y-3"
+          >
             <div className="flex items-center justify-between">
               <div className="text-xs font-bold text-white">Connect Multi-Git Repository (GitLab, Bitbucket, Codeberg / Gitea, Self-Hosted)</div>
               <button type="button" onClick={() => setShowMultiGitForm(false)} className="text-zinc-500 hover:text-white text-xs">Close</button>
@@ -804,7 +820,7 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
       </div>
 
       {/* PR Intelligence Bot Card */}
-      <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3 mt-6">
+      <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3.5 mt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
@@ -819,11 +835,81 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
             POST /api/v1/webhooks/pr-check
           </code>
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-[100px_1fr_1fr_auto] gap-2">
+          <input
+            type="number"
+            min={1}
+            value={prCheckNumber}
+            onChange={(e) => setPrCheckNumber(e.target.value)}
+            placeholder="PR #"
+            aria-label="Pull Request Number"
+            className="px-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
+          />
+          <input
+            type="text"
+            value={prCheckBranch}
+            onChange={(e) => setPrCheckBranch(e.target.value)}
+            placeholder="Branch (e.g. feat/checkout)"
+            className="px-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
+          />
+          <input
+            type="text"
+            value={prCheckUrl}
+            onChange={(e) => setPrCheckUrl(e.target.value)}
+            placeholder="Preview URL"
+            className="px-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-white"
+          />
+          <button
+            type="button"
+            disabled={prCheckLoading}
+            onClick={async () => {
+              if (isDemo) {
+                setPrCheckPreview(
+                  [
+                    `### DevPulse PR Intelligence — ${project.name} (#${prCheckNumber || 42})`,
+                    `Branch: ${prCheckBranch || "feat/checkout"} • Preview: ${prCheckUrl || "https://pr-42.pages.dev"}`,
+                    "",
+                    "- **LCP p75:** 1420 ms • **INP p75:** 78 ms • **CLS p75:** 0.032",
+                    "- **SBOM Check:** 0 critical OSV.dev vulnerabilities introduced",
+                    "- **Crash Match:** 0 unresolved exceptions matching changed paths",
+                  ].join("\n")
+                );
+                return;
+              }
+              setPrCheckLoading(true);
+              try {
+                const res = await fetch("/api/v1/webhooks/pr-check", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    projectId: project.id,
+                    prNumber: Number(prCheckNumber || 1),
+                    branch: prCheckBranch,
+                    previewUrl: prCheckUrl,
+                    postComment: false,
+                  }),
+                });
+                const d = await res.json();
+                if (res.ok && d.commentMarkdown) setPrCheckPreview(d.commentMarkdown);
+              } finally {
+                setPrCheckLoading(false);
+              }
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition disabled:opacity-50"
+          >
+            {prCheckLoading ? "Generating..." : "Preview PR Comment"}
+          </button>
+        </div>
+        {prCheckPreview && (
+          <pre className="p-3 rounded-xl bg-zinc-950 border border-emerald-500/30 text-[11px] font-mono text-emerald-200 whitespace-pre-wrap">
+            {prCheckPreview}
+          </pre>
+        )}
         <pre className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 overflow-x-auto">
 {`curl -X POST https://devpulse.ritualdev.in/api/v1/webhooks/pr-check \\
   -H "Authorization: Bearer $DEVPULSE_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"prNumber":42,"branch":"feat/checkout","previewUrl":"https://pr-42.pages.dev"}'`}
+  -d '{"prNumber":${prCheckNumber || 42},"branch":"${prCheckBranch || "feat/checkout"}","previewUrl":"${prCheckUrl || "https://pr-42.pages.dev"}"}'`}
         </pre>
       </div>
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 import { escapeGoModulePath } from "@/lib/integrations/go";
 import { searchNuGetPackages } from "@/lib/integrations/nuget";
 import { searchRubyGems } from "@/lib/integrations/rubygems";
@@ -100,8 +101,16 @@ async function fetchJsonSafe<T>(url: string, headers: Record<string, string> = {
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) {
+  const isDemoQuery = req.nextUrl.searchParams.get("demo") === "1";
+  if (!user && !isDemoQuery) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!user && isDemoQuery) {
+    const ip = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "demo";
+    const rl = await checkRateLimit({ key: `regsearch:${ip}`, limit: 30, windowSeconds: 60 });
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Demo search rate limit reached" }, { status: 429 });
+    }
   }
 
   const ecoParam = String(req.nextUrl.searchParams.get("ecosystem") || "npm").toLowerCase() as SearchableEcosystem;
