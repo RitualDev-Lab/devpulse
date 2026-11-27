@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   ScrollText,
   Search,
@@ -14,6 +15,8 @@ import {
   Bookmark,
   AlertTriangle,
   Trash2,
+  Clock,
+  Bell,
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
@@ -51,7 +54,9 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("all");
   const [service, setService] = useState("all");
+  const [timeWindow, setTimeWindow] = useState<"all" | "15m" | "1h" | "24h" | "7d">("all");
   const [liveTail, setLiveTail] = useState(false);
+  const [tailHoverPaused, setTailHoverPaused] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [showSaveBox, setShowSaveBox] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,11 +66,19 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
   const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
+      const windowMsMap: Record<string, number> = {
+        "15m": 15 * 60 * 1000,
+        "1h": 60 * 60 * 1000,
+        "24h": 24 * 60 * 60 * 1000,
+        "7d": 7 * 24 * 60 * 60 * 1000,
+      };
+      const sinceMs = windowMsMap[timeWindow] ? String(Date.now() - windowMsMap[timeWindow]) : "";
       const qs = new URLSearchParams({
         projectId: project.id,
         ...(query ? { q: query } : {}),
         ...(level !== "all" ? { level } : {}),
         ...(service !== "all" ? { service } : {}),
+        ...(sinceMs ? { sinceMs } : {}),
       });
       const res = await fetch(`/api/v1/logs?${qs.toString()}`);
       const d = await res.json();
@@ -78,7 +91,7 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
     } finally {
       setLoading(false);
     }
-  }, [project.id, query, level, service]);
+  }, [project.id, query, level, service, timeWindow]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -88,12 +101,12 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
   }, [loadLogs]);
 
   useEffect(() => {
-    if (!liveTail) return;
+    if (!liveTail || tailHoverPaused) return;
     const iv = setInterval(() => {
       void loadLogs();
     }, 3000);
     return () => clearInterval(iv);
-  }, [liveTail, loadLogs]);
+  }, [liveTail, tailHoverPaused, loadLogs]);
 
   const handleSaveQuery = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,9 +211,18 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
               <AlertTriangle className={`w-4 h-4 shrink-0 ${spikeAnalysis.isSpike ? "text-red-400" : "text-emerald-400"}`} />
               <span>{spikeAnalysis.summary}</span>
             </div>
-            <span className="font-mono text-[11px] text-zinc-400">
-              Current: {spikeAnalysis.currentErrorCount}/hr &bull; Baseline avg: {spikeAnalysis.baselineHourlyAvg}/hr
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[11px] text-zinc-400">
+                Current: {spikeAnalysis.currentErrorCount}/hr &bull; Baseline avg: {spikeAnalysis.baselineHourlyAvg}/hr
+              </span>
+              <Link
+                href={`/dashboard/crashes?project=${encodeURIComponent(project.slug)}${isDemo ? "&demo=1" : ""}#smart-alerts`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-950/90 hover:bg-zinc-800 border border-zinc-700 text-[11px] font-semibold text-amber-300 transition"
+              >
+                <Bell className="w-3 h-3" />
+                <span>Create Alert Rule</span>
+              </Link>
+            </div>
           </div>
         )}
 
@@ -340,10 +362,37 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
               </option>
             ))}
           </select>
+          <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-[11px]">
+            <Clock className="w-3.5 h-3.5 text-zinc-500 mx-1" />
+            {(["15m", "1h", "24h", "7d", "all"] as const).map((win) => (
+              <button
+                key={win}
+                type="button"
+                onClick={() => setTimeWindow(win)}
+                className={`px-2 py-1 rounded-lg font-mono uppercase transition ${
+                  timeWindow === win
+                    ? "bg-emerald-600 text-white"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                {win}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Logs Stream with Extracted JSON Fields */}
-        <div className="rounded-2xl bg-zinc-900/90 border border-zinc-800 overflow-hidden">
+        <div
+          onMouseEnter={() => { if (liveTail) setTailHoverPaused(true); }}
+          onMouseLeave={() => { if (liveTail) setTailHoverPaused(false); }}
+          className="rounded-2xl bg-zinc-900/90 border border-zinc-800 overflow-hidden"
+        >
+          {liveTail && tailHoverPaused && (
+            <div className="px-4 py-1.5 bg-amber-950/50 border-b border-amber-500/30 text-[11px] text-amber-200 flex items-center justify-between">
+              <span>Live Tail paused while inspecting rows — move pointer away to resume polling</span>
+              <span className="font-mono text-[10px]">PAUSED</span>
+            </div>
+          )}
           {loading && logs.length === 0 ? (
             <div className="p-8 text-center text-xs text-zinc-500">Searching structured logs...</div>
           ) : logs.length === 0 ? (
@@ -376,7 +425,23 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
                       <span className="text-[11px] px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-cyan-300 shrink-0">
                         {l.serviceName}
                       </span>
-                      <span className="text-zinc-200 flex-1 break-all min-w-0">{l.message}</span>
+                      <span className="text-zinc-200 flex-1 break-all min-w-0">
+                        {(() => {
+                          const qTrim = query.trim();
+                          if (!qTrim) return l.message;
+                          const idx = l.message.toLowerCase().indexOf(qTrim.toLowerCase());
+                          if (idx === -1) return l.message;
+                          return (
+                            <>
+                              {l.message.slice(0, idx)}
+                              <mark className="bg-amber-500/30 text-amber-200 rounded px-0.5">
+                                {l.message.slice(idx, idx + qTrim.length)}
+                              </mark>
+                              {l.message.slice(idx + qTrim.length)}
+                            </>
+                          );
+                        })()}
+                      </span>
                       {l.traceId && (
                         <span className="text-[10px] text-indigo-300 shrink-0">
                           trace:{l.traceId.slice(0, 8)}

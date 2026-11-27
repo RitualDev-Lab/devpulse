@@ -27,6 +27,8 @@ import {
   MessageSquarePlus,
   ScrollText,
   Smartphone,
+  Copy,
+  Check,
 } from "lucide-react";
 import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/utils/format";
@@ -99,6 +101,8 @@ interface ErrorStreamCardProps {
   initialErrors: ErrorEventItem[];
   projectId: string;
   telemetryApiKey?: string;
+  countryFilter?: string | null;
+  onClearCountryFilter?: () => void;
 }
 
 function formatBytesShort(bytes?: number): string {
@@ -172,6 +176,8 @@ export function ErrorStreamCard({
   initialErrors,
   projectId,
   telemetryApiKey,
+  countryFilter,
+  onClearCountryFilter,
 }: ErrorStreamCardProps) {
   const [errors, setErrors] = useState<ErrorEventItem[]>(initialErrors);
   const [statusFilter, setStatusFilter] = useState<"all" | "unresolved" | "resolved" | "ignored">("all");
@@ -221,6 +227,8 @@ export function ErrorStreamCard({
   const [rollingBackFlag, setRollingBackFlag] = useState(false);
   const [replayIdx, setReplayIdx] = useState<number>(0);
   const [playingReplay, setPlayingReplay] = useState(false);
+  const [showFrameworkFrames, setShowFrameworkFrames] = useState(false);
+  const [copiedStack, setCopiedStack] = useState(false);
   const [symbolicatedResult, setSymbolicatedResult] = useState<{
     symbolicatedCount: number;
     totalFrames: number;
@@ -265,6 +273,12 @@ export function ErrorStreamCard({
         return p !== "react-native" && p !== "flutter" && p !== "ios" && p !== "android";
       });
     }
+    if (countryFilter) {
+      const targetCountry = countryFilter.toUpperCase();
+      base = base.filter((g) =>
+        g.events.some((ev) => (ev.countryCode || "US").toUpperCase() === targetCountry)
+      );
+    }
     return [...base].sort((a, b) => {
       if (sortMode === "impact") {
         if (b.totalLostRevenueCents !== a.totalLostRevenueCents) {
@@ -278,7 +292,31 @@ export function ErrorStreamCard({
       }
       return new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime();
     });
-  }, [issueGroups, statusFilter, platformFilter, sortMode]);
+  }, [issueGroups, statusFilter, platformFilter, countryFilter, sortMode]);
+
+  useEffect(() => {
+    if (!selectedGroup) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "Escape") {
+        setSelectedGroup(null);
+        setSelectedEvent(null);
+      } else if (e.key === "j" || e.key === "k") {
+        if (filteredGroups.length < 2) return;
+        const idx = filteredGroups.findIndex((g) => g.fingerprint === selectedGroup.fingerprint);
+        if (idx === -1) return;
+        const nextIdx =
+          e.key === "j"
+            ? (idx + 1) % filteredGroups.length
+            : (idx - 1 + filteredGroups.length) % filteredGroups.length;
+        setSelectedGroup(filteredGroups[nextIdx]);
+        setSelectedEvent(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedGroup, filteredGroups]);
 
   const runGeminiAnalyze = async (errorId?: string) => {
     setAnalyzingAi(true);
@@ -678,6 +716,17 @@ export function ErrorStreamCard({
                   </button>
                 ))}
               </div>
+              {countryFilter && (
+                <button
+                  type="button"
+                  onClick={onClearCountryFilter}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[11px] font-mono hover:bg-amber-500/30 transition"
+                  title="Clear region filter"
+                >
+                  <span>Region: {countryFilter}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -935,6 +984,9 @@ export function ErrorStreamCard({
                     <span>Ignore</span>
                   </button>
                 )}
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-400">
+                  j/k next &bull; Esc close
+                </span>
                 <button
                   onClick={() => {
                     setSelectedGroup(null);
@@ -1398,6 +1450,21 @@ export function ErrorStreamCard({
                           : "Symbolicate Trace"}
                       </span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const raw = fullPayload ?? inspectedEvent.stackTrace ?? "";
+                        if (raw && navigator.clipboard) {
+                          navigator.clipboard.writeText(raw);
+                          setCopiedStack(true);
+                          setTimeout(() => setCopiedStack(false), 1600);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[11px] text-zinc-300 transition"
+                    >
+                      {copiedStack ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedStack ? "Copied" : "Copy Trace"}</span>
+                    </button>
                     {downloadUrl && (
                       <a
                         href={downloadUrl}
@@ -1467,29 +1534,59 @@ export function ErrorStreamCard({
                     <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
                     <span>Fetching full payload from Cloudflare R2...</span>
                   </div>
-                ) : (
-                  <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-[11px] overflow-x-auto max-h-60 space-y-1">
-                    {(fullPayload ?? inspectedEvent.stackTrace ?? "No stack trace captured.")
-                      .split("\n")
-                      .map((line, idx) => {
-                        const isAppFrame = line.includes("src/") || line.includes("app/");
-                        return (
-                          <div
-                            key={idx}
-                            className={`px-2 py-0.5 rounded ${
-                              idx === 0
-                                ? "text-red-300 font-semibold"
-                                : isAppFrame
-                                ? "bg-indigo-950/50 text-indigo-200 border-l-2 border-indigo-400"
-                                : "text-zinc-400"
-                            } whitespace-pre-wrap break-words`}
+                ) : (() => {
+                  const lines = (fullPayload ?? inspectedEvent.stackTrace ?? "No stack trace captured.").split("\n");
+                  const isFrameworkLine = (line: string) =>
+                    line.includes("node_modules") ||
+                    line.includes("internal/") ||
+                    line.includes("(node:") ||
+                    line.includes("webpack-internal");
+                  const hiddenCount = lines.filter((l, i) => i > 0 && isFrameworkLine(l)).length;
+                  const visibleLines = lines.map((line, idx) => ({ line, idx })).filter(
+                    ({ line, idx }) => idx === 0 || showFrameworkFrames || !isFrameworkLine(line)
+                  );
+                  return (
+                    <div className="space-y-1.5">
+                      {hiddenCount > 0 && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-500">
+                            Showing app frames ({lines.length - hiddenCount} in-app / {hiddenCount} framework)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowFrameworkFrames((v) => !v)}
+                            className="text-cyan-400 hover:text-cyan-300 font-mono underline"
                           >
-                            {line}
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
+                            {showFrameworkFrames
+                              ? `Hide ${hiddenCount} framework frames`
+                              : `Show ${hiddenCount} framework frames`}
+                          </button>
+                        </div>
+                      )}
+                      <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-[11px] overflow-x-auto max-h-60 space-y-1">
+                        {visibleLines.map(({ line, idx }) => {
+                          const isAppFrame =
+                            !isFrameworkLine(line) &&
+                            (line.includes("src/") || line.includes("app/") || /\.(ts|tsx|js|rs|go|py):\d+/.test(line));
+                          return (
+                            <div
+                              key={idx}
+                              className={`px-2 py-0.5 rounded ${
+                                idx === 0
+                                  ? "text-red-300 font-semibold"
+                                  : isAppFrame
+                                  ? "bg-indigo-950/50 text-indigo-200 border-l-2 border-indigo-400"
+                                  : "text-zinc-500"
+                              } whitespace-pre-wrap break-words`}
+                            >
+                              {line}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {attachmentSignedUrl && (

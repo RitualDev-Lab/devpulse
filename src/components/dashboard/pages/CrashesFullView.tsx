@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Bug, Code2, Terminal } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { maskApiKey } from "@/lib/security/mask-key";
@@ -15,6 +15,7 @@ import { DeploymentsPanel } from "../widgets/DeploymentsPanel";
 export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
   const project = initialData.project;
+  const [countryFilter, setCountryFilter] = useState<string | null>(null);
 
   return (
     <WorkspaceShell
@@ -41,11 +42,19 @@ export function CrashesFullView({ workspace }: { workspace: LoadedWorkspaceReady
           initialErrors={initialData.errors}
           projectId={project.id}
           telemetryApiKey={project.telemetryApiKey || undefined}
+          countryFilter={countryFilter}
+          onClearCountryFilter={() => setCountryFilter(null)}
         />
 
         <div className="grid grid-cols-1 gap-5">
-          <SmartAlertsPanel projectId={project.id} isDemo={isDemo} />
-          <GeoErrorHeatmap errors={initialData.errors} />
+          <div id="smart-alerts">
+            <SmartAlertsPanel projectId={project.id} isDemo={isDemo} />
+          </div>
+          <GeoErrorHeatmap
+            errors={initialData.errors}
+            selectedCountry={countryFilter}
+            onSelectCountry={setCountryFilter}
+          />
           <DeploymentsPanel
             projectId={project.id}
             telemetryApiKey={project.telemetryApiKey}

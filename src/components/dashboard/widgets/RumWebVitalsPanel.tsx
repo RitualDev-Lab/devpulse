@@ -4,11 +4,19 @@ import React, { useState } from "react";
 import { Gauge } from "lucide-react";
 import type { RumWebVitalsSummary, VitalMetricName } from "@/lib/analytics/rum-vitals";
 
-const VITAL_META: Array<{ metric: VitalMetricName; label: string; unit: string; threshold: string }> = [
-  { metric: "LCP", label: "Largest Contentful Paint", unit: "ms", threshold: "Good <= 2500ms" },
-  { metric: "INP", label: "Interaction to Next Paint", unit: "ms", threshold: "Good <= 200ms" },
-  { metric: "CLS", label: "Cumulative Layout Shift", unit: "", threshold: "Good <= 0.1" },
-  { metric: "TTFB", label: "Time to First Byte", unit: "ms", threshold: "Good <= 800ms" },
+const VITAL_META: Array<{
+  metric: VitalMetricName;
+  label: string;
+  unit: string;
+  threshold: string;
+  goodMax: number;
+  poorMin: number;
+  scaleMax: number;
+}> = [
+  { metric: "LCP", label: "Largest Contentful Paint", unit: "ms", threshold: "Good <= 2500ms", goodMax: 2500, poorMin: 4000, scaleMax: 5000 },
+  { metric: "INP", label: "Interaction to Next Paint", unit: "ms", threshold: "Good <= 200ms", goodMax: 200, poorMin: 500, scaleMax: 650 },
+  { metric: "CLS", label: "Cumulative Layout Shift", unit: "", threshold: "Good <= 0.1", goodMax: 0.1, poorMin: 0.25, scaleMax: 0.35 },
+  { metric: "TTFB", label: "Time to First Byte", unit: "ms", threshold: "Good <= 800ms", goodMax: 800, poorMin: 1800, scaleMax: 2400 },
 ];
 
 export function RumWebVitalsPanel({ summary }: { summary?: RumWebVitalsSummary | null }) {
@@ -64,6 +72,11 @@ export function RumWebVitalsPanel({ summary }: { summary?: RumWebVitalsSummary |
                   ? "bg-red-500/15 text-red-300 border-red-500/30"
                   : "bg-zinc-800 text-zinc-400 border-zinc-700";
 
+          const p75Pct = stat ? Math.min(98, Math.max(2, (stat.p75 / v.scaleMax) * 100)) : null;
+          const goodZonePct = Math.round((v.goodMax / v.scaleMax) * 100);
+          const warnZonePct = Math.round(((v.poorMin - v.goodMax) / v.scaleMax) * 100);
+          const poorZonePct = Math.max(5, 100 - goodZonePct - warnZonePct);
+
           return (
             <div key={v.metric} className="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 space-y-2">
               <div className="flex items-center justify-between gap-2">
@@ -87,7 +100,23 @@ export function RumWebVitalsPanel({ summary }: { summary?: RumWebVitalsSummary |
                   <div className="text-zinc-200 font-bold">{stat ? `${stat.p95}${v.unit}` : "—"}</div>
                 </div>
               </div>
-              <div className="text-[10px] text-zinc-500">{v.threshold}</div>
+              {/* Threshold Zones Progress Track */}
+              <div className="relative h-2 rounded-full overflow-hidden flex bg-zinc-900 border border-zinc-800/80">
+                <div style={{ width: `${goodZonePct}%` }} className="bg-emerald-500/45 h-full" />
+                <div style={{ width: `${warnZonePct}%` }} className="bg-amber-500/45 h-full" />
+                <div style={{ width: `${poorZonePct}%` }} className="bg-red-500/45 h-full" />
+                {p75Pct !== null && (
+                  <div
+                    style={{ left: `${p75Pct}%` }}
+                    title={`p75 = ${stat?.p75}${v.unit}`}
+                    className="absolute top-0 bottom-0 w-1 -ml-0.5 bg-white shadow-[0_0_6px_rgba(255,255,255,0.9)]"
+                  />
+                )}
+              </div>
+              <div className="text-[10px] text-zinc-500 flex items-center justify-between">
+                <span>{v.threshold}</span>
+                {stat && <span className="font-mono text-zinc-400">p75</span>}
+              </div>
             </div>
           );
         })}
@@ -108,13 +137,61 @@ export function RumWebVitalsPanel({ summary }: { summary?: RumWebVitalsSummary |
             </thead>
             <tbody className="divide-y divide-zinc-800/60 bg-zinc-950/40 font-mono">
               {rows.map((r) => (
-                <tr key={r.key}>
-                  <td className="px-3 py-2 text-zinc-200">{r.key}</td>
+                <tr key={r.key} className="hover:bg-zinc-900/50 transition">
+                  <td className="px-3 py-2 text-zinc-200 font-semibold">{r.key}</td>
                   <td className="px-3 py-2 text-zinc-400">{r.count}</td>
-                  <td className="px-3 py-2 text-cyan-300">{r.lcpP75 !== null ? `${r.lcpP75}ms` : "—"}</td>
-                  <td className="px-3 py-2 text-indigo-300">{r.inpP75 !== null ? `${r.inpP75}ms` : "—"}</td>
-                  <td className="px-3 py-2 text-emerald-300">{r.clsP75 !== null ? r.clsP75 : "—"}</td>
-                  <td className="px-3 py-2 text-amber-300">{r.ttfbP75 !== null ? `${r.ttfbP75}ms` : "—"}</td>
+                  <td
+                    className={`px-3 py-2 font-semibold ${
+                      r.lcpP75 === null
+                        ? "text-zinc-500"
+                        : r.lcpP75 <= 2500
+                        ? "text-emerald-300"
+                        : r.lcpP75 <= 4000
+                        ? "text-amber-300"
+                        : "text-red-300"
+                    }`}
+                  >
+                    {r.lcpP75 !== null ? `${r.lcpP75}ms` : "—"}
+                  </td>
+                  <td
+                    className={`px-3 py-2 font-semibold ${
+                      r.inpP75 === null
+                        ? "text-zinc-500"
+                        : r.inpP75 <= 200
+                        ? "text-emerald-300"
+                        : r.inpP75 <= 500
+                        ? "text-amber-300"
+                        : "text-red-300"
+                    }`}
+                  >
+                    {r.inpP75 !== null ? `${r.inpP75}ms` : "—"}
+                  </td>
+                  <td
+                    className={`px-3 py-2 font-semibold ${
+                      r.clsP75 === null
+                        ? "text-zinc-500"
+                        : r.clsP75 <= 0.1
+                        ? "text-emerald-300"
+                        : r.clsP75 <= 0.25
+                        ? "text-amber-300"
+                        : "text-red-300"
+                    }`}
+                  >
+                    {r.clsP75 !== null ? r.clsP75 : "—"}
+                  </td>
+                  <td
+                    className={`px-3 py-2 font-semibold ${
+                      r.ttfbP75 === null
+                        ? "text-zinc-500"
+                        : r.ttfbP75 <= 800
+                        ? "text-emerald-300"
+                        : r.ttfbP75 <= 1800
+                        ? "text-amber-300"
+                        : "text-red-300"
+                    }`}
+                  >
+                    {r.ttfbP75 !== null ? `${r.ttfbP75}ms` : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>

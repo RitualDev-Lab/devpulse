@@ -20,7 +20,15 @@ const COUNTRY_META: Record<string, { name: string; x: number; y: number }> = {
   ZA: { name: "South Africa", x: 55, y: 74 },
 };
 
-export function GeoErrorHeatmap({ errors }: { errors: ErrorEventItem[] }) {
+export function GeoErrorHeatmap({
+  errors,
+  selectedCountry,
+  onSelectCountry,
+}: {
+  errors: ErrorEventItem[];
+  selectedCountry?: string | null;
+  onSelectCountry?: (code: string | null) => void;
+}) {
   const geoStats = useMemo(() => {
     const byCountry = new Map<
       string,
@@ -99,24 +107,29 @@ export function GeoErrorHeatmap({ errors }: { errors: ErrorEventItem[] }) {
               const meta = COUNTRY_META[item.code] || { name: item.code, x: 50, y: 45 };
               const ratio = item.count / geoStats.total;
               const radius = Math.max(1.8, Math.min(5.5, 1.8 + ratio * 6));
+              const active = selectedCountry?.toUpperCase() === item.code;
               return (
-                <g key={item.code}>
+                <g
+                  key={item.code}
+                  onClick={() => onSelectCountry?.(active ? null : item.code)}
+                  className={onSelectCountry ? "cursor-pointer" : undefined}
+                >
                   <circle
                     cx={meta.x}
                     cy={meta.y}
                     r={radius * 1.9}
-                    fill="#ef4444"
-                    opacity={0.18}
+                    fill={active ? "#22d3ee" : "#ef4444"}
+                    opacity={active ? 0.32 : 0.18}
                   />
                   <circle
                     cx={meta.x}
                     cy={meta.y}
                     r={radius}
-                    fill={ratio > 0.35 ? "#ef4444" : "#f59e0b"}
+                    fill={active ? "#22d3ee" : ratio > 0.35 ? "#ef4444" : "#f59e0b"}
                     stroke="#09090b"
                     strokeWidth="0.4"
                   >
-                    <title>{`${meta.name} (${item.code}): ${item.count} crashes (${Math.round(ratio * 100)}%)`}</title>
+                    <title>{`${meta.name} (${item.code}): ${item.count} crashes (${Math.round(ratio * 100)}%) — click to filter`}</title>
                   </circle>
                   <text
                     x={meta.x}
@@ -144,10 +157,17 @@ export function GeoErrorHeatmap({ errors }: { errors: ErrorEventItem[] }) {
             geoStats.list.slice(0, 8).map((item) => {
               const pct = Math.round((item.count / geoStats.total) * 100);
               const meta = COUNTRY_META[item.code];
+              const active = selectedCountry?.toUpperCase() === item.code;
               return (
-                <div
+                <button
                   key={item.code}
-                  className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1 text-xs"
+                  type="button"
+                  onClick={() => onSelectCountry?.(active ? null : item.code)}
+                  className={`w-full text-left p-2.5 rounded-xl border space-y-1 text-xs transition ${
+                    active
+                      ? "bg-cyan-950/30 border-cyan-500/60 ring-1 ring-cyan-500/40"
+                      : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-white">
@@ -168,7 +188,7 @@ export function GeoErrorHeatmap({ errors }: { errors: ErrorEventItem[] }) {
                     Top: {item.topError} • {item.topOs}
                     {item.regressions > 0 ? ` • ${item.regressions} regression(s)` : ""}
                   </div>
-                </div>
+                </button>
               );
             })
           )}

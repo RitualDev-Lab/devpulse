@@ -15,6 +15,7 @@ import {
   Sparkles,
   Loader2,
   Bug,
+  X,
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
@@ -106,6 +107,7 @@ export function TracesFullView({ workspace }: { workspace: LoadedWorkspaceReady 
   const [inspectedSpan, setInspectedSpan] = useState<SpanRow | null>(null);
   const [searchQ, setSearchQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "error" | "ok">("all");
+  const [httpBucket, setHttpBucket] = useState<"all" | "2xx" | "4xx" | "5xx">("all");
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [sendingSample, setSendingSample] = useState(false);
@@ -162,6 +164,12 @@ export function TracesFullView({ workspace }: { workspace: LoadedWorkspaceReady 
   const filteredTraces = useMemo(() => {
     return traces.filter((t) => {
       if (statusFilter !== "all" && t.status !== statusFilter) return false;
+      if (httpBucket !== "all") {
+        const code = t.httpStatusCode ?? (t.status === "error" ? 500 : 200);
+        if (httpBucket === "2xx" && (code < 200 || code >= 300)) return false;
+        if (httpBucket === "4xx" && (code < 400 || code >= 500)) return false;
+        if (httpBucket === "5xx" && code < 500) return false;
+      }
       if (searchQ.trim()) {
         const q = searchQ.toLowerCase();
         return (
@@ -173,7 +181,7 @@ export function TracesFullView({ workspace }: { workspace: LoadedWorkspaceReady 
       }
       return true;
     });
-  }, [traces, statusFilter, searchQ]);
+  }, [traces, statusFilter, httpBucket, searchQ]);
 
   const waterfallMeta = useMemo(() => {
     if (selectedSpans.length === 0) {
@@ -295,6 +303,26 @@ export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${maskApiKey(project.tel
                 <option value="error">Errors</option>
                 <option value="ok">OK</option>
               </select>
+            </div>
+            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-[10px] font-mono">
+              {(["all", "2xx", "4xx", "5xx"] as const).map((bucket) => (
+                <button
+                  key={bucket}
+                  type="button"
+                  onClick={() => setHttpBucket(bucket)}
+                  className={`flex-1 py-1 rounded-lg uppercase font-semibold transition ${
+                    httpBucket === bucket
+                      ? bucket === "5xx"
+                        ? "bg-red-600 text-white"
+                        : bucket === "4xx"
+                        ? "bg-amber-600 text-white"
+                        : "bg-cyan-600 text-white"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {bucket === "all" ? "All HTTP" : bucket}
+                </button>
+              ))}
             </div>
 
             <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
@@ -443,6 +471,11 @@ export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${maskApiKey(project.tel
                           <span className="text-xs font-medium text-white truncate">
                             {sp.spanName}
                           </span>
+                          {sp.durationMs >= 500 && (
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-bold shrink-0">
+                              SLOW
+                            </span>
+                          )}
                         </div>
                         <div className="col-span-6 h-5 rounded bg-zinc-900/90 relative overflow-hidden">
                           <div
@@ -450,7 +483,7 @@ export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${maskApiKey(project.tel
                             className={`absolute top-1 bottom-1 rounded border ${svcClass} opacity-90`}
                           />
                         </div>
-                        <div className="col-span-1 text-right text-[11px] font-mono text-zinc-300">
+                        <div className={`col-span-1 text-right text-[11px] font-mono ${sp.durationMs >= 500 ? "text-amber-300 font-bold" : "text-zinc-300"}`}>
                           {sp.durationMs}ms
                         </div>
                       </button>
@@ -458,35 +491,70 @@ export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer ${maskApiKey(project.tel
                   })}
                 </div>
 
-                {/* Span Attributes Inspector */}
+                {/* Span Attributes & Events Inspector */}
                 {inspectedSpan && (
-                  <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2 text-xs">
+                  <div className="p-4 rounded-xl bg-zinc-950 border border-cyan-500/40 space-y-2.5 text-xs">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-bold text-white">
                         Span Inspector: {inspectedSpan.spanName} ({inspectedSpan.kind})
                       </span>
-                      <span className="font-mono text-[11px] text-zinc-400">
-                        spanId={inspectedSpan.spanId} • {inspectedSpan.durationMs}ms
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-zinc-400">
+                          spanId={inspectedSpan.spanId} • {inspectedSpan.durationMs}ms
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setInspectedSpan(null)}
+                          className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+                          title="Close span inspector"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                     {inspectedSpan.statusMessage && (
                       <div className="p-2 rounded bg-red-950/50 border border-red-800/50 text-red-200 font-mono text-[11px]">
                         Error: {inspectedSpan.statusMessage}
                       </div>
                     )}
-                    <pre className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-cyan-200 overflow-x-auto max-h-48">
-                      {(() => {
-                        try {
-                          return JSON.stringify(
-                            JSON.parse(inspectedSpan.attributesJson || "{}"),
-                            null,
-                            2
-                          );
-                        } catch {
-                          return inspectedSpan.attributesJson || "{}";
-                        }
-                      })()}
-                    </pre>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mb-1">
+                          OTEL Span Attributes
+                        </div>
+                        <pre className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-cyan-200 overflow-x-auto max-h-48">
+                          {(() => {
+                            try {
+                              return JSON.stringify(
+                                JSON.parse(inspectedSpan.attributesJson || "{}"),
+                                null,
+                                2
+                              );
+                            } catch {
+                              return inspectedSpan.attributesJson || "{}";
+                            }
+                          })()}
+                        </pre>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold mb-1">
+                          Span Events &amp; Exceptions
+                        </div>
+                        <pre className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-emerald-200 overflow-x-auto max-h-48">
+                          {(() => {
+                            try {
+                              return JSON.stringify(
+                                JSON.parse(inspectedSpan.eventsJson || "[]"),
+                                null,
+                                2
+                              );
+                            } catch {
+                              return inspectedSpan.eventsJson || "[]";
+                            }
+                          })()}
+                        </pre>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
