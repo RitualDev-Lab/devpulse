@@ -36,6 +36,7 @@ import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { useWorkspaceData } from "../WorkspaceCacheContext";
 import { useToast } from "../ToastContext";
+import { DoraScorecardPanel } from "../widgets/DoraScorecardPanel";
 
 interface GitHubManagePayload {
   repo: string;
@@ -495,6 +496,11 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
         </div>
 
         {/* Daily Clones, Views & Daily Star Growth Charts */}
+        <DoraScorecardPanel
+          prReviewVelocityHours={gh?.prReviewVelocityHours}
+          releaseCountHint={initialData.npmStats?.totalReleases || 12}
+        />
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
             <div className="flex items-center justify-between">

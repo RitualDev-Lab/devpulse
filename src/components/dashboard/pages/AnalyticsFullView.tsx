@@ -18,6 +18,7 @@ import { LanguageSdkTabs } from "../LanguageSdkTabs";
 import { ExternalAnalyticsHub } from "../ExternalAnalyticsHub";
 import { EngagementAnalyticsPanel } from "../EngagementAnalyticsPanel";
 import { RumWebVitalsPanel } from "../widgets/RumWebVitalsPanel";
+import { NlExplorerPanel } from "../widgets/NlExplorerPanel";
 
 export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { projects, customDomain, storageTier, isDemo } = workspace;
@@ -162,6 +163,7 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
         </div>
 
         <WebAnalyticsCard summary={summary || null} projectSlug={project.slug} />
+        <NlExplorerPanel projectId={project.id} isDemo={isDemo} />
         <RumWebVitalsPanel summary={summary?.webVitals || null} />
         <EngagementAnalyticsPanel projectId={project.id} isDemo={isDemo} />
 

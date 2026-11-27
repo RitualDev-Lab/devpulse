@@ -55,7 +55,7 @@ export function SnapshotSyncBar({
       >
         {justSynced && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
         <span className="text-zinc-500">{isDemo ? "Source: Snapshot" : "Source: Live API"} ·</span>
-        <span>Last Synced {formatRelativeSyncAge(effectiveTs)}</span>
+        <span>{formatRelativeSyncAge(effectiveTs)}</span>
       </span>
       <button
         type="button"

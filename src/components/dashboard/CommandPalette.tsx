@@ -26,6 +26,7 @@ import {
   Bot,
   MessageSquare,
   Palette,
+  Sparkles,
 } from "lucide-react";
 import type { ProjectSummary } from "./ProjectWorkspaceSwitcher";
 
@@ -120,6 +121,7 @@ export function CommandPalette({
       { id: "nav-analytics", group: "Workspace Pages", label: "Daily Users & Telemetry", sublabel: "/dashboard/analytics", icon: BarChart3, action: () => router.push(`/dashboard/analytics${qs}`) },
       { id: "nav-crashes", group: "Workspace Pages", label: "Crash Stream & Source Maps", sublabel: "/dashboard/crashes", icon: Bug, action: () => router.push(`/dashboard/crashes${qs}`) },
       { id: "nav-security", group: "Workspace Pages", label: "Security & SBOM Vulnerability Center", sublabel: "/dashboard/security", icon: ShieldAlert, action: () => router.push(`/dashboard/security${qs}`) },
+      { id: "nav-defense", group: "Workspace Pages", label: "RitualDev Defense Suite Control Plane", sublabel: "/dashboard/defense", icon: Sparkles, action: () => router.push(`/dashboard/defense${qs}`) },
       { id: "nav-mcp", group: "Workspace Pages", label: "MCP & AI Agent Analytics", sublabel: "/dashboard/mcp", icon: Bot, action: () => router.push(`/dashboard/mcp${qs}`) },
       { id: "nav-traces", group: "Workspace Pages", label: "Distributed Traces (OpenTelemetry)", sublabel: "/dashboard/traces", icon: Workflow, action: () => router.push(`/dashboard/traces${qs}`) },
       { id: "nav-logs", group: "Workspace Pages", label: "Log Explorer (Loki & Live Tail)", sublabel: "/dashboard/logs", icon: ScrollText, action: () => router.push(`/dashboard/logs${qs}`) },

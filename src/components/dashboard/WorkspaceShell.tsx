@@ -120,6 +120,7 @@ const NAV_GROUPS: Array<{
     title: "Security & AI",
     items: [
       { href: "/dashboard/security", label: "Security & SBOM", icon: ShieldAlert },
+      { href: "/dashboard/defense", label: "Defense Suite", icon: Sparkles },
       { href: "/dashboard/mcp", label: "MCP & AI Agents", icon: Bot },
       { href: "/dashboard/flags", label: "Flags & A/B", icon: Flag },
       { href: "/dashboard/feedback", label: "Feedback & Releases", icon: MessageSquare },
@@ -499,7 +500,7 @@ export function WorkspaceShell({
       <div className={`flex-1 ${collapsed ? "lg:pl-16" : "lg:pl-60"} flex flex-col min-w-0 transition-all duration-200`}>
         {/* Clean Minimal Top Bar */}
         <header className="devpulse-topbar h-14 border-b border-zinc-800/80 bg-zinc-950/75 backdrop-blur-xl sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3">
-          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 shrink">
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
@@ -516,12 +517,12 @@ export function WorkspaceShell({
             />
 
             {isDemo && (
-              <span className="hidden xl:inline-flex shrink-0 whitespace-nowrap text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                Demo Preview · Snapshot Seed
+              <span className="hidden 2xl:inline-flex shrink-0 whitespace-nowrap text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                Demo Snapshot
               </span>
             )}
             <div
-              className="hidden lg:inline-flex items-center rounded-lg bg-zinc-900 border border-zinc-800 p-0.5 shrink-0"
+              className="hidden md:inline-flex items-center rounded-lg bg-zinc-900 border border-zinc-800 p-0.5 shrink-0"
               role="group"
               aria-label="Global time range filter"
             >
@@ -559,7 +560,7 @@ export function WorkspaceShell({
               title="Open Command Palette (Ctrl+K / Cmd+K)"
             >
               <Search className="w-3.5 h-3.5 text-zinc-500" />
-              <span>Search...</span>
+              <span className="hidden 2xl:inline">Search...</span>
               <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-400">
                 ⌘K
               </kbd>

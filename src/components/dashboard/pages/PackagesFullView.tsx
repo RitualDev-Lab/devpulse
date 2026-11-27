@@ -26,6 +26,7 @@ import { PackageSecurityBadge } from "../widgets/PackageSecurityBadge";
 import { SnapshotSyncBar } from "../SnapshotSyncBar";
 import { QuickConnectPanel } from "../QuickConnectPanel";
 import { PackageSearchPicker } from "../PackageSearchPicker";
+import { ReleasePulseTimeline } from "../widgets/ReleasePulseTimeline";
 import { securitySummaryKey } from "@/lib/integrations/registry-adapter";
 
 export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
@@ -260,6 +261,8 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
         </div>
 
         {/* Release Version Adoption & Registry Matrix Table */}
+        <ReleasePulseTimeline data={initialData} />
+
         <div className="rounded-2xl bg-zinc-900/90 border border-zinc-800 overflow-hidden">
           <div className="px-5 py-3.5 border-b border-zinc-800 flex items-center justify-between">
             <div>

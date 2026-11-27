@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import type { CveSeverity, SbomInventoryReport, SbomVulnerability } from "@/lib/security/sbom";
+import { analyzeSupplyChainBehavior } from "@/lib/security/watchdog";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { useWorkspaceData } from "../WorkspaceCacheContext";
 
@@ -490,6 +491,58 @@ export function SecurityCenterFullView({ workspace }: { workspace: LoadedWorkspa
             </table>
           </div>
         </section>
+
+        {/* Behavioral Supply-Chain Watchdog */}
+        {(() => {
+          const watchdogFindings = analyzeSupplyChainBehavior(
+            (report?.packages || []).map((p) => ({
+              ecosystem: p.ecosystem,
+              packageName: p.packageName,
+              version: p.version,
+              license: p.license,
+              scorecardOverall: p.scorecardOverall,
+              sourceRepo: p.sourceRepo,
+            }))
+          );
+          return (
+            <section className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Behavioral Supply-Chain Watchdog</span>
+                  </h2>
+                  <p className="text-xs text-zinc-400">
+                    Screens packages for install-script hazards, typosquat lookalikes, maintainer key churn, and Scorecard provenance gaps.
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-950 border border-zinc-800 text-zinc-300 tabular-nums">
+                  {watchdogFindings.length} Alert{watchdogFindings.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              {watchdogFindings.length === 0 ? (
+                <div className="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-500/25 text-xs text-emerald-300">
+                  All scanned packages passed behavioral install-hook, typosquat, and provenance checks.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {watchdogFindings.map((finding) => (
+                    <div key={finding.id} className="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono font-bold text-white">{finding.packageName}</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                          {finding.severity} · {finding.category}
+                        </span>
+                      </div>
+                      <div className="text-xs text-zinc-200 font-semibold">{finding.title}</div>
+                      <p className="text-[11px] text-zinc-400">{finding.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })()}
 
         {/* CVE Advisory Detail Slide-Over Drawer */}
         {inspectedVuln && (
