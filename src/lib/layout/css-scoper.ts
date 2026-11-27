@@ -310,6 +310,31 @@ export function getPresetThemeCss(themeId: string): string {
           border-color: #cbd5e1 !important;
           color: #0f172a !important;
         }
+        .devpulse-shell[data-theme="minimal_white"] header.devpulse-topbar button[class*="from-zinc-800"] {
+          background: #18181b !important;
+          border-color: #18181b !important;
+          color: #ffffff !important;
+        }
+        .devpulse-shell[data-theme="minimal_white"] header.devpulse-topbar [class*="text-emerald-300"],
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace [class*="text-emerald-300"],
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace [class*="text-emerald-200"] {
+          color: #047857 !important;
+        }
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace [class*="text-cyan-300"],
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace [class*="text-indigo-300"],
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace [class*="text-purple-300"] {
+          color: #3730a3 !important;
+        }
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace [class*="text-amber-300"] {
+          color: #b45309 !important;
+        }
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace button.bg-indigo-600,
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace button.bg-emerald-600,
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace button.bg-red-600,
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace a.bg-indigo-600,
+        .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace a.bg-emerald-600 {
+          color: #ffffff !important;
+        }
         .devpulse-shell[data-theme="minimal_white"] .devpulse-workspace [class*="bg-zinc-900"] {
           background-color: #ffffff !important;
           border-color: #e2e8f0 !important;
