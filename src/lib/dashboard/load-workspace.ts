@@ -740,6 +740,18 @@ export async function loadDashboardWorkspace(
           // ignore
         }
       }
+      if (isDemoView && vitalSamples.length === 0) {
+        vitalSamples.push(
+          { metric: "LCP", value: 1420, route: "/", country: "US", browser: "chrome", release: "v1.4.2" },
+          { metric: "INP", value: 78, route: "/", country: "US", browser: "chrome", release: "v1.4.2" },
+          { metric: "CLS", value: 0.032, route: "/", country: "US", browser: "chrome", release: "v1.4.2" },
+          { metric: "TTFB", value: 195, route: "/", country: "US", browser: "chrome", release: "v1.4.2" },
+          { metric: "LCP", value: 2780, route: "/dashboard/crashes", country: "DE", browser: "firefox", release: "v1.4.1" },
+          { metric: "INP", value: 142, route: "/dashboard/crashes", country: "DE", browser: "firefox", release: "v1.4.1" },
+          { metric: "CLS", value: 0.048, route: "/checkout", country: "IN", browser: "safari", release: "v1.4.2" },
+          { metric: "TTFB", value: 410, route: "/checkout", country: "IN", browser: "safari", release: "v1.4.2" }
+        );
+      }
       return {
         ...analyticsSummary,
         webVitals: aggregateWebVitals(vitalSamples),

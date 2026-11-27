@@ -72,6 +72,124 @@ const SERVICE_COLORS = [
   "bg-amber-500 border-amber-400",
 ];
 
+const DEMO_TRACE_LIST: TraceRow[] = [
+  {
+    id: "tr_demo_1",
+    traceId: "demo_trace_9f8a2c1b",
+    serviceName: "edge-gateway",
+    rootSpanName: "POST /api/billing/quote",
+    status: "error",
+    spanCount: 4,
+    durationMs: 790,
+    startedAt: "2026-11-26T22:00:00.000Z",
+    httpMethod: "POST",
+    httpRoute: "/api/billing/quote",
+    httpStatusCode: 502,
+    linkedErrorId: "demo_err_1",
+  },
+  {
+    id: "tr_demo_2",
+    traceId: "demo_trace_4a12e0c8",
+    serviceName: "web-app",
+    rootSpanName: "GET /dashboard",
+    status: "ok",
+    spanCount: 3,
+    durationMs: 145,
+    startedAt: "2026-11-26T21:55:00.000Z",
+    httpMethod: "GET",
+    httpRoute: "/dashboard",
+    httpStatusCode: 200,
+    linkedErrorId: null,
+  },
+];
+
+const DEMO_SPANS: Record<string, SpanRow[]> = {
+  demo_trace_9f8a2c1b: [
+    {
+      id: "sp_1",
+      traceId: "demo_trace_9f8a2c1b",
+      spanId: "span_root",
+      parentSpanId: null,
+      serviceName: "edge-gateway",
+      spanName: "POST /api/billing/quote",
+      kind: "SERVER",
+      statusCode: "ERROR",
+      statusMessage: "Upstream payment quote timed out",
+      startTimeMs: 1000,
+      endTimeMs: 1790,
+      durationMs: 790,
+      attributesJson: '{"http.method":"POST","http.route":"/api/billing/quote","http.status_code":502}',
+      eventsJson: '[{"name":"exception","attributes":{"exception.type":"UpstreamTimeoutError"}}]',
+    },
+    {
+      id: "sp_2",
+      traceId: "demo_trace_9f8a2c1b",
+      spanId: "span_auth",
+      parentSpanId: "span_root",
+      serviceName: "auth-service",
+      spanName: "verifySessionToken",
+      kind: "INTERNAL",
+      statusCode: "OK",
+      statusMessage: null,
+      startTimeMs: 1015,
+      endTimeMs: 1065,
+      durationMs: 50,
+      attributesJson: '{"auth.provider":"github","cache.hit":true}',
+      eventsJson: "[]",
+    },
+    {
+      id: "sp_3",
+      traceId: "demo_trace_9f8a2c1b",
+      spanId: "span_db",
+      parentSpanId: "span_root",
+      serviceName: "turso-db",
+      spanName: "SELECT subscription_quotas",
+      kind: "CLIENT",
+      statusCode: "OK",
+      statusMessage: null,
+      startTimeMs: 1070,
+      endTimeMs: 1680,
+      durationMs: 610,
+      attributesJson: '{"db.system":"sqlite","db.statement":"SELECT * FROM projects WHERE id = ?"}',
+      eventsJson: '[{"name":"slow_query_threshold_exceeded","durationMs":610}]',
+    },
+    {
+      id: "sp_4",
+      traceId: "demo_trace_9f8a2c1b",
+      spanId: "span_stripe",
+      parentSpanId: "span_root",
+      serviceName: "stripe-client",
+      spanName: "POST v1/quotes",
+      kind: "CLIENT",
+      statusCode: "ERROR",
+      statusMessage: "502 Bad Gateway",
+      startTimeMs: 1685,
+      endTimeMs: 1785,
+      durationMs: 100,
+      attributesJson: '{"http.status_code":502,"peer.service":"api.stripe.com"}',
+      eventsJson: "[]",
+    },
+  ],
+  demo_trace_4a12e0c8: [
+    {
+      id: "sp_2_1",
+      traceId: "demo_trace_4a12e0c8",
+      spanId: "span_web",
+      parentSpanId: null,
+      serviceName: "web-app",
+      spanName: "GET /dashboard",
+      kind: "SERVER",
+      statusCode: "OK",
+      statusMessage: null,
+      startTimeMs: 2000,
+      endTimeMs: 2145,
+      durationMs: 145,
+      attributesJson: '{"http.method":"GET","http.route":"/dashboard","http.status_code":200}',
+      eventsJson: "[]",
+    },
+  ],
+};
+
 function computeSpanDepthMap(spans: SpanRow[]): Map<string, number> {
   const byId = new Map(spans.map((s) => [s.spanId, s]));
   const depths = new Map<string, number>();
@@ -119,7 +237,8 @@ export function TracesFullView({ workspace }: { workspace: LoadedWorkspaceReady 
       const res = await fetch(`/api/v1/traces?projectId=${encodeURIComponent(project.id)}`);
       const data = await res.json();
       if (res.ok) {
-        const list = (data.traces || []) as TraceRow[];
+        const fetched = (data.traces || []) as TraceRow[];
+        const list = isDemo && fetched.length === 0 ? DEMO_TRACE_LIST : fetched;
         setTraces(list);
         if (!selectedTraceId && list.length > 0) {
           setSelectedTraceId(list[0].traceId);
@@ -128,12 +247,19 @@ export function TracesFullView({ workspace }: { workspace: LoadedWorkspaceReady 
     } finally {
       setLoadingList(false);
     }
-  }, [project.id, selectedTraceId]);
+  }, [project.id, selectedTraceId, isDemo]);
 
   const loadTraceDetail = useCallback(async () => {
     if (!selectedTraceId) {
       setSelectedSpans([]);
       setLinkedErrors([]);
+      return;
+    }
+    if (isDemo && DEMO_SPANS[selectedTraceId]) {
+      const spans = DEMO_SPANS[selectedTraceId];
+      setSelectedSpans(spans);
+      setLinkedErrors([]);
+      setInspectedSpan(spans[0] || null);
       return;
     }
     setLoadingDetail(true);
@@ -151,7 +277,7 @@ export function TracesFullView({ workspace }: { workspace: LoadedWorkspaceReady 
     } finally {
       setLoadingDetail(false);
     }
-  }, [project.id, selectedTraceId]);
+  }, [project.id, selectedTraceId, isDemo]);
 
   useEffect(() => {
     loadTraces();

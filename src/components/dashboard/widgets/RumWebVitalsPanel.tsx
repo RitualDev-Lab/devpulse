@@ -21,6 +21,7 @@ const VITAL_META: Array<{
 
 export function RumWebVitalsPanel({ summary }: { summary?: RumWebVitalsSummary | null }) {
   const [groupBy, setGroupBy] = useState<"route" | "country" | "browser" | "release">("route");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const rows =
     groupBy === "country"
@@ -49,7 +50,10 @@ export function RumWebVitalsPanel({ summary }: { summary?: RumWebVitalsSummary |
             <button
               key={dim}
               type="button"
-              onClick={() => setGroupBy(dim)}
+              onClick={() => {
+                setGroupBy(dim);
+                setSelectedKey(null);
+              }}
               className={`px-2.5 py-1 rounded-lg capitalize font-semibold transition ${
                 groupBy === dim ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-white"
               }`}
@@ -136,8 +140,14 @@ export function RumWebVitalsPanel({ summary }: { summary?: RumWebVitalsSummary |
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 bg-zinc-950/40 font-mono">
-              {rows.map((r) => (
-                <tr key={r.key} className="hover:bg-zinc-900/50 transition">
+              {rows.map((r) => {
+                const isSelected = selectedKey === r.key;
+                return (
+                <tr
+                  key={r.key}
+                  onClick={() => setSelectedKey(isSelected ? null : r.key)}
+                  className={`cursor-pointer transition ${isSelected ? "bg-indigo-950/40" : "hover:bg-zinc-900/50"}`}
+                >
                   <td className="px-3 py-2 text-zinc-200 font-semibold">{r.key}</td>
                   <td className="px-3 py-2 text-zinc-400">{r.count}</td>
                   <td
@@ -193,11 +203,40 @@ export function RumWebVitalsPanel({ summary }: { summary?: RumWebVitalsSummary |
                     {r.ttfbP75 !== null ? `${r.ttfbP75}ms` : "—"}
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      {selectedKey && (() => {
+        const row = rows.find((r) => r.key === selectedKey);
+        if (!row) return null;
+        return (
+          <div className="p-3.5 rounded-xl bg-zinc-950 border border-indigo-500/40 space-y-2 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-white">
+                Drill-Down: <code className="text-cyan-300">{row.key}</code> ({row.count} RUM samples)
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedKey(null)}
+                className="text-[11px] text-zinc-400 hover:text-white underline"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="text-[11px] text-zinc-400">
+              {row.lcpP75 !== null && row.lcpP75 > 2500
+                ? "Optimization Tip: LCP exceeds 2.5s — preload hero media, inline critical CSS, or enable edge HTML streaming."
+                : row.inpP75 !== null && row.inpP75 > 200
+                ? "Optimization Tip: INP exceeds 200ms — defer heavy hydration listeners and break up long main-thread tasks."
+                : "All sampled Core Web Vitals for this cohort meet Google Good thresholds."}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

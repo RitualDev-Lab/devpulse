@@ -38,6 +38,55 @@ interface ParsedMeta {
   note?: string;
 }
 
+const DEMO_ANALYTICS_CONNECTORS: ExternalConnector[] = [
+  {
+    id: "demo_ext_plausible",
+    category: "analytics",
+    provider: "plausible",
+    label: "Plausible (docs.devpulse.dev)",
+    targetUrl: "https://plausible.io",
+    identifier: "docs.devpulse.dev",
+    lastSyncedAt: "2026-11-26T12:00:00Z",
+    metadataJson: JSON.stringify({
+      activeUsers: 3840,
+      sessions: 5120,
+      pageViews: 14920,
+      bounceRatePct: 38.4,
+      daily: [
+        { date: "Nov 21", activeUsers: 480, sessions: 640, pageViews: 1850 },
+        { date: "Nov 22", activeUsers: 510, sessions: 685, pageViews: 1990 },
+        { date: "Nov 23", activeUsers: 545, sessions: 720, pageViews: 2140 },
+        { date: "Nov 24", activeUsers: 610, sessions: 810, pageViews: 2380 },
+        { date: "Nov 25", activeUsers: 590, sessions: 790, pageViews: 2290 },
+        { date: "Nov 26", activeUsers: 640, sessions: 855, pageViews: 2510 },
+      ],
+    }),
+  },
+  {
+    id: "demo_ext_oci",
+    category: "analytics",
+    provider: "oci_server",
+    label: "OCI Edge Metrics (iad-1)",
+    targetUrl: "https://edge-iad-1.ritualdev.in/summary.json",
+    identifier: "oci-iad-1",
+    lastSyncedAt: "2026-11-26T12:05:00Z",
+    metadataJson: JSON.stringify({
+      activeUsers: 1920,
+      sessions: 4180,
+      pageViews: 18400,
+      bounceRatePct: 21.2,
+      daily: [
+        { date: "Nov 21", activeUsers: 280, sessions: 590, pageViews: 2610 },
+        { date: "Nov 22", activeUsers: 305, sessions: 640, pageViews: 2840 },
+        { date: "Nov 23", activeUsers: 318, sessions: 695, pageViews: 3010 },
+        { date: "Nov 24", activeUsers: 342, sessions: 745, pageViews: 3290 },
+        { date: "Nov 25", activeUsers: 325, sessions: 720, pageViews: 3180 },
+        { date: "Nov 26", activeUsers: 350, sessions: 790, pageViews: 3470 },
+      ],
+    }),
+  },
+];
+
 export function ExternalAnalyticsHub({
   projectId,
   projectSlug,
@@ -51,8 +100,10 @@ export function ExternalAnalyticsHub({
   telemetryApiKey?: string | null;
   isDemo?: boolean;
 }) {
-  const [connectors, setConnectors] = useState<ExternalConnector[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [connectors, setConnectors] = useState<ExternalConnector[]>(
+    isDemo ? DEMO_ANALYTICS_CONNECTORS : []
+  );
+  const [loading, setLoading] = useState(!isDemo);
   const [showAdd, setShowAdd] = useState(false);
 
   const [provider, setProvider] = useState<"ga4" | "plausible" | "posthog" | "umami" | "oci_server">("ga4");
@@ -71,6 +122,11 @@ export function ExternalAnalyticsHub({
   const [monitorNotice, setMonitorNotice] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const loadConnectors = async () => {
+    if (isDemo) {
+      setConnectors(DEMO_ANALYTICS_CONNECTORS);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/projects/connectors?projectId=${encodeURIComponent(projectId)}`);
@@ -85,7 +141,7 @@ export function ExternalAnalyticsHub({
 
   useEffect(() => {
     void loadConnectors();
-  }, [projectId]);
+  }, [projectId, isDemo]);
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -43,6 +43,47 @@ interface SavedQueryItem {
   service: string;
 }
 
+const DEMO_LOGS: StructuredLogRow[] = [
+  {
+    id: "demo_log_1",
+    level: "error",
+    serviceName: "billing-api",
+    message: '{"status":502,"route":"/api/billing/quote","latencyMs":618,"error":"Stripe upstream timeout after 600ms"}',
+    labelsJson: '{"region":"sjc","release":"v1.4.2"}',
+    traceId: "demo_trace_9f8a2c1b",
+    timestampMs: 1764204000000,
+    timestampIso: "2026-11-26T22:00:00.000Z",
+  },
+  {
+    id: "demo_log_2",
+    level: "warn",
+    serviceName: "edge-gateway",
+    message: "Slow downstream latency detected on checkout session quote route (/api/billing/quote latencyMs=482)",
+    labelsJson: '{"region":"fra","release":"v1.4.2"}',
+    traceId: "demo_trace_9f8a2c1b",
+    timestampMs: 1764203995000,
+    timestampIso: "2026-11-26T21:59:55.000Z",
+  },
+  {
+    id: "demo_log_3",
+    level: "info",
+    serviceName: "worker-cron",
+    message: '{"job":"registry_sync","ecosystems":23,"durationMs":412,"status":"ok"}',
+    labelsJson: '{"region":"iad"}',
+    traceId: null,
+    timestampMs: 1764203980000,
+    timestampIso: "2026-11-26T21:59:40.000Z",
+  },
+];
+
+const DEMO_SPIKE: LogSpikeAnalysis = {
+  isSpike: false,
+  currentErrorCount: 4,
+  baselineHourlyAvg: 3.2,
+  multiplier: 1.25,
+  summary: "Demo log stream healthy — error rate within 1.25x of 24h baseline",
+};
+
 export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { initialData, projects, customDomain, storageTier, isDemo } = workspace;
   const project = initialData.project;
@@ -83,15 +124,31 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
       const res = await fetch(`/api/v1/logs?${qs.toString()}`);
       const d = await res.json();
       if (res.ok) {
-        setLogs(d.logs || []);
-        setServices(d.services || []);
-        setSpikeAnalysis(d.spikeAnalysis || null);
+        const fetched = (d.logs || []) as StructuredLogRow[];
+        if (isDemo && fetched.length === 0) {
+          const demoFiltered = DEMO_LOGS.filter((l) => {
+            if (level !== "all" && l.level.toLowerCase() !== level.toLowerCase()) return false;
+            if (service !== "all" && l.serviceName !== service) return false;
+            if (query.trim()) {
+              const hay = `${l.message} ${l.serviceName} ${l.labelsJson || ""} ${l.traceId || ""}`.toLowerCase();
+              if (!hay.includes(query.trim().toLowerCase())) return false;
+            }
+            return true;
+          });
+          setLogs(demoFiltered);
+          setServices(["billing-api", "edge-gateway", "worker-cron"]);
+          setSpikeAnalysis(DEMO_SPIKE);
+        } else {
+          setLogs(fetched);
+          setServices(d.services || []);
+          setSpikeAnalysis(d.spikeAnalysis || (isDemo ? DEMO_SPIKE : null));
+        }
         setSavedQueries(d.savedQueries || []);
       }
     } finally {
       setLoading(false);
     }
-  }, [project.id, query, level, service, timeWindow]);
+  }, [project.id, query, level, service, timeWindow, isDemo]);
 
   useEffect(() => {
     const t = setTimeout(() => {

@@ -112,8 +112,31 @@ export function EngagementAnalyticsPanel({ projectId, isDemo = false }: { projec
           {report.sessionsByDay.length === 0 ? <p className="text-xs text-zinc-500">No session-tagged events in this period yet.</p> : report.sessionsByDay.slice(-14).map((day) => <div key={day.date} className="grid grid-cols-[78px_1fr_52px] items-center gap-2 text-[11px]"><span className="font-mono text-zinc-500">{day.date.slice(5)}</span><div className="h-2 rounded bg-zinc-800 overflow-hidden"><div className="h-full bg-cyan-500 rounded" style={{ width: `${Math.max(2, day.sessions / maxSessions * 100)}%` }} /></div><span className="text-right text-zinc-300 tabular-nums">{day.sessions}</span></div>)}
         </div>
         <div className="space-y-2">
-          <h3 className="text-[11px] font-semibold uppercase text-zinc-400 flex items-center gap-1.5"><Funnel className="w-3.5 h-3.5" /> Funnel conversion (unique sessions)</h3>
-          {report.funnel.length === 0 ? <p className="text-xs text-zinc-500">Enter 2–5 comma-separated event names and run the report.</p> : <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">{report.funnel.map((step, index) => <div key={`${index}-${step.event}`} className="p-3 rounded-xl bg-zinc-950 border border-zinc-800"><div className="text-xs font-mono text-white truncate">{index + 1}. {step.event}</div><div className="text-lg font-bold text-cyan-300 mt-1">{step.users.toLocaleString()} <span className="text-[10px] font-normal text-zinc-400">sessions</span></div><div className="text-[10px] text-zinc-500">{step.conversionFromStart == null ? "Starting step" : `${step.conversionFromStart}% of start`} {step.conversionFromPrevious == null ? "" : ` • ${step.conversionFromPrevious}% from prior`}</div></div>)}</div>}
+          <h3 className="text-[11px] font-semibold uppercase text-zinc-400 flex items-center gap-1.5"><Funnel className="w-3.5 h-3.5" /> Funnel conversion &amp; step drop-off</h3>
+          {report.funnel.length === 0 ? <p className="text-xs text-zinc-500">Enter 2–5 comma-separated event names and run the report.</p> : <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">{report.funnel.map((step, index) => {
+            const pctStart = step.conversionFromStart == null ? 100 : Math.min(100, Math.max(2, step.conversionFromStart));
+            const dropPct = step.conversionFromPrevious == null ? null : Math.max(0, Number((100 - step.conversionFromPrevious).toFixed(1)));
+            return (
+              <div key={`${index}-${step.event}`} className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-mono text-white truncate">{index + 1}. {step.event}</div>
+                  {dropPct !== null && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                      -{dropPct}% drop
+                    </span>
+                  )}
+                </div>
+                <div className="text-lg font-bold text-cyan-300">{step.users.toLocaleString()} <span className="text-[10px] font-normal text-zinc-400">sessions</span></div>
+                <div className="h-1.5 w-full rounded-full bg-zinc-900 overflow-hidden border border-zinc-800/80">
+                  <div
+                    style={{ width: `${pctStart}%` }}
+                    className={`h-full rounded-full transition-all ${pctStart >= 60 ? "bg-emerald-500" : pctStart >= 30 ? "bg-cyan-500" : "bg-amber-500"}`}
+                  />
+                </div>
+                <div className="text-[10px] text-zinc-500">{step.conversionFromStart == null ? "Starting step (100%)" : `${step.conversionFromStart}% of start`} {step.conversionFromPrevious == null ? "" : ` • ${step.conversionFromPrevious}% from prior`}</div>
+              </div>
+            );
+          })}</div>}
         </div>
         <p className="text-[10px] text-zinc-500">{report.retention7d.note}</p>
       </>}
