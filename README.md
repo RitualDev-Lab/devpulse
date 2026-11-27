@@ -11,9 +11,9 @@
 [![Supabase Auth](https://img.shields.io/badge/Auth-Supabase-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com)
 [![Built by RitualDev-Lab](https://img.shields.io/badge/Org-RitualDev--Lab-7c3aed?style=flat-square)](https://github.com/RitualDev-Lab)
 
-**DevPulse** is a unified command center designed for modern maintainers and indie hackers. If you maintain multiple repositories, ship npm packages, release PyPI libraries, or build CLI tools, DevPulse brings all your downloads, open issues, pull requests, and live runtime crashes into **one customizable, draggable mission control dashboard.**
+**DevPulse by RitualDev** (`@ritualdev/pulse`) is a unified command center designed for modern maintainers and indie hackers. If you maintain multiple repositories, ship npm packages, release PyPI libraries, or build CLI tools, DevPulse brings all your downloads, open issues, pull requests, and live runtime crashes into **one customizable, draggable mission control dashboard.**
 
-[Live Demo](https://devpulse.ritualdev.in/dashboard?demo=1) • [OSSInsight Alternative](https://devpulse.ritualdev.in/ossinsight-alternative) • [Report a Bug](https://devpulse.ritualdev.in/report/ritual-core) • [Security](./SECURITY.md) • [Contributing](./CONTRIBUTING.md) • [Accessibility](./ACCESSIBILITY.md) • [llms.txt](./llms.txt)
+[Live Demo](https://devpulse.ritualdev.in/dashboard?demo=1) • [OSSInsight Alternative](https://devpulse.ritualdev.in/ossinsight-alternative) • [Report a Bug](https://devpulse.ritualdev.in/report/ritual-core) • [OpenAPI](./public/openapi.json) • [Security](./SECURITY.md) • [Contributing](./CONTRIBUTING.md) • [Accessibility](./ACCESSIBILITY.md) • [llms.txt](./llms.txt)
 
 </div>
 

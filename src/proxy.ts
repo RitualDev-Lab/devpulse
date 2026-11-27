@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PRIMARY_PORTAL_DOMAIN } from "@/lib/domains/cloudflare-saas";
+import { applySecurityHeaders } from "@/lib/security/headers";
 
 const MAIN_APP_HOSTS = new Set([
   PRIMARY_PORTAL_DOMAIN,
@@ -45,7 +46,7 @@ export function proxy(request: NextRequest) {
     pathname === "/favicon.ico" ||
     /\.(svg|png|jpe?g|gif|webp|ico|css|js|map|txt|xml)$/i.test(pathname)
   ) {
-    return NextResponse.next();
+    return applySecurityHeaders(NextResponse.next(), pathname);
   }
 
   if (!host || MAIN_APP_HOSTS.has(host) || host.endsWith(".pages.dev")) {
@@ -55,7 +56,7 @@ export function proxy(request: NextRequest) {
       callbackUrl.pathname = "/auth/callback";
       return NextResponse.redirect(callbackUrl);
     }
-    return NextResponse.next();
+    return applySecurityHeaders(NextResponse.next(), pathname);
   }
 
   let hostKey: string | null = null;
@@ -78,7 +79,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (!hostKey) {
-    return NextResponse.next();
+    return applySecurityHeaders(NextResponse.next(), pathname);
   }
 
   const rewriteUrl = request.nextUrl.clone();
@@ -96,9 +97,12 @@ export function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-devpulse-portal-host", host);
 
-  return NextResponse.rewrite(rewriteUrl, {
-    request: { headers: requestHeaders },
-  });
+  return applySecurityHeaders(
+    NextResponse.rewrite(rewriteUrl, {
+      request: { headers: requestHeaders },
+    }),
+    pathname
+  );
 }
 
 export const config = {

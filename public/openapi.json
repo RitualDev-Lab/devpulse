@@ -1,0 +1,62 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DevPulse by RitualDev API",
+    "version": "1.0.0",
+    "description": "Unified Developer Headquarters & Multi-Registry Telemetry Engine API (crash ingestion, OTLP traces, analytics beacons, Defense Suite, NL-to-SQL explorer, Scarf-style Zero-PII gateway, and dynamic README SVG badges)."
+  },
+  "servers": [
+    {
+      "url": "https://devpulse.ritualdev.in",
+      "description": "Production Cloud Edge"
+    }
+  ],
+  "paths": {
+    "/api/v1/event": {
+      "post": {
+        "summary": "Ingest runtime crash or telemetry event",
+        "description": "Accepts bearer telemetry API key, enforces payload byte ceiling and key-first rate limits, validates timestamps cleanly, scrubs PII at ingress, and increments workspace quota atomically.",
+        "responses": {
+          "201": { "description": "Event ingested" },
+          "400": { "description": "Malformed payload or out-of-range timestamp" },
+          "413": { "description": "Payload exceeds DEVPULSE_MAX_EVENT_BYTES" },
+          "429": { "description": "Rate limit or workspace monthly quota exceeded" }
+        }
+      }
+    },
+    "/api/v1/analytics": {
+      "post": {
+        "summary": "Record privacy-first web or app telemetry beacon",
+        "responses": { "200": { "description": "Beacon accepted with zero raw IP persistence" } }
+      }
+    },
+    "/api/v1/defense": {
+      "get": {
+        "summary": "Retrieve RitualDev Defense Suite posture & guardrail events",
+        "responses": { "200": { "description": "Defense engine status & events" } }
+      },
+      "post": {
+        "summary": "Report security finding from AgentShield, DBShield, SkillPrism, PromptShield, or web-sec-auditor",
+        "responses": { "200": { "description": "Audit-chained finding logged" } }
+      }
+    },
+    "/api/v1/explore": {
+      "post": {
+        "summary": "Compile natural-language prompt to scoped read-only SQL analytics query",
+        "responses": { "200": { "description": "Compiled SQL and tabular query output" } }
+      }
+    },
+    "/api/v1/gateway/{slug}": {
+      "get": {
+        "summary": "Zero-PII Package & Release Adoption Gateway redirect or JSON check",
+        "responses": { "200": { "description": "JSON adoption metadata" }, "302": { "description": "Redirect to canonical registry target" } }
+      }
+    },
+    "/api/badge/{type}/{slug}": {
+      "get": {
+        "summary": "Dynamic SVG badge (stars, downloads, health, security)",
+        "responses": { "200": { "description": "image/svg+xml shield" } }
+      }
+    }
+  }
+}

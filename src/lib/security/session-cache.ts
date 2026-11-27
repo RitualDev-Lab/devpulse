@@ -5,7 +5,8 @@
  * repeated navigations resolve in <1ms without blocking on Supabase Auth network roundtrips.
  */
 
-export const SESSION_CACHE_COOKIE = "dp_user_cache";
+export const SESSION_CACHE_COOKIE =
+  process.env.NODE_ENV === "production" ? "__Host-dp_user_cache" : "dp_user_cache";
 export const SESSION_CACHE_TTL_SECONDS = 60;
 
 export interface CachedUserClaims {

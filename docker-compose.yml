@@ -1,0 +1,51 @@
+# Self-Hosted DevPulse OSS Stack (~512MB app footprint + PostgreSQL + Valkey cache)
+services:
+  devpulse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DEVPULSE_PUBLIC_DEMO_PROJECT: "true"
+      DEVPULSE_STORAGE_MODE: lean
+      POSTGRES_DATABASE_URL: postgres://devpulse:devpulse@postgres:5432/devpulse
+      REDIS_URL: redis://valkey:6379
+      TURSO_DATABASE_URL: ${TURSO_DATABASE_URL:-http://libsql:8080}
+      TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN:-dev-local-token}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: devpulse
+      POSTGRES_PASSWORD: devpulse
+      POSTGRES_DB: devpulse
+    volumes:
+      - devpulse_pgdata:/var/lib/postgresql/data
+      - ./drizzle/pg-rls-migration.sql:/docker-entrypoint-initdb.d/01-rls.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devpulse -d devpulse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  devpulse_pgdata:
