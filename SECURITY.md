@@ -23,6 +23,14 @@ Please report suspected vulnerabilities privately to **security@ritualdev.in** (
 
 ---
 
+## Compliance, SOC 2 Readiness & Data Privacy (DPDP 2023 / GDPR)
+
+- **SOC 2 Type II Alignment:** DevPulse maintains **SOC 2 Type II-Aligned Controls & Audit-Ready Evidence Packs** (independent licensed CPA firm attestation is pursued separately and is never represented as a self-issued certificate).
+- **DPDP Act 2023 & GDPR Portability / Erasure:** Project owners and admins can export structured tenant data (`GET /api/v1/privacy/export?projectId=<id>`) or trigger telemetry erasure (`DELETE /api/v1/privacy/export?projectId=<id>&confirm=ERASE_TELEMETRY`) while preserving tamper-evident `audit_logs`.
+- **Subprocessors & Retention:** Managed SaaS telemetry respects plan retention TTLs (`7` / `90` / `365` days or customer BYOS S3/R2 buckets); edge visitor digests rotate monthly without persisting raw IPs.
+
+---
+
 ## Supported Versions
 
 | Version | Supported |

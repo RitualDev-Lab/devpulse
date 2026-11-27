@@ -57,6 +57,26 @@
         "summary": "Dynamic SVG badge (stars, downloads, health, security)",
         "responses": { "200": { "description": "image/svg+xml shield" } }
       }
+    },
+    "/api/v1/sentry/{projectId}/envelope": {
+      "post": {
+        "summary": "Sentry SDK v11 streaming span and exception envelope ingestion",
+        "responses": {
+          "200": { "description": "Envelope accepted" },
+          "400": { "description": "Malformed envelope or timestamp" },
+          "413": { "description": "Payload exceeds max size" }
+        }
+      }
+    },
+    "/api/v1/privacy/export": {
+      "get": {
+        "summary": "DPDP / GDPR tenant data portability export (owner/admin)",
+        "responses": { "200": { "description": "JSON project telemetry bundle" } }
+      },
+      "delete": {
+        "summary": "Owner-only telemetry erasure preserving immutable audit logs",
+        "responses": { "200": { "description": "Telemetry erased" } }
+      }
     }
   }
 }

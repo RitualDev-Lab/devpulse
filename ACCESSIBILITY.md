@@ -14,6 +14,13 @@
 - **Target Sizing & Sticky Header Safe Scrolling:**
   - Interactive icon buttons meet `>= 24x24` CSS pixel minimum hit areas.
   - Numeric KPI counters and tables use `tabular-nums` to prevent layout shift and reading jitter.
+  - Dashboard routes use `scroll-padding-top: 4.5rem` (WCAG 2.4.11 Focus Not Obscured) and explicit `:focus-visible` outlines (WCAG 2.4.13).
+- **Accessible Charts & Tables (`ChartTableToggle`):**
+  - Core analytics and package velocity charts define lifted dark-mode `oklch` series tokens (`--chart-1..5`, >= 3:1 non-text graphical contrast per WCAG 1.4.11), provenance badges (`Source`, `Window`, `Estimated`), and keyboard-accessible **Show Chart / Show Table** toggles.
+
+## VPAT Summary Status
+- Desktop (`1280x800`), mobile (`390x844`), and enlarged zoom viewports verified via automated Chromium layout checks (`scrollWidth <= innerWidth`, zero unhandled console errors).
+- Continuous improvements track full keyboard & screen-reader parity across interactive charts and slide-over panels.
 
 ## Feedback & Support
 
