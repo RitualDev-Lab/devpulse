@@ -10,11 +10,13 @@ export function ReportPortalTabsClient({
   projectName,
   turnstileSiteKey,
   initialTab = "bug",
+  portalTheme,
 }: {
   projectSlug: string;
   projectName: string;
   turnstileSiteKey: string;
   initialTab?: "bug" | "feedback";
+  portalTheme?: string;
 }) {
   const [tab, setTab] = useState<"bug" | "feedback">(initialTab);
 
@@ -53,6 +55,7 @@ export function ReportPortalTabsClient({
           projectSlug={projectSlug}
           projectName={projectName}
           turnstileSiteKey={turnstileSiteKey}
+          portalTheme={portalTheme}
         />
       ) : (
         <FeedbackBoardClient projectSlug={projectSlug} projectName={projectName} />

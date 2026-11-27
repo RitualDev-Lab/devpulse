@@ -242,6 +242,22 @@ export function DashboardOnboardingView({ user }: DashboardOnboardingViewProps) 
           </div>
         )}
 
+        {/* 3-Step Visual Onboarding Progress Stepper */}
+        <div className="grid grid-cols-3 gap-2 text-xs font-mono">
+          <div className="px-3 py-2 rounded-xl bg-indigo-600/15 border border-indigo-500/40 text-indigo-200 flex items-center gap-2">
+            <span className="font-bold">1.</span>
+            <span className="truncate">Stack Preset</span>
+          </div>
+          <div className={`px-3 py-2 rounded-xl border flex items-center gap-2 ${!isScanning && !summary ? "bg-cyan-600/15 border-cyan-500/40 text-cyan-200" : "bg-zinc-900 border-zinc-800 text-zinc-400"}`}>
+            <span className="font-bold">2.</span>
+            <span className="truncate">Auto-Scan Manifests</span>
+          </div>
+          <div className={`px-3 py-2 rounded-xl border flex items-center gap-2 ${isScanning || summary ? "bg-emerald-600/15 border-emerald-500/40 text-emerald-200" : "bg-zinc-900 border-zinc-800 text-zinc-400"}`}>
+            <span className="font-bold">3.</span>
+            <span className="truncate">Copy SDK &amp; First Ping</span>
+          </div>
+        </div>
+
         {/* Role-Aware Preset Picker */}
         <div className="rounded-2xl bg-zinc-900/70 border border-zinc-800 p-4 space-y-2.5">
           <div className="flex items-center justify-between">

@@ -738,16 +738,19 @@ export function ImportRepositoryModal({
           )}
 
           {scanResult && (
-            <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200 text-xs space-y-1.5">
+            <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200 text-xs space-y-2">
               <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Workspace Provisioned! Auto-Configured:</span>
+                <span>Step 3 Complete — Workspace Provisioned! Auto-Configured:</span>
               </div>
               <ul className="space-y-0.5 pl-4 list-disc text-emerald-300/90 text-[11px]">
                 {scanResult.summary.map((item, idx) => (
                   <li key={idx}>{item}</li>
                 ))}
               </ul>
+              <div className="p-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-[10px] text-cyan-300 overflow-x-auto">
+                npx @ritualdev/pulse init --project {scanResult.project?.slug || "app"}
+              </div>
             </div>
           )}
 

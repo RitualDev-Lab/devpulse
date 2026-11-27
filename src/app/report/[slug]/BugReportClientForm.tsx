@@ -17,12 +17,14 @@ interface BugReportClientFormProps {
   projectSlug: string;
   projectName: string;
   turnstileSiteKey: string;
+  portalTheme?: string;
 }
 
 export function BugReportClientForm({
   projectSlug,
   projectName,
   turnstileSiteKey,
+  portalTheme,
 }: BugReportClientFormProps) {
   const [errorName, setErrorName] = useState("");
   const [message, setMessage] = useState("");
@@ -61,7 +63,7 @@ export function BugReportClientForm({
           // ignore
         }
       }
-      const themeAttr = document.documentElement.getAttribute("data-theme");
+      const themeAttr = portalTheme || document.documentElement.getAttribute("data-theme");
       widgetIdRef.current = window.turnstile.render(turnstileContainerRef.current, {
         sitekey: turnstileSiteKey,
         theme: themeAttr === "minimal_white" ? "light" : "dark",

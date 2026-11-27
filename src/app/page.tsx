@@ -111,6 +111,12 @@ export default function HomePage() {
               <span>Launch Mission Control</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
+            <Link
+              href="/dashboard?demo=1"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/40 text-sm font-semibold text-emerald-200 hover:text-white transition"
+            >
+              <span>Explore Live Demo</span>
+            </Link>
             <a
               href="#about"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-sm font-semibold text-zinc-300 hover:text-white transition"
@@ -298,58 +304,58 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Card 1 */}
-          <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+          <Link href="/dashboard/packages?demo=1" className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 hover:border-indigo-500/40 transition space-y-3 block">
             <Package className="w-6 h-6 text-indigo-400" />
             <h4 className="font-bold text-white text-sm">23+ Ecosystem &amp; Multi-Git Tracking</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
               Unifies npm, PyPI, Crates.io, Docker, NuGet, Go, Packagist &amp; Homebrew alongside GitHub, GitLab, Bitbucket &amp; Codeberg PRs.
             </p>
-          </div>
+          </Link>
 
           {/* Card 2 */}
-          <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+          <Link href="/dashboard/traces?demo=1" className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 hover:border-cyan-500/40 transition space-y-3 block">
             <Cpu className="w-6 h-6 text-cyan-400" />
             <h4 className="font-bold text-white text-sm">OTEL Tracing, Loki Logs &amp; MCP Analytics</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
               Flame graph span waterfalls linked directly to crashes, 3s live-tail Loki logs, and per-tool MCP token cost &amp; allowlist governance.
             </p>
-          </div>
+          </Link>
 
           {/* Card 3 */}
-          <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+          <Link href="/dashboard/revenue?demo=1" className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 hover:border-emerald-500/40 transition space-y-3 block">
             <DollarSign className="w-6 h-6 text-emerald-400" />
-            <h4 className="font-bold text-white text-sm">Stripe & Dodo Payments Revenue</h4>
+            <h4 className="font-bold text-white text-sm">Stripe &amp; Dodo Payments Revenue</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
               Track MRR, 30-day net volume, active subscribers, and transaction velocity with 100% read-only secure keys.
             </p>
-          </div>
+          </Link>
 
           {/* Card 4 */}
-          <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+          <Link href="/dashboard/crashes?demo=1" className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 hover:border-amber-500/40 transition space-y-3 block">
             <Zap className="w-6 h-6 text-amber-400" />
-            <h4 className="font-bold text-white text-sm">Crash Replay, RUM &amp; 8 Language SDKs</h4>
+            <h4 className="font-bold text-white text-sm">Crash Replay, RUM &amp; 12 Language SDKs</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              R2 session replay timelines, p75 Core Web Vitals (LCP/INP/CLS), source map/DWARF symbolication, and zero-bloat SDKs for JS, Python, Go, Rust, JVM, .NET, PHP &amp; Swift.
+              R2 session replay timelines, p75 Core Web Vitals (LCP/INP/CLS), source map/DWARF symbolication, and lightweight SDKs for Web, Mobile, Go, Rust, JVM, .NET, PHP, Swift &amp; C++.
             </p>
-          </div>
+          </Link>
 
           {/* Card 5 */}
-          <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+          <Link href="/dashboard/analytics?demo=1" className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 hover:border-blue-500/40 transition space-y-3 block">
             <Globe className="w-6 h-6 text-blue-400" />
-            <h4 className="font-bold text-white text-sm">Cookie-Free Analytics, Flags &amp; Heartbeats</h4>
+            <h4 className="font-bold text-white text-sm">Analytics, Flags &amp; Maintenance Timelines</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              GDPR &lt;2KB visitor analytics, A/B feature flags with crash-triggered auto-rollback, and dead-man&apos;s-switch cron heartbeats.
+              GDPR &lt;2KB visitor analytics, A/B feature flags with crash-triggered auto-rollback, cron heartbeats, and scheduled maintenance suppression windows.
             </p>
-          </div>
+          </Link>
 
           {/* Card 6 */}
-          <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-3">
+          <Link href="/dashboard/security?demo=1" className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 hover:border-purple-500/40 transition space-y-3 block">
             <ShieldCheck className="w-6 h-6 text-purple-400" />
             <h4 className="font-bold text-white text-sm">SBOM CVEs, OSV Fix PRs &amp; SVG Badges</h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
               Live OSV.dev advisory scanning, SPDX license matrix, 1-click GitHub Fix PRs, and dynamic shields like <code className="text-zinc-300">/api/badge/downloads/...svg</code>.
             </p>
-          </div>
+          </Link>
         </div>
       </section>
 

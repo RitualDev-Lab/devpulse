@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { loadPortalStatusHistory } from "@/lib/domains/status-loader";
 import { StatusSubscribeWidget } from "@/components/portal/StatusSubscribeWidget";
+import { normalizeThemeId, getPresetThemeCss, scopeCustomCss } from "@/lib/layout/css-scoper";
 
 export const dynamic = "force-dynamic";
 
@@ -37,13 +38,21 @@ export default async function PortalStatusHistoryPage(props: {
 
   const { portal, history, incidents, maintenanceWindows = [] } = loaded;
   const project = portal.activeProject;
+  const activeTheme = normalizeThemeId(project?.theme);
+  const dynamicCss = [
+    getPresetThemeCss(activeTheme),
+    scopeCustomCss(project?.customCss || "", ".devpulse-workspace"),
+  ]
+    .filter(Boolean)
+    .join("\n");
   const brandName = portal.user.brandTitle || project?.name || portal.user.githubUsername;
   const hasActiveOutage = history.perMonitor.some((m) => m.lastStatus === "down");
   const hasDegraded = history.perMonitor.some((m) => m.lastStatus === "degraded");
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      <header className="border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl sticky top-0 z-30">
+    <div data-theme={activeTheme} className="devpulse-shell min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      {dynamicCss && <style dangerouslySetInnerHTML={{ __html: dynamicCss }} />}
+      <header className="devpulse-topbar border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
@@ -68,7 +77,7 @@ export default async function PortalStatusHistoryPage(props: {
         </div>
       </header>
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <main className="devpulse-workspace flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Global Operational Banner */}
         {maintenanceWindows.length > 0 && (
           <div className="p-4 rounded-2xl border bg-amber-950/35 border-amber-600/40 text-amber-100 space-y-1.5">

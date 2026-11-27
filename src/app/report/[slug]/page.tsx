@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { ReportPortalTabsClient } from "./ReportPortalTabsClient";
 import { notFound } from "next/navigation";
 import { AlertCircle, ShieldCheck } from "lucide-react";
+import { normalizeThemeId, getPresetThemeCss, scopeCustomCss } from "@/lib/layout/css-scoper";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,8 @@ export default async function BugReportPage({ params, searchParams }: PageProps)
       name: projects.name,
       slug: projects.slug,
       description: projects.description,
+      theme: projects.theme,
+      customCss: projects.customCss,
     })
     .from(projects)
     .where(eq(projects.slug, slug))
@@ -34,12 +37,24 @@ export default async function BugReportPage({ params, searchParams }: PageProps)
     notFound();
   }
 
+  const activeTheme = normalizeThemeId(project.theme);
+  const dynamicCss = [
+    getPresetThemeCss(activeTheme),
+    scopeCustomCss(project.customCss || "", ".devpulse-workspace"),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const turnstileSiteKey =
     process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "0x4AAAAAAGRcrYre1ndzSEjF";
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between py-12 px-4 sm:px-6">
-      <div className="max-w-xl mx-auto w-full">
+    <div
+      data-theme={activeTheme}
+      className="devpulse-shell min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between py-12 px-4 sm:px-6"
+    >
+      {dynamicCss && <style dangerouslySetInnerHTML={{ __html: dynamicCss }} />}
+      <div className="devpulse-workspace max-w-xl mx-auto w-full">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-red-600 via-amber-500 to-amber-400 p-[1px] mx-auto mb-3 shadow-lg shadow-red-500/10">
@@ -63,6 +78,7 @@ export default async function BugReportPage({ params, searchParams }: PageProps)
             projectName={project.name}
             turnstileSiteKey={turnstileSiteKey}
             initialTab={initialTab}
+            portalTheme={activeTheme}
           />
         </div>
 

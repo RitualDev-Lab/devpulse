@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { GitMerge, ArrowLeft, Sparkles, Tag, ExternalLink, Activity } from "lucide-react";
 import { loadPortalChangelog } from "@/lib/domains/changelog-loader";
+import { normalizeThemeId, getPresetThemeCss, scopeCustomCss } from "@/lib/layout/css-scoper";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +29,19 @@ export default async function PortalChangelogPage(props: {
 
   const { portal, releases, unreleasedPrs, shippedRequests } = loaded;
   const project = portal.activeProject;
+  const activeTheme = normalizeThemeId(project?.theme);
+  const dynamicCss = [
+    getPresetThemeCss(activeTheme),
+    scopeCustomCss(project?.customCss || "", ".devpulse-workspace"),
+  ]
+    .filter(Boolean)
+    .join("\n");
   const brandName = portal.user.brandTitle || project?.name || portal.user.githubUsername;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      <header className="border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl sticky top-0 z-30">
+    <div data-theme={activeTheme} className="devpulse-shell min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      {dynamicCss && <style dangerouslySetInnerHTML={{ __html: dynamicCss }} />}
+      <header className="devpulse-topbar border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
@@ -55,7 +64,7 @@ export default async function PortalChangelogPage(props: {
         </div>
       </header>
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <main className="devpulse-workspace flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
         {shippedRequests.length > 0 && (
           <section className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/30 space-y-3">
             <div className="flex items-center gap-2">
