@@ -1,5 +1,6 @@
 -- DevPulse Enterprise PostgreSQL Multi-Tenant Isolation Migration
--- Enforces FORCE ROW LEVEL SECURITY across all tenant-scoped tables.
+-- Compatible with PgBouncer transaction pooling (SET LOCAL / set_config(..., true))
+-- Enforces FORCE ROW LEVEL SECURITY and creates tenant indexes across all multi-tenant tables.
 
 DO $$
 DECLARE
@@ -23,5 +24,6 @@ BEGIN
       'CREATE POLICY devpulse_tenant_isolation ON %I USING (organization_id = current_setting(''app.current_org_id'', true)) WITH CHECK (organization_id = current_setting(''app.current_org_id'', true));',
       tbl
     );
+    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%I_org_id ON %I (organization_id);', tbl, tbl);
   END LOOP;
 END $$;
