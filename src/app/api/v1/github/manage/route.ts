@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { dailyMetrics } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { resolveProjectAccess } from "@/lib/security/rbac";
 import { decryptSecret } from "@/lib/security/crypto";
@@ -134,7 +134,12 @@ export async function GET(req: NextRequest) {
       for (const d of clonesJson.clones) {
         const dt = String(d.timestamp || "").slice(0, 10);
         if (!dt) continue;
-        clonesMap.set(dt, { date: dt, count: d.count || 0, uniques: d.uniques || 0 });
+        const incomingCount = Number(d.count || 0);
+        const incomingUniques = Number(d.uniques || 0);
+        const prev = clonesMap.get(dt);
+        const mergedCount = Math.max(prev?.count || 0, incomingCount);
+        const mergedUniques = Math.max(prev?.uniques || 0, incomingUniques);
+        clonesMap.set(dt, { date: dt, count: mergedCount, uniques: mergedUniques });
         db.insert(dailyMetrics)
           .values({
             id: `met_gh_clones_${projectId}_${dt}`,
@@ -142,12 +147,15 @@ export async function GET(req: NextRequest) {
             source: "github",
             metricType: "clones",
             date: dt,
-            value: d.count || 0,
-            metadataJson: JSON.stringify({ uniques: d.uniques || 0 }),
+            value: incomingCount,
+            metadataJson: JSON.stringify({ uniques: incomingUniques, estimated: true }),
           })
           .onConflictDoUpdate({
             target: dailyMetrics.id,
-            set: { value: d.count || 0, metadataJson: JSON.stringify({ uniques: d.uniques || 0 }) },
+            set: {
+              value: sql`max(${dailyMetrics.value}, ${incomingCount})`,
+              metadataJson: JSON.stringify({ uniques: mergedUniques, estimated: true }),
+            },
           })
           .catch(() => {});
       }
@@ -157,7 +165,12 @@ export async function GET(req: NextRequest) {
       for (const d of viewsJson.views) {
         const dt = String(d.timestamp || "").slice(0, 10);
         if (!dt) continue;
-        viewsMap.set(dt, { date: dt, count: d.count || 0, uniques: d.uniques || 0 });
+        const incomingCount = Number(d.count || 0);
+        const incomingUniques = Number(d.uniques || 0);
+        const prev = viewsMap.get(dt);
+        const mergedCount = Math.max(prev?.count || 0, incomingCount);
+        const mergedUniques = Math.max(prev?.uniques || 0, incomingUniques);
+        viewsMap.set(dt, { date: dt, count: mergedCount, uniques: mergedUniques });
         db.insert(dailyMetrics)
           .values({
             id: `met_gh_views_${projectId}_${dt}`,
@@ -165,12 +178,15 @@ export async function GET(req: NextRequest) {
             source: "github",
             metricType: "views",
             date: dt,
-            value: d.count || 0,
-            metadataJson: JSON.stringify({ uniques: d.uniques || 0 }),
+            value: incomingCount,
+            metadataJson: JSON.stringify({ uniques: incomingUniques, estimated: true }),
           })
           .onConflictDoUpdate({
             target: dailyMetrics.id,
-            set: { value: d.count || 0, metadataJson: JSON.stringify({ uniques: d.uniques || 0 }) },
+            set: {
+              value: sql`max(${dailyMetrics.value}, ${incomingCount})`,
+              metadataJson: JSON.stringify({ uniques: mergedUniques, estimated: true }),
+            },
           })
           .catch(() => {});
       }

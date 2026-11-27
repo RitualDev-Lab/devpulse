@@ -3,10 +3,10 @@ import { PUBLIC_APP_URL } from "@/lib/config/app-url";
  * Python Ecosystem (PyPI) Service
  * Interacts with public PyPI APIs (pypistats.org and pypi.org)
  * Ingests:
- * - Real-time downloads & non-mirror downloads
+ * - Real-time downloads & non-mirror downloads (?mirrors=false)
  * - Python minor version distribution (3.12, 3.11, etc.)
  * - Operating system distribution (Linux, Darwin, Windows)
- * - Release history & version count
+ * - Release history & PEP 503 normalized metadata
  * Requires ZERO private tokens.
  */
 
@@ -27,17 +27,23 @@ export interface PyPiStats {
   latestVersion?: string;
   totalReleases: number;
   description?: string;
+  author?: string;
+  requiresDist?: string[];
+}
+
+export function normalizePep503PackageName(packageName: string): string {
+  return packageName.trim().toLowerCase().replace(/[._-]+/g, "-");
 }
 
 export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | null> {
   try {
-    const cleanPkg = encodeURIComponent(packageName.toLowerCase().trim());
+    const cleanPkg = encodeURIComponent(normalizePep503PackageName(packageName));
     const headers = {
       "User-Agent": `DevPulse-HQ/1.0 (${PUBLIC_APP_URL})`,
       Accept: "application/json",
     };
 
-    // Parallel fetch: Recent, Overall, Python Minor versions, System, and PyPI JSON
+    // Parallel fetch: Recent, Overall (?mirrors=false), Python Minor versions, System, and PyPI JSON
     const [recentRes, overallRes, pyMinorRes, systemRes, metaRes] = await Promise.all([
       fetch(`https://pypistats.org/api/packages/${cleanPkg}/recent`, {
         headers,
@@ -117,7 +123,6 @@ export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | n
           const versionMap: Record<string, number> = {};
           let totalVersionDl = 0;
 
-          // Aggregate latest date's downloads by category/version
           for (const item of pyMinorJson.data) {
             const ver = item.category || "other";
             if (ver !== "null") {
@@ -163,9 +168,11 @@ export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | n
       }
     }
 
-    // 5. Official PyPI Metadata (Releases count, version, description)
+    // 5. Official PyPI Metadata (Releases count, version, description, PEP 503 null-safe fields)
     let latestVersion = "";
     let description = "";
+    let author = "";
+    let requiresDist: string[] = [];
     let totalReleases = 0;
 
     if (metaRes && metaRes.ok) {
@@ -173,6 +180,8 @@ export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | n
         const meta = await metaRes.json();
         latestVersion = meta.info?.version || "";
         description = meta.info?.summary || "";
+        author = meta.info?.author || meta.info?.author_email || "";
+        requiresDist = Array.isArray(meta.info?.requires_dist) ? meta.info.requires_dist : [];
         if (meta.releases && typeof meta.releases === "object") {
           totalReleases = Object.keys(meta.releases).length;
         }
@@ -192,6 +201,8 @@ export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | n
       latestVersion,
       totalReleases,
       description,
+      author,
+      requiresDist,
     };
   } catch (err) {
     console.error(`Error fetching PyPI stats for ${packageName}:`, err);

@@ -1,3 +1,15 @@
+/**
+ * Mandatory tenant-prefixed cache key builder preventing cross-tenant key collisions.
+ */
+export function tenantCacheKey(tenantId: string | null | undefined, key: string): string {
+  const cleanTenant = String(tenantId || "").trim();
+  const cleanKey = String(key || "").trim();
+  if (!cleanTenant || !cleanKey) {
+    throw new Error("tenantCacheKey requires non-empty tenantId and key");
+  }
+  return `tenant:${cleanTenant}:${cleanKey}`;
+}
+
 interface CacheEntry<T> {
   value: T;
   expiresAt: number;

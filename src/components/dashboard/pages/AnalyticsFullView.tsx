@@ -19,6 +19,8 @@ import { ExternalAnalyticsHub } from "../ExternalAnalyticsHub";
 import { EngagementAnalyticsPanel } from "../EngagementAnalyticsPanel";
 import { RumWebVitalsPanel } from "../widgets/RumWebVitalsPanel";
 import { NlExplorerPanel } from "../widgets/NlExplorerPanel";
+import { ChartTableToggle } from "../widgets/ChartTableToggle";
+import { formatMetricNumber } from "@/lib/charts/formatters";
 
 export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
   const { projects, customDomain, storageTier, isDemo } = workspace;
@@ -107,25 +109,42 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
               </p>
             </div>
           </div>
-          <div className="h-56 min-w-0">
-            {cohortSeries.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 640, height: 224 }}>
-                <AreaChart data={cohortSeries}>
-                  <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={36} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
-                  />
-                  <Area type="monotone" dataKey="web" name="Web Active" stroke="#06b6d4" fill="#06b6d425" strokeWidth={2} />
-                  <Area type="monotone" dataKey="appCli" name="Desktop / CLI" stroke="#a855f7" fill="#a855f725" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800/70 flex items-center justify-center text-xs text-zinc-500">
-                Send a pageview or app event using Test Ping or trackMetric below to populate daily user charts.
-              </div>
-            )}
-          </div>
+          <ChartTableToggle
+            sourceLabel={isDemo ? "Demo Telemetry Snapshot" : "First-Party Beacons"}
+            windowLabel="Last 30 Days (UTC)"
+            columns={[
+              { key: "date", label: "Date" },
+              { key: "web", label: "Web Active" },
+              { key: "appCli", label: "Desktop / CLI" },
+              { key: "total", label: "Total" },
+            ]}
+            rows={cohortSeries as unknown as Array<Record<string, unknown>>}
+          >
+            <div className="h-56 min-w-0">
+              {cohortSeries.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 640, height: 224 }}>
+                  <AreaChart data={cohortSeries}>
+                    <XAxis dataKey="date" tick={{ fill: "var(--chart-axis)", fontSize: 10 }} />
+                    <YAxis
+                      tick={{ fill: "var(--chart-axis)", fontSize: 10 }}
+                      width={36}
+                      tickFormatter={(v: number | undefined) => formatMetricNumber(v)}
+                    />
+                    <Tooltip
+                      formatter={(val: unknown) => formatMetricNumber(val as number | undefined)}
+                      contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
+                    />
+                    <Area type="monotone" dataKey="web" name="Web Active" stroke="var(--chart-1)" fill="#06b6d425" strokeWidth={2} />
+                    <Area type="monotone" dataKey="appCli" name="Desktop / CLI" stroke="var(--chart-4)" fill="#a855f725" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full rounded-xl bg-zinc-950/60 border border-zinc-800/70 flex items-center justify-center text-xs text-zinc-500">
+                  Send a pageview or app event using Test Ping or trackMetric below to populate daily user charts.
+                </div>
+              )}
+            </div>
+          </ChartTableToggle>
         </div>
 
         {/* Top Pages & Top Custom Events Breakdown */}

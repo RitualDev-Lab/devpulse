@@ -27,6 +27,8 @@ import { SnapshotSyncBar } from "../SnapshotSyncBar";
 import { QuickConnectPanel } from "../QuickConnectPanel";
 import { PackageSearchPicker } from "../PackageSearchPicker";
 import { ReleasePulseTimeline } from "../widgets/ReleasePulseTimeline";
+import { ChartTableToggle } from "../widgets/ChartTableToggle";
+import { formatMetricNumber } from "@/lib/charts/formatters";
 import { securitySummaryKey } from "@/lib/integrations/registry-adapter";
 
 export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
@@ -156,6 +158,7 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                     <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
                     <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
                     <Tooltip
+                      formatter={(val: unknown) => formatMetricNumber(val as number | undefined)}
                       contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
                     />
                     <Area type="monotone" dataKey="downloads" name="npm" stroke="#ef4444" fill="#ef444425" strokeWidth={2} />
@@ -202,9 +205,21 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                 })}
               </div>
             </div>
-            <div className="h-48 min-w-0">
-              {(initialData.packageHistory || []).length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 420, height: 192 }}>
+              <ChartTableToggle
+                sourceLabel="PyPI / Crates / Docker / Go Snapshots"
+                windowLabel="Last 30 Days"
+                columns={[
+                  { key: "date", label: "Date" },
+                  { key: "pypi", label: "PyPI" },
+                  { key: "crates", label: "Crates" },
+                  { key: "docker", label: "Docker" },
+                  { key: "go", label: "Go" },
+                ]}
+                rows={(initialData.packageHistory || []) as unknown as Array<Record<string, unknown>>}
+              >
+                <div className="h-48 min-w-0">
+                  {(initialData.packageHistory || []).length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 420, height: 192 }}>
                   <AreaChart
                     data={initialData.packageHistory || []}
                     margin={{ top: 8, right: 12, left: 8, bottom: 0 }}
@@ -222,6 +237,7 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                       }
                     />
                     <Tooltip
+                      formatter={(val: unknown) => formatMetricNumber(val as number | undefined)}
                       contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "8px", fontSize: "12px" }}
                     />
                     {!hiddenSeries.pypi && <Area type="monotone" dataKey="pypi" name="PyPI" stroke="#3b82f6" fill="#3b82f620" />}
@@ -256,8 +272,9 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                   Multi-registry daily points appear here as daily cron sync snapshots PyPI, Crates.io, Docker Hub &amp; Go metrics.
                 </div>
               )}
+                </div>
+              </ChartTableToggle>
             </div>
-          </div>
         </div>
 
         {/* Release Version Adoption & Registry Matrix Table */}
