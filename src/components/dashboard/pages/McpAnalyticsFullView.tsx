@@ -181,9 +181,9 @@ export function McpAnalyticsFullView({ workspace }: { workspace: LoadedWorkspace
               <h2 className="text-sm font-bold text-white">Daily Agent Tool Calls</h2>
               <p className="text-xs text-zinc-400">Invocation velocity across authorized MCP clients</p>
             </div>
-            <div className="h-48">
+            <div className="h-48 min-w-0">
               {chartSeries.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 420, height: 192 }}>
                   <AreaChart data={chartSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                     <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
                     <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
@@ -204,9 +204,9 @@ export function McpAnalyticsFullView({ workspace }: { workspace: LoadedWorkspace
               <h2 className="text-sm font-bold text-white">Per-Tool Token Cost Distribution (USD)</h2>
               <p className="text-xs text-zinc-400">Identify high-spend agent tools for prompt or cache tuning</p>
             </div>
-            <div className="h-48">
+            <div className="h-48 min-w-0">
               {(data.tools || []).length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 420, height: 192 }}>
                   <BarChart
                     data={data.tools.map((t) => ({
                       tool: t.toolName.replace(/_/g, " "),

@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { ModalShell } from "./ModalShell";
+import { getProjectStorageKey } from "@/lib/storage-keys";
 import {
   ACCENT_SWATCHES,
   DEFAULT_APPEARANCE_PREFS,
@@ -103,7 +104,7 @@ export function CustomCssModal({
       onSaveAppearancePrefs(next);
     }
     try {
-      localStorage.setItem(`devpulse_prefs_${projectId}`, JSON.stringify(next));
+      localStorage.setItem(getProjectStorageKey("prefs", projectId, isDemo), JSON.stringify(next));
     } catch {
       // ignore
     }
@@ -122,9 +123,9 @@ export function CustomCssModal({
     if (onSaveAppearancePrefs) onSaveAppearancePrefs(prefs);
 
     try {
-      localStorage.setItem(`devpulse_theme_${projectId}`, selectedTheme);
-      localStorage.setItem(`devpulse_css_${projectId}`, cssCode);
-      localStorage.setItem(`devpulse_prefs_${projectId}`, JSON.stringify(prefs));
+      localStorage.setItem(getProjectStorageKey("theme", projectId, isDemo), selectedTheme);
+      localStorage.setItem(getProjectStorageKey("css", projectId, isDemo), cssCode);
+      localStorage.setItem(getProjectStorageKey("prefs", projectId, isDemo), JSON.stringify(prefs));
     } catch {
       // ignore
     }

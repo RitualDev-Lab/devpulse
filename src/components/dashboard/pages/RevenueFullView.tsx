@@ -160,8 +160,8 @@ export function RevenueFullView({ workspace }: { workspace: LoadedWorkspaceReady
                 ))}
               </div>
             </div>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-48 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 480, height: 192 }}>
                 <AreaChart data={initialData.revenueStats.history || []}>
                   <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />

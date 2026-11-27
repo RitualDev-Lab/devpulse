@@ -112,9 +112,9 @@ export function UptimeFullView({ workspace }: { workspace: LoadedWorkspaceReady 
             )}
           </div>
 
-          <div className="h-52">
+          <div className="h-52 min-w-0">
             {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 480, height: 208 }}>
                 <AreaChart data={chartData}>
                   <XAxis dataKey="time" tick={{ fill: "#71717a", fontSize: 10 }} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} unit="ms" />

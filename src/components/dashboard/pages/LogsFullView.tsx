@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
+import { getProjectStorageKey } from "@/lib/storage-keys";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
 import { maskApiKey } from "@/lib/security/mask-key";
 import { extractJsonFieldsFromLog, type LogSpikeAnalysis } from "@/lib/logs/spike-detector";
@@ -103,12 +104,12 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
 
   useEffect(() => {
     try {
-      const savedPii = localStorage.getItem(`devpulse_pii_${project.id}`);
+      const savedPii = localStorage.getItem(getProjectStorageKey("pii", project.id, isDemo));
       if (savedPii === "false") setPiiScrubEnabled(false);
     } catch {
       // ignore
     }
-  }, [project.id]);
+  }, [project.id, isDemo]);
   const [showSaveBox, setShowSaveBox] = useState(false);
   const [loading, setLoading] = useState(false);
   const [emitting, setEmitting] = useState(false);

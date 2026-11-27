@@ -361,8 +361,8 @@ export function UptimeMonitorsCard({
             <span>Recent Edge Response Latency (ms)</span>
             <span>{chartData.length} samples</span>
           </div>
-          <div className="h-20 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-20 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 80 }}>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id={`lat-${projectId}`} x1="0" y1="0" x2="0" y2="1">

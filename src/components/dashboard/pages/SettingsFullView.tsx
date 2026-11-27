@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell, useWorkspaceAppearance } from "../WorkspaceShell";
+import { getProjectStorageKey } from "@/lib/storage-keys";
 import { useToast } from "../ToastContext";
 import {
   ACCENT_SWATCHES,
@@ -64,14 +65,14 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
 
   React.useEffect(() => {
     try {
-      const savedTab = localStorage.getItem(`devpulse_default_tab_${project.id}`);
+      const savedTab = localStorage.getItem(getProjectStorageKey("default_tab", project.id, isDemo));
       if (savedTab) setDefaultTab(savedTab);
-      const savedPii = localStorage.getItem(`devpulse_pii_${project.id}`);
+      const savedPii = localStorage.getItem(getProjectStorageKey("pii", project.id, isDemo));
       if (savedPii === "false") setPiiScrubEnabled(false);
     } catch {
       // ignore
     }
-  }, [project.id]);
+  }, [project.id, isDemo]);
 
   const applyThemeInline = async (themeId: string) => {
     setTheme(themeId);
@@ -79,7 +80,7 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
     try {
       document.cookie = `dp_theme=${encodeURIComponent(themeId)}; path=/; max-age=31536000; SameSite=Lax`;
       document.documentElement.setAttribute("data-theme", themeId);
-      localStorage.setItem(`devpulse_theme_${project.id}`, themeId);
+      localStorage.setItem(getProjectStorageKey("theme", project.id, isDemo), themeId);
     } catch {
       // ignore
     }
@@ -97,7 +98,7 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
     const next = { ...appearancePrefs, ...patch };
     setAppearancePrefs(next);
     try {
-      localStorage.setItem(`devpulse_prefs_${project.id}`, JSON.stringify(next));
+      localStorage.setItem(getProjectStorageKey("prefs", project.id, isDemo), JSON.stringify(next));
     } catch {
       // ignore
     }
@@ -513,7 +514,7 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
                 onChange={(e) => {
                   setDefaultTab(e.target.value);
                   try {
-                    localStorage.setItem(`devpulse_default_tab_${project.id}`, e.target.value);
+                    localStorage.setItem(getProjectStorageKey("default_tab", project.id, isDemo), e.target.value);
                   } catch {}
                 }}
                 className="w-full px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white"
@@ -533,7 +534,7 @@ export function SettingsFullView({ workspace }: { workspace: LoadedWorkspaceRead
                   onChange={(e) => {
                     setPiiScrubEnabled(e.target.checked);
                     try {
-                      localStorage.setItem(`devpulse_pii_${project.id}`, String(e.target.checked));
+                      localStorage.setItem(getProjectStorageKey("pii", project.id, isDemo), String(e.target.checked));
                     } catch {}
                   }}
                 />

@@ -106,9 +106,9 @@ export function AnalyticsFullView({ workspace }: { workspace: LoadedWorkspaceRea
               </p>
             </div>
           </div>
-          <div className="h-56">
+          <div className="h-56 min-w-0">
             {cohortSeries.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 640, height: 224 }}>
                 <AreaChart data={cohortSeries}>
                   <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={36} />

@@ -151,8 +151,8 @@ export function WebAnalyticsCard({ summary, projectSlug }: WebAnalyticsCardProps
         {tab === "overview" && (
           <>
             {chartData.length > 0 && (
-              <div className="h-20 w-full mb-3 rounded-xl bg-zinc-950/60 border border-zinc-800/60 p-1.5">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-20 w-full min-w-0 mb-3 rounded-xl bg-zinc-950/60 border border-zinc-800/60 p-1.5">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 80 }}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="analyticsFill" x1="0" y1="0" x2="0" y2="1">

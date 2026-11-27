@@ -50,11 +50,12 @@ export function SnapshotSyncBar({
   return (
     <div className="inline-flex items-center gap-2 text-xs">
       <span
-        className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-[11px] font-mono text-zinc-400"
+        className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-[11px] font-mono text-zinc-400 tabular-nums"
         suppressHydrationWarning
       >
         {justSynced && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
-        <span>{formatRelativeSyncAge(effectiveTs)}</span>
+        <span className="text-zinc-500">{isDemo ? "Source: Snapshot" : "Source: Live API"} ·</span>
+        <span>Last Synced {formatRelativeSyncAge(effectiveTs)}</span>
       </span>
       <button
         type="button"

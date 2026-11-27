@@ -510,9 +510,9 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
                 </p>
               </div>
             </div>
-            <div className="h-44">
+            <div className="h-44 min-w-0">
               {clonesSeries.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 176 }}>
                   <AreaChart data={clonesSeries}>
                     <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
                     <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={32} />
@@ -557,9 +557,9 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
                 </p>
               </div>
             </div>
-            <div className="h-44">
+            <div className="h-44 min-w-0">
               {viewsSeries.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 176 }}>
                   <AreaChart data={viewsSeries}>
                     <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
                     <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={32} />
@@ -590,9 +590,9 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
                 </p>
               </div>
             </div>
-            <div className="h-44">
+            <div className="h-44 min-w-0">
               {starsSeries.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 176 }}>
                   <AreaChart data={starsSeries}>
                     <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
                     <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={32} />

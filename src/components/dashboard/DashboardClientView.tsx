@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sliders, RefreshCw } from "lucide-react";
 import { WorkspaceShell } from "./WorkspaceShell";
+import { getProjectStorageKey } from "@/lib/storage-keys";
 import { useWorkspaceData } from "./WorkspaceCacheContext";
 import { DragDropGrid, type DashboardData } from "./DragDropGrid";
 import { SnapshotSyncBar } from "./SnapshotSyncBar";
@@ -58,7 +59,7 @@ export function DashboardClientView({
         const landedKey = `dp_landed_${data.project.id}`;
         if (!sessionStorage.getItem(landedKey)) {
           sessionStorage.setItem(landedKey, "1");
-          const savedTab = localStorage.getItem(`devpulse_default_tab_${data.project.id}`);
+          const savedTab = localStorage.getItem(getProjectStorageKey("default_tab", data.project.id, isDemo));
           if (savedTab && savedTab !== "/dashboard" && savedTab.startsWith("/dashboard/")) {
             const qs = new URLSearchParams(window.location.search);
             router.replace(`${savedTab}${qs.toString() ? `?${qs.toString()}` : ""}`);
@@ -69,13 +70,13 @@ export function DashboardClientView({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [data.project.id, router]);
+  }, [data.project.id, isDemo, router]);
 
   const handleResetLayout = async () => {
     try {
-      localStorage.removeItem(`devpulse_layout_${data.project.id}`);
-      localStorage.removeItem(`devpulse_colspans_${data.project.id}`);
-      localStorage.removeItem(`devpulse_2d_layout_${data.project.id}`);
+      localStorage.removeItem(getProjectStorageKey("layout", data.project.id, isDemo));
+      localStorage.removeItem(getProjectStorageKey("colspans", data.project.id, isDemo));
+      localStorage.removeItem(getProjectStorageKey("2d_layout", data.project.id, isDemo));
       if (!isDemo) {
         await fetch(`/api/v1/projects/layout?projectId=${encodeURIComponent(data.project.id)}`, {
           method: "DELETE",

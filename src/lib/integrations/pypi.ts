@@ -43,7 +43,7 @@ export async function fetchPyPiStats(packageName: string): Promise<PyPiStats | n
         headers,
         next: { revalidate: 3600 },
       }).catch(() => null),
-      fetch(`https://pypistats.org/api/packages/${cleanPkg}/overall`, {
+      fetch(`https://pypistats.org/api/packages/${cleanPkg}/overall?mirrors=false`, {
         headers,
         next: { revalidate: 3600 },
       }).catch(() => null),

@@ -539,8 +539,8 @@ curl -s -X POST "${PUBLIC_APP_URL}/api/v1/event" \\
                     </div>
 
                     {Array.isArray(meta.daily) && meta.daily.length > 0 && (
-                      <div className="h-24 pt-1">
-                        <ResponsiveContainer width="100%" height="100%">
+                      <div className="h-24 pt-1 min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 96 }}>
                           <AreaChart data={meta.daily}>
                             <XAxis dataKey="date" hide />
                             <Tooltip

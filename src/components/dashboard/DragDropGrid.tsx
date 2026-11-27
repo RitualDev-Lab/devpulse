@@ -12,6 +12,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableCard } from "./SortableCard";
+import { getProjectStorageKey } from "@/lib/storage-keys";
 import { GitHubStatsCard } from "./widgets/GitHubStatsCard";
 import { NpmDownloadsCard } from "./widgets/NpmDownloadsCard";
 import { PyPiDownloadsCard } from "./widgets/PyPiDownloadsCard";
@@ -243,7 +244,7 @@ export function DragDropGrid({
     const initial = computeInitialLayout();
     if (!data.initialLayout || data.initialLayout.length === 0) {
       try {
-        const cached = localStorage.getItem(`devpulse_2d_layout_${data.project.id}`);
+        const cached = localStorage.getItem(getProjectStorageKey("2d_layout", data.project.id, isDemo));
         if (cached) {
           const parsed = JSON.parse(cached) as GridWidgetItem[];
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -277,7 +278,7 @@ export function DragDropGrid({
 
   const persistLayout = async (nextLayout: GridWidgetItem[]) => {
     try {
-      localStorage.setItem(`devpulse_2d_layout_${data.project.id}`, JSON.stringify(nextLayout));
+      localStorage.setItem(getProjectStorageKey("2d_layout", data.project.id, isDemo), JSON.stringify(nextLayout));
     } catch {
       // ignore localStorage errors
     }

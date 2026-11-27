@@ -74,11 +74,16 @@ export async function fetchNpmStats(
     const registryHeaders: Record<string, string> = {
       Accept: "application/json",
     };
+    // Abbreviated npm install manifest cuts payload size up to ~90% by omitting full READMEs & tarballs
+    const abbreviatedHeaders: Record<string, string> = {
+      Accept: "application/vnd.npm.install-v1+json, application/json;q=0.9",
+    };
     if (npmToken) {
       registryHeaders.Authorization = `Bearer ${npmToken}`;
+      abbreviatedHeaders.Authorization = `Bearer ${npmToken}`;
     }
 
-    // Fetch 30-day downloads, week/day points, and package metadata in ONE parallel wave
+    // Fetch 30-day downloads, week/day points, and slim package metadata in ONE parallel wave
     const [rangeRes, weekRes, dayRes, metaRes] = await Promise.all([
       fetch(`https://api.npmjs.org/downloads/range/last-month/${encodedPkg}`, {
         headers: registryHeaders,
@@ -93,7 +98,7 @@ export async function fetchNpmStats(
         next: { revalidate: 3600 },
       }).catch(() => null),
       fetch(`https://registry.npmjs.org/${encodedPkg}`, {
-        headers: registryHeaders,
+        headers: abbreviatedHeaders,
         next: { revalidate: 86400 },
       }).catch(() => null),
     ]);
@@ -209,4 +214,67 @@ export async function fetchNpmOrgPackages(
   } catch {
     return [];
   }
+}
+
+/**
+ * Bulk-fetch npm download totals for many packages cleanly.
+ * api.npmjs.org bulk comma queries reject @scoped/pkg names with HTTP 400, so scoped
+ * packages are partitioned into isolated single requests while unscoped packages batch up to 128.
+ */
+export async function fetchNpmDownloadsBulk(
+  packageNames: string[],
+  period: "last-day" | "last-week" | "last-month" = "last-week"
+): Promise<Record<string, number>> {
+  const results: Record<string, number> = {};
+  const unique = Array.from(new Set(packageNames.map((p) => p.trim()).filter(Boolean)));
+  if (unique.length === 0) return results;
+
+  const scoped = unique.filter((p) => p.startsWith("@"));
+  const unscoped = unique.filter((p) => !p.startsWith("@"));
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < unscoped.length; i += 128) {
+    chunks.push(unscoped.slice(i, i + 128));
+  }
+
+  await Promise.all([
+    ...scoped.map(async (pkg) => {
+      const encoded = `@${encodeURIComponent(pkg.slice(1)).replace(/%2F/i, "/")}`;
+      const res = await fetch(`https://api.npmjs.org/downloads/point/${period}/${encoded}`, {
+        headers: { Accept: "application/json" },
+        next: { revalidate: 3600 },
+      }).catch(() => null);
+      if (res?.ok) {
+        const json = (await res.json()) as { downloads?: number };
+        results[pkg] = Number(json.downloads || 0);
+      }
+    }),
+    ...chunks.map(async (chunk) => {
+      if (chunk.length === 1) {
+        const pkg = chunk[0];
+        const res = await fetch(
+          `https://api.npmjs.org/downloads/point/${period}/${encodeURIComponent(pkg)}`,
+          { headers: { Accept: "application/json" }, next: { revalidate: 3600 } }
+        ).catch(() => null);
+        if (res?.ok) {
+          const json = (await res.json()) as { downloads?: number };
+          results[pkg] = Number(json.downloads || 0);
+        }
+        return;
+      }
+      const joined = chunk.map((p) => encodeURIComponent(p)).join(",");
+      const res = await fetch(`https://api.npmjs.org/downloads/point/${period}/${joined}`, {
+        headers: { Accept: "application/json" },
+        next: { revalidate: 3600 },
+      }).catch(() => null);
+      if (res?.ok) {
+        const json = (await res.json()) as Record<string, { downloads?: number } | null>;
+        for (const pkg of chunk) {
+          if (json[pkg]) results[pkg] = Number(json[pkg]?.downloads || 0);
+        }
+      }
+    }),
+  ]);
+
+  return results;
 }

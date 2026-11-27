@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, createContext, useContext, useMemo, useCallback } from "react";
 import Link from "next/link";
+import { getProjectStorageKey } from "@/lib/storage-keys";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
@@ -182,9 +183,9 @@ export function WorkspaceShell({
     if (isInsideShell) return;
     const frame = requestAnimationFrame(() => {
       try {
-        const savedTheme = localStorage.getItem(`devpulse_theme_${currentProject.id}`);
-        const savedCss = localStorage.getItem(`devpulse_css_${currentProject.id}`);
-        const savedPrefs = localStorage.getItem(`devpulse_prefs_${currentProject.id}`);
+        const savedTheme = localStorage.getItem(getProjectStorageKey("theme", currentProject.id, isDemo));
+        const savedCss = localStorage.getItem(getProjectStorageKey("css", currentProject.id, isDemo));
+        const savedPrefs = localStorage.getItem(getProjectStorageKey("prefs", currentProject.id, isDemo));
         setLiveTheme(normalizeThemeId(savedTheme || currentProject.theme));
         setLiveCustomCss(savedCss !== null ? savedCss : currentProject.customCss || "");
         if (savedPrefs) {
@@ -516,9 +517,38 @@ export function WorkspaceShell({
 
             {isDemo && (
               <span className="hidden xl:inline-flex shrink-0 whitespace-nowrap text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                Demo Preview
+                Demo Preview · Snapshot Seed
               </span>
             )}
+            <div
+              className="hidden lg:inline-flex items-center rounded-lg bg-zinc-900 border border-zinc-800 p-0.5 shrink-0"
+              role="group"
+              aria-label="Global time range filter"
+            >
+              {(["7d", "30d", "90d", "1y"] as const).map((r) => {
+                const activeRange = searchParams.get("range") || "30d";
+                const active = activeRange === r;
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      const next = new URLSearchParams(searchParams.toString());
+                      next.set("range", r);
+                      router.replace(`${pathname}?${next.toString()}`);
+                    }}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-mono tabular-nums transition ${
+                      active
+                        ? "bg-indigo-600 text-white font-semibold"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    {r}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">

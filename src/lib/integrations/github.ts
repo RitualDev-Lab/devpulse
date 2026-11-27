@@ -62,6 +62,8 @@ export interface GitHubRepoStats {
   }>;
 }
 
+const githubRepoEtagCache = new Map<string, { etag: string; data: any }>();
+
 export async function fetchGitHubRepoStats(
   repoFullName: string,
   userToken?: string
@@ -86,10 +88,16 @@ export async function fetchGitHubRepoStats(
       headers.Authorization = `Basic ${basic}`;
     }
 
+    const cacheKey = `${owner}/${repo}`.toLowerCase();
+    const cachedEntry = githubRepoEtagCache.get(cacheKey);
+    const repoHeaders = cachedEntry?.etag
+      ? { ...headers, "If-None-Match": cachedEntry.etag }
+      : headers;
+
     // Parallelize all GitHub API requests instead of 6 sequential roundtrips
     const [repoRes, prsRes, relRes, issuesRes, depRes, clonesRes, viewsRes] = await Promise.all([
       fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-        headers,
+        headers: repoHeaders,
         next: { revalidate: 1800 },
       }).catch(() => null),
       fetch(`https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=30`, {
@@ -122,12 +130,25 @@ export async function fetchGitHubRepoStats(
         : Promise.resolve(null),
     ]);
 
-    if (!repoRes || !repoRes.ok) {
+    const remainingHeader = repoRes?.headers?.get("x-ratelimit-remaining");
+    if (remainingHeader !== null && Number(remainingHeader) <= 5) {
+      console.warn(`GitHub API rate limit low (${remainingHeader} remaining) for ${repoFullName}`);
+    }
+
+    let repoData: any = null;
+    if (repoRes?.status === 304 && cachedEntry) {
+      repoData = cachedEntry.data;
+    } else if (repoRes && repoRes.ok) {
+      repoData = await repoRes.json();
+      const etag = repoRes.headers?.get("etag");
+      if (etag) {
+        githubRepoEtagCache.set(cacheKey, { etag, data: repoData });
+      }
+    } else {
       console.warn(`GitHub API returned ${repoRes?.status ?? "network_err"} for ${repoFullName}`);
       return null;
     }
 
-    const repoData = await repoRes.json();
     const totalOpen = repoData.open_issues_count || 0;
 
     let openPrCount = 0;

@@ -149,8 +149,8 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                   </p>
                 </div>
               </div>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-48 min-w-0">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 420, height: 192 }}>
                   <AreaChart data={npmDaily}>
                     <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
                     <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={40} />
@@ -201,9 +201,9 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                 })}
               </div>
             </div>
-            <div className="h-48">
+            <div className="h-48 min-w-0">
               {(initialData.packageHistory || []).length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 420, height: 192 }}>
                   <AreaChart
                     data={initialData.packageHistory || []}
                     margin={{ top: 8, right: 12, left: 8, bottom: 0 }}
