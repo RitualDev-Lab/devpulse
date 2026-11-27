@@ -63,6 +63,12 @@ export interface GitHubRepoStats {
 }
 
 const githubRepoEtagCache = new Map<string, { etag: string; data: any }>();
+const githubRateLimitResetAt = new Map<string, number>();
+
+export function _clearGitHubClientCacheForTest() {
+  githubRepoEtagCache.clear();
+  githubRateLimitResetAt.clear();
+}
 
 export async function fetchGitHubRepoStats(
   repoFullName: string,
@@ -89,7 +95,11 @@ export async function fetchGitHubRepoStats(
     }
 
     const cacheKey = `${owner}/${repo}`.toLowerCase();
+    const cooldownUntil = githubRateLimitResetAt.get(cacheKey);
     const cachedEntry = githubRepoEtagCache.get(cacheKey);
+    if (cooldownUntil && Date.now() < cooldownUntil) {
+      if (!cachedEntry) return null;
+    }
     const repoHeaders = cachedEntry?.etag
       ? { ...headers, "If-None-Match": cachedEntry.etag }
       : headers;
@@ -133,6 +143,18 @@ export async function fetchGitHubRepoStats(
     const remainingHeader = repoRes?.headers?.get("x-ratelimit-remaining");
     if (remainingHeader !== null && Number(remainingHeader) <= 5) {
       console.warn(`GitHub API rate limit low (${remainingHeader} remaining) for ${repoFullName}`);
+    }
+
+    if (repoRes && (repoRes.status === 403 || repoRes.status === 429)) {
+      const retryAfterSec = Number(repoRes.headers?.get("retry-after") || "0");
+      const resetEpochSec = Number(repoRes.headers?.get("x-ratelimit-reset") || "0");
+      const nextResetMs =
+        retryAfterSec > 0
+          ? Date.now() + retryAfterSec * 1000
+          : resetEpochSec > 0
+          ? resetEpochSec * 1000
+          : Date.now() + 60_000;
+      githubRateLimitResetAt.set(cacheKey, nextResetMs);
     }
 
     let repoData: any = null;
@@ -254,9 +276,10 @@ export async function fetchGitHubRepoStats(
       }
     }
 
+    const hasPushAccess = repoData.permissions?.push !== false;
     let trafficClones: GitHubRepoStats["trafficClones"];
     let trafficViews: GitHubRepoStats["trafficViews"];
-    if (userToken) {
+    if (userToken && hasPushAccess) {
       if (clonesRes?.ok) {
         const c = await clonesRes.json().catch(() => null);
         if (c) {
