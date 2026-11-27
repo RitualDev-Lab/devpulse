@@ -24,7 +24,7 @@ export const metadata = {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-indigo-500/30 selection:text-white">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-x-hidden selection:bg-indigo-500/30 selection:text-white">
       {/* Navigation Bar */}
       <header className="w-full border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -139,8 +139,8 @@ export default function HomePage() {
       </section>
 
       {/* Live Interactive UI Showcase Preview */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-20 relative z-10">
-        <div className="p-1 rounded-3xl bg-gradient-to-b from-zinc-700/50 via-zinc-800/20 to-zinc-900/50 shadow-2xl">
+      <section className="max-w-7xl w-full mx-auto px-4 sm:px-6 pb-20 relative z-10 min-w-0">
+        <div className="p-1 rounded-3xl bg-gradient-to-b from-zinc-700/50 via-zinc-800/20 to-zinc-900/50 shadow-2xl overflow-hidden">
           <div className="rounded-[22px] bg-zinc-950 p-6 sm:p-8 space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-zinc-800/80">
               <div className="flex items-center gap-2.5">
