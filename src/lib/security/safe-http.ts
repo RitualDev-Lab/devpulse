@@ -19,6 +19,14 @@ export function _resetWebhookCircuitsForTest() {
   hostCircuitMap.clear();
 }
 
+export function _expireWebhookCircuitForTest(hostname: string) {
+  const key = hostname.toLowerCase();
+  const prev = hostCircuitMap.get(key);
+  if (prev) {
+    hostCircuitMap.set(key, { ...prev, openUntilMs: Date.now() - 1 });
+  }
+}
+
 export interface SafeWebhookPostOptions {
   url: string;
   body: unknown;

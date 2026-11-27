@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { validateResolvedPublicUrl } from "../src/lib/security/ssrf";
-import { safeWebhookPost, _resetWebhookCircuitsForTest } from "../src/lib/security/safe-http";
+import {
+  safeWebhookPost,
+  _resetWebhookCircuitsForTest,
+  _expireWebhookCircuitForTest,
+} from "../src/lib/security/safe-http";
 
 test("validateResolvedPublicUrl blocks DNS rebinding to private or loopback IPs", async () => {
   const blocked = await validateResolvedPublicUrl("https://rebind.attacker.example/hook", {
@@ -61,6 +65,34 @@ test("safeWebhookPost enforces redirect error, timeout abort, and per-host circu
     assert.equal(tripped.ok, false);
     assert.equal(tripped.circuitOpen, true);
     assert.equal(fetchCalls, 3);
+
+    // After cooldown expires, circuit recovers and closes on healthy 200 response
+    _expireWebhookCircuitForTest("hooks.slow-destination.example");
+    globalThis.fetch = (async () => {
+      fetchCalls++;
+      return new Response("ok", { status: 200 });
+    }) as typeof fetch;
+
+    const recovered = await safeWebhookPost({
+      url: "https://hooks.slow-destination.example/ingest",
+      body: { ok: true },
+      maxRetries: 0,
+      dnsResolver: async () => ["93.184.216.34"],
+    });
+    assert.equal(recovered.ok, true);
+    assert.equal(fetchCalls, 4);
+
+    // Timeout / AbortError handling
+    globalThis.fetch = (async () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    }) as typeof fetch;
+    const timedOut = await safeWebhookPost({
+      url: "https://timeout.destination.example/ingest",
+      body: { ok: true },
+      maxRetries: 0,
+      dnsResolver: async () => ["93.184.216.34"],
+    });
+    assert.equal(timedOut.ok, false);
   } finally {
     globalThis.fetch = originalFetch;
     _resetWebhookCircuitsForTest();

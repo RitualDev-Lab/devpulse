@@ -526,50 +526,67 @@ export async function POST(req: NextRequest) {
       project.teamsWebhookUrl
     );
 
+    const notificationTasks: Promise<unknown>[] = [];
+
     if (issueSummary.shouldAlert && hasWebhooks) {
-      const webhookConfig = await resolveDecryptedWebhookConfig(project);
-      await dispatchCrashAlerts(
-        webhookConfig,
-        {
-          eventId,
-          fingerprint: issueSummary.fingerprint,
-          occurrenceCount: issueSummary.occurrenceCount,
-          projectName: project.name,
-          projectSlug: project.slug,
-          errorName:
-            issueSummary.occurrenceCount > 1
-              ? `${errorName} (×${issueSummary.occurrenceCount})`
-              : errorName,
-          message,
-          runtime,
-          version,
-          os,
-          environment,
-          reporterEmail,
-          r2ObjectKey,
-          payloadSizeBytes: payloadBytes,
-          dashboardUrl: `${PUBLIC_APP_URL}/dashboard?project=${project.slug}`,
-        }
-      ).catch((err) => console.error("Webhook alert error:", err));
+      notificationTasks.push(
+        resolveDecryptedWebhookConfig(project)
+          .then((webhookConfig) =>
+            dispatchCrashAlerts(webhookConfig, {
+              eventId,
+              fingerprint: issueSummary.fingerprint,
+              occurrenceCount: issueSummary.occurrenceCount,
+              projectName: project.name,
+              projectSlug: project.slug,
+              errorName:
+                issueSummary.occurrenceCount > 1
+                  ? `${errorName} (×${issueSummary.occurrenceCount})`
+                  : errorName,
+              message,
+              runtime,
+              version,
+              os,
+              environment,
+              reporterEmail,
+              r2ObjectKey,
+              payloadSizeBytes: payloadBytes,
+              dashboardUrl: `${PUBLIC_APP_URL}/dashboard?project=${project.slug}`,
+            })
+          )
+          .catch((err) => console.error("Webhook alert error:", err))
+      );
     }
 
     if (issueSummary.shouldAlert && project.notificationEmail) {
-      const emailKey = await decryptSecret(project.emailApiKeyEncrypted);
-      await sendTransactionalEmail({
-        to: project.notificationEmail,
-        subject: `[DevPulse Fatal Crash] ${errorName} in ${project.name} (${version || runtime})`,
-        html: buildFatalCrashEmailHtml({
-          projectName: project.name,
-          errorName,
-          message,
-          runtime,
-          version,
-          environment,
-          dashboardUrl: `${PUBLIC_APP_URL}/dashboard?project=${project.slug}`,
-        }),
-        provider: project.emailProvider,
-        apiKey: emailKey,
-      }).catch((err) => console.error("Email alert error:", err));
+      notificationTasks.push(
+        decryptSecret(project.emailApiKeyEncrypted)
+          .then((emailKey) =>
+            sendTransactionalEmail({
+              to: project.notificationEmail!,
+              subject: `[DevPulse Fatal Crash] ${errorName} in ${project.name} (${version || runtime})`,
+              html: buildFatalCrashEmailHtml({
+                projectName: project.name,
+                errorName,
+                message,
+                runtime,
+                version,
+                environment,
+                dashboardUrl: `${PUBLIC_APP_URL}/dashboard?project=${project.slug}`,
+              }),
+              provider: project.emailProvider,
+              apiKey: emailKey,
+            })
+          )
+          .catch((err) => console.error("Email alert error:", err))
+      );
+    }
+
+    if (notificationTasks.length > 0) {
+      // Bound crash alert dispatch strictly under 3.5s so slow webhooks never stall ingestion responses
+      await Promise.race([
+        Promise.allSettled(notificationTasks),
+        new Promise((resolve) => setTimeout(resolve, 3500)),
+      ]);
     }
 
     // Run Smart Alert Rules & Z-Score Anomaly Detector + Feature Flag Crash Auto-Rollback + GitHub Auto-Issue Escalation
