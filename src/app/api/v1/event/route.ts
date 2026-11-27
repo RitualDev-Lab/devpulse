@@ -102,8 +102,8 @@ export async function GET(req: NextRequest) {
     }
 
     const conditions = [eq(errorEvents.projectId, targetProject.id)];
-    if (["unresolved", "resolved", "ignored"].includes(statusParam)) {
-      conditions.push(eq(errorEvents.status, statusParam as "unresolved" | "resolved" | "ignored"));
+    if (["unresolved", "resolved", "ignored", "pending_release"].includes(statusParam)) {
+      conditions.push(eq(errorEvents.status, statusParam as "unresolved" | "resolved" | "ignored" | "pending_release"));
     }
     if (sinceParam) {
       conditions.push(gt(errorEvents.createdAt, sinceParam));
@@ -659,7 +659,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const { eventId, projectId, status } = body;
 
-    if (!eventId || !projectId || !["unresolved", "resolved", "ignored"].includes(status)) {
+    if (!eventId || !projectId || !["unresolved", "resolved", "ignored", "pending_release"].includes(status)) {
       return NextResponse.json({ error: "Invalid eventId, projectId, or status" }, { status: 400 });
     }
 

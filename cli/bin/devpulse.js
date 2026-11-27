@@ -303,6 +303,9 @@ switch (command) {
   case "upload-sourcemaps":
     handleUploadSourcemaps(args.slice(1));
     break;
+  case "sourcemaps":
+    handleUploadSourcemaps(args[1] === "upload" ? args.slice(2) : args.slice(1));
+    break;
   case "help":
   case "--help":
   case "-h":

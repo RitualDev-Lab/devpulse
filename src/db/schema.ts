@@ -174,7 +174,7 @@ export const errorEvents = sqliteTable("error_events", {
   version: text("version"),
   os: text("os"),
   environment: text("environment").default("production"), // 'production', 'development', etc.
-  status: text("status", { enum: ["unresolved", "resolved", "ignored"] }).default("unresolved").notNull(),
+  status: text("status", { enum: ["unresolved", "resolved", "ignored", "pending_release"] }).default("unresolved").notNull(),
   attachmentUrl: text("attachment_url"), // Cloudflare R2 or BYOS S3 bucket link / object key
   r2ObjectKey: text("r2_object_key"), // Key in R2 / BYOS for heavy 100KB+ stack traces & terminal logs
   payloadSizeBytes: integer("payload_size_bytes").default(0).notNull(),
@@ -763,7 +763,7 @@ export const crashIssues = sqliteTable("crash_issues", {
   errorName: text("error_name").notNull(),
   topFrame: text("top_frame"),
   occurrenceCount: integer("occurrence_count").default(1).notNull(),
-  status: text("status", { enum: ["unresolved", "resolved", "ignored"] }).default("unresolved").notNull(),
+  status: text("status", { enum: ["unresolved", "resolved", "ignored", "pending_release"] }).default("unresolved").notNull(),
   firstSeenAt: text("first_seen_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   lastSeenAt: text("last_seen_at").default(sql`(CURRENT_TIMESTAMP)`).notNull(),
   lastAlertedAt: text("last_alerted_at"),

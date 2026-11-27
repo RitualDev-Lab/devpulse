@@ -44,7 +44,7 @@ export interface ErrorEventItem {
   version?: string | null;
   os?: string | null;
   environment?: string | null;
-  status: "unresolved" | "resolved" | "ignored";
+  status: "unresolved" | "resolved" | "ignored" | "pending_release";
   attachmentUrl?: string | null;
   r2ObjectKey?: string | null;
   payloadSizeBytes?: number;
@@ -83,7 +83,7 @@ interface IssueGroup {
   aiGroupTitle?: string | null;
   latestMessage: string;
   runtime: string;
-  status: "unresolved" | "resolved" | "ignored";
+  status: "unresolved" | "resolved" | "ignored" | "pending_release";
   count: number;
   totalAffectedUsers: number;
   totalLostRevenueCents: number;
@@ -130,7 +130,7 @@ function groupErrorsIntoIssues(items: ErrorEventItem[]): IssueGroup[] {
     const latest = sorted[0];
     const earliest = sorted[sorted.length - 1];
     const hasUnresolved = sorted.some((e) => e.status === "unresolved");
-    const status: "unresolved" | "resolved" | "ignored" = hasUnresolved
+    const status: "unresolved" | "resolved" | "ignored" | "pending_release" = hasUnresolved
       ? "unresolved"
       : sorted[0].status;
 
@@ -180,7 +180,7 @@ export function ErrorStreamCard({
   onClearCountryFilter,
 }: ErrorStreamCardProps) {
   const [errors, setErrors] = useState<ErrorEventItem[]>(initialErrors);
-  const [statusFilter, setStatusFilter] = useState<"all" | "unresolved" | "resolved" | "ignored">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "unresolved" | "resolved" | "ignored" | "pending_release">("all");
   const [platformFilter, setPlatformFilter] = useState<"all" | "web_backend" | "mobile">("all");
   const [sortMode, setSortMode] = useState<"impact" | "recent" | "frequency" | "regressions">("impact");
   const [analyzingAi, setAnalyzingAi] = useState(false);
@@ -531,7 +531,7 @@ export function ErrorStreamCard({
 
   const updateIssueStatus = async (
     eventIds: string[],
-    nextStatus: "unresolved" | "resolved" | "ignored",
+    nextStatus: "unresolved" | "resolved" | "ignored" | "pending_release",
     e?: React.MouseEvent
   ) => {
     if (e) e.stopPropagation();
@@ -679,7 +679,7 @@ export function ErrorStreamCard({
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex flex-wrap items-center gap-1.5">
               <div className="flex items-center gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 w-fit text-[11px]">
-                {(["all", "unresolved", "resolved", "ignored"] as const).map((tab) => (
+                {(["all", "unresolved", "pending_release", "resolved", "ignored"] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -690,7 +690,7 @@ export function ErrorStreamCard({
                         : "text-zinc-400 hover:text-white"
                     }`}
                   >
-                    {tab}
+                    {tab === "pending_release" ? "Pending Release" : tab}
                   </button>
                 ))}
               </div>
@@ -941,19 +941,36 @@ export function ErrorStreamCard({
 
               <div className="flex items-center justify-end gap-1.5 flex-wrap shrink-0">
                 {selectedGroup.status !== "resolved" ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateIssueStatus(
-                        selectedGroup.events.map((ev) => ev.id),
-                        "resolved"
-                      )
-                    }
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Resolve</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateIssueStatus(
+                          selectedGroup.events.map((ev) => ev.id),
+                          "resolved"
+                        )
+                      }
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Resolve</span>
+                    </button>
+                    {selectedGroup.status !== "pending_release" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateIssueStatus(
+                            selectedGroup.events.map((ev) => ev.id),
+                            "pending_release"
+                          )
+                        }
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-semibold transition"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Pending Release</span>
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <button
                     type="button"

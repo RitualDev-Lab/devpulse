@@ -1,0 +1,13 @@
+# DevPulse Opt-In Service Ownership & Production Readiness Manifest
+service: devpulse
+tier: tier-1
+owner: security@ritualdev.in
+minOpenSsfScore: 7.5
+maxCriticalCves: 0
+minCrashFreeRate: 99.5
+requireSlsaProvenance: true
+ecosystems:
+  - npm:@ritualdev/pulse
+  - pypi:devpulse-sdk
+  - crates:devpulse-rs
+  - go:github.com/ritualdev-lab/devpulse-go
