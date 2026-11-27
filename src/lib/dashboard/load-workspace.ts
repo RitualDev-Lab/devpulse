@@ -42,6 +42,7 @@ import type { ProjectSummary } from "@/components/dashboard/ProjectWorkspaceSwit
 import type { DashboardData } from "@/components/dashboard/DragDropGrid";
 import { DEMO_PROJECT_ID, isPublicDemoProject } from "@/lib/security/demo-project";
 import { attachSessionShare } from "@/lib/metrics/daily-delta";
+import { securitySummaryKey } from "@/lib/integrations/registry-adapter";
 
 export interface LoadedWorkspaceReady {
   status: "ready";
@@ -435,6 +436,17 @@ export async function loadDashboardWorkspace(
 
   const errors = (rawErrors || []).map((err, idx) => {
     let resolvedBreadcrumbs = err.breadcrumbsJson;
+    let resolvedStackTrace = err.stackTrace;
+    if (isDemoView && idx === 0 && !resolvedStackTrace) {
+      resolvedStackTrace = [
+        `${err.errorName}: ${err.message}`,
+        `    at processPaymentQuote (src/app/api/billing/quote/route.ts:48:15)`,
+        `    at checkoutHandler (src/components/checkout/CheckoutForm.tsx:112:9)`,
+        `    at Object.applyMiddleware (node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:18:4210)`,
+        `    at node_modules/next/dist/server/lib/router-server.js:312:12`,
+        `    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)`,
+      ].join("\n");
+    }
     if (isDemoView && idx === 0 && !resolvedBreadcrumbs) {
       const baseMs = Date.parse(err.createdAt) || Date.now();
       resolvedBreadcrumbs = JSON.stringify([
@@ -479,7 +491,7 @@ export async function loadDashboardWorkspace(
       id: err.id,
       errorName: err.errorName,
       message: err.message,
-      stackTrace: err.stackTrace,
+      stackTrace: resolvedStackTrace,
       runtime: err.runtime,
       version: err.version,
       os: err.os,
@@ -618,27 +630,61 @@ export async function loadDashboardWorkspace(
     packageSecurity: (() => {
       if (!isDemoView) return packageSecurity;
       const seeded = { ...(packageSecurity || {}) };
-      if (activeProject.npmPackage && !seeded[`npm:${activeProject.npmPackage}`]) {
-        seeded[`npm:${activeProject.npmPackage}`] = {
-          system: "NPM",
-          packageName: activeProject.npmPackage,
-          defaultVersion: npmStats?.latestVersion || "1.0.0",
-          advisoryCount: 0,
-          licenses: [npmStats?.license || "MIT"],
-          scorecardOverall: 8.4,
-          sourceRepo: "github.com/RitualDev-Lab/devpulse",
-        };
+      if (activeProject.npmPackage) {
+        const k = securitySummaryKey("NPM", activeProject.npmPackage);
+        if (!seeded[k]) {
+          seeded[k] = {
+            system: "NPM",
+            packageName: activeProject.npmPackage,
+            defaultVersion: npmStats?.latestVersion || "1.0.0",
+            advisoryCount: 0,
+            licenses: [npmStats?.license || "MIT"],
+            scorecardOverall: 8.4,
+            sourceRepo: "github.com/RitualDev-Lab/devpulse",
+          };
+        }
       }
-      if (activeProject.pypiPackage && !seeded[`pypi:${activeProject.pypiPackage}`]) {
-        seeded[`pypi:${activeProject.pypiPackage}`] = {
-          system: "PYPI",
-          packageName: activeProject.pypiPackage,
-          defaultVersion: pypiStats?.latestVersion || "1.0.0",
-          advisoryCount: 0,
-          licenses: ["Apache-2.0"],
-          scorecardOverall: 7.9,
-          sourceRepo: "github.com/RitualDev-Lab/devpulse",
-        };
+      if (activeProject.pypiPackage) {
+        const k = securitySummaryKey("PYPI", activeProject.pypiPackage);
+        if (!seeded[k]) {
+          seeded[k] = {
+            system: "PYPI",
+            packageName: activeProject.pypiPackage,
+            defaultVersion: pypiStats?.latestVersion || "1.0.0",
+            advisoryCount: 0,
+            licenses: ["Apache-2.0"],
+            scorecardOverall: 7.9,
+            sourceRepo: "github.com/RitualDev-Lab/devpulse",
+          };
+        }
+      }
+      if (activeProject.rustCrate) {
+        const k = securitySummaryKey("CARGO", activeProject.rustCrate);
+        if (!seeded[k]) {
+          seeded[k] = {
+            system: "CARGO",
+            packageName: activeProject.rustCrate,
+            defaultVersion: rustStats?.maxVersion || "0.9.1",
+            advisoryCount: 0,
+            licenses: ["MIT"],
+            scorecardOverall: 8.1,
+            sourceRepo: "github.com/RitualDev-Lab/devpulse",
+          };
+        }
+      }
+      if (activeProject.goModule) {
+        const k = securitySummaryKey("GO", activeProject.goModule);
+        if (!seeded[k]) {
+          seeded[k] = {
+            system: "GO",
+            packageName: activeProject.goModule,
+            defaultVersion: goStats?.latestVersion || "v0.4.0",
+            advisoryCount: 0,
+            licenses: ["BSD-3-Clause"],
+            scorecardOverall: 8.0,
+            sourceRepo: "github.com/RitualDev-Lab/devpulse",
+          };
+        }
       }
       return seeded;
     })(),

@@ -130,7 +130,7 @@ export function FeedbackFullView({ workspace }: { workspace: LoadedWorkspaceRead
       {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
       <section className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3">
         <h2 className="text-sm font-bold text-white">Public feedback board</h2>
-        <FeedbackBoardClient projectSlug={project.slug} projectName={project.name} />
+        <FeedbackBoardClient projectSlug={project.slug} projectName={project.name} isDemo={isDemo} />
       </section>
       <section className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3">
         <h2 className="text-sm font-bold text-white">Published releases</h2>

@@ -41,14 +41,44 @@ export function FeedbackBoardClient({
   projectSlug,
   projectName,
   compact = false,
+  isDemo = false,
 }: {
   projectSlug: string;
   projectName: string;
   compact?: boolean;
+  isDemo?: boolean;
 }) {
-  const [items, setItems] = useState<FeatureRequestItem[]>([]);
+  const DEMO_PUBLIC_ITEMS: FeatureRequestItem[] = [
+    {
+      id: "demo_pub_fb_1",
+      title: "Native OpenTelemetry gRPC Collector Endpoint",
+      description: "Accept protobuf OTLP/gRPC spans alongside HTTP JSON so Go & Rust microservices need zero sidecars.",
+      category: "integration",
+      status: "shipped",
+      targetVersion: "v1.4.0",
+      releaseUrl: "https://github.com/RitualDev-Lab/devpulse/releases",
+      voteCount: 42,
+      authorName: "ritualdev-lab",
+      viewerVoted: false,
+      createdAt: "2026-11-18T00:00:00Z",
+    },
+    {
+      id: "demo_pub_fb_2",
+      title: "GitLab Self-Hosted Merge Request Bot Comments",
+      description: "Post automated CWV deltas and new CVEs directly onto GitLab MR discussions.",
+      category: "feature",
+      status: "in_progress",
+      targetVersion: "v1.5.0",
+      releaseUrl: null,
+      voteCount: 31,
+      authorName: "oss-maintainer",
+      viewerVoted: true,
+      createdAt: "2026-11-22T00:00:00Z",
+    },
+  ];
+  const [items, setItems] = useState<FeatureRequestItem[]>(isDemo ? DEMO_PUBLIC_ITEMS : []);
   const [releases, setReleases] = useState<Array<{ version: string; url: string | null }>>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isDemo);
   const [showForm, setShowForm] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
@@ -61,6 +91,11 @@ export function FeedbackBoardClient({
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isDemo) {
+      setItems(DEMO_PUBLIC_ITEMS);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     void fetch(`/api/v1/feedback?projectSlug=${encodeURIComponent(projectSlug)}`)
       .then(async (res) => {
@@ -69,7 +104,7 @@ export function FeedbackBoardClient({
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectSlug]);
+  }, [projectSlug, isDemo]);
 
   const handleToggleVote = async (featureId: string) => {
     // Optimistic update

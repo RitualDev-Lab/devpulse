@@ -515,7 +515,7 @@ export function WorkspaceShell({
             />
 
             {isDemo && (
-              <span className="hidden sm:inline-flex shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <span className="hidden xl:inline-flex shrink-0 whitespace-nowrap text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 Demo Preview
               </span>
             )}

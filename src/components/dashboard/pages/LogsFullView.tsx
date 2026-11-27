@@ -163,6 +163,13 @@ export function LogsFullView({ workspace }: { workspace: LoadedWorkspaceReady })
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/dashboard/crashes?project=${encodeURIComponent(project.slug)}${isDemo ? "&demo=1" : ""}#smart-alerts`}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-amber-300 transition"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>Create Alert Rule</span>
+            </Link>
             <button
               type="button"
               onClick={() => setLiveTail((prev) => !prev)}

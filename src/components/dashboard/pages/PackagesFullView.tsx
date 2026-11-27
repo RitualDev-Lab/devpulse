@@ -311,8 +311,8 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
                           {rel.crashFreeRate === null ? "No session data" : `${rel.crashFreeRate}%`}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-zinc-400">
-                        {new Date(rel.releasedAt).toLocaleDateString()}
+                      <td className="px-4 py-2.5 text-zinc-400 font-mono">
+                        {rel.releasedAt.slice(0, 10)}
                       </td>
                     </tr>
                   ))
