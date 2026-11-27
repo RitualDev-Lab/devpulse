@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { PUBLIC_APP_URL } from "@/lib/config/app-url";
+import { loadPublicShowcasePreview } from "@/lib/dashboard/public-preview";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "DevPulse - Unified Developer Headquarters & Telemetry Engine",
@@ -22,7 +25,8 @@ export const metadata = {
     "One mission control for every star, download, crash, and dollar. Unify GitHub, npm, PyPI, VS Code, MCP, crash telemetry, and Stripe/Dodo revenue.",
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const preview = await loadPublicShowcasePreview();
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-x-hidden selection:bg-indigo-500/30 selection:text-white">
       {/* Navigation Bar */}
@@ -151,54 +155,76 @@ export default function HomePage() {
                 <span className="ml-2 font-mono text-xs text-zinc-400">{PORTAL_DOMAIN}/dashboard</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
-                  ● Live Cloudflare Edge Synced
+                <span
+                  data-preview-mode={preview.mode}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                    preview.mode === "live_demo"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                  }`}
+                >
+                  {preview.mode === "live_demo" ? "● " : ""}
+                  {preview.badgeLabel}
                 </span>
-                <span className="text-xs font-semibold text-zinc-400">Ritual-Core CLI</span>
+                <span className="text-xs font-semibold text-zinc-400">{preview.workspaceName}</span>
               </div>
             </div>
 
-            {/* Mock Dashboard Grid Preview */}
+            {/* Demo / Illustrative Workspace Grid Preview */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {/* GitHub Card Preview */}
               <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">GitHub Repository</span>
-                  <span className="text-xs text-indigo-400 font-mono">ritualdev-lab/core</span>
+                  <span className="text-xs text-indigo-400 font-mono">{preview.repoSlug}</span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-extrabold text-white">1,420</span>
+                  <span className="text-3xl font-extrabold text-white tabular-nums">
+                    {preview.stars.toLocaleString("en-US")}
+                  </span>
                   <span className="text-xs font-semibold text-amber-400">★ Stars</span>
                 </div>
-                <p className="text-xs text-zinc-500">188 forks &bull; 14 open issues &bull; 99.8% health</p>
+                <p className="text-xs text-zinc-500 tabular-nums">
+                  {preview.forks.toLocaleString("en-US")} forks &bull; {preview.openIssues.toLocaleString("en-US")} open issues
+                </p>
               </div>
 
               {/* Package Downloads Card Preview */}
               <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Multi-Registry Downloads</span>
-                  <span className="text-xs text-cyan-400 font-mono">npm &bull; PyPI &bull; VSCode</span>
+                  <span className="text-xs text-cyan-400 font-mono">npm &bull; PyPI &bull; Docker</span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-extrabold text-white">84,320</span>
-                  <span className="text-xs font-semibold text-emerald-400">+18% this month</span>
+                  <span className="text-3xl font-extrabold text-white tabular-nums">
+                    {preview.monthlyDownloads.toLocaleString("en-US")}
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-400">30d installs</span>
                 </div>
-                <p className="text-xs text-zinc-500">42.1k npm &bull; 31.8k PyPI &bull; 10.4k VS Code</p>
+                <p className="text-xs text-zinc-500 tabular-nums">
+                  {preview.npmMonthly.toLocaleString("en-US")} npm &bull; {preview.pypiMonthly.toLocaleString("en-US")} PyPI &bull; {preview.dockerPulls.toLocaleString("en-US")} Docker pulls
+                </p>
               </div>
 
               {/* Revenue Card Preview */}
               <div id="revenue" className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/30 space-y-3 bg-gradient-to-br from-emerald-950/20 via-zinc-900/80 to-zinc-900/80">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">MRR & Monetization</span>
+                  <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">MRR &amp; Monetization</span>
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     Stripe + Dodo
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-extrabold text-emerald-400">$2,840</span>
-                  <span className="text-xs text-zinc-400 font-medium">Monthly Recurring</span>
+                  <span className="text-3xl font-extrabold text-emerald-400 tabular-nums">
+                    ${preview.mrrDollars.toLocaleString("en-US")}
+                  </span>
+                  <span className="text-xs text-zinc-400 font-medium">
+                    {preview.mrrDollars > 0 ? "Monthly Recurring" : "Demo Sandbox Ready"}
+                  </span>
                 </div>
-                <p className="text-xs text-zinc-500">142 active subscribers &bull; $3,410 30d volume</p>
+                <p className="text-xs text-zinc-500 tabular-nums">
+                  {preview.activeSubscribers.toLocaleString("en-US")} active subscribers &bull; ${preview.revenue30dDollars.toLocaleString("en-US")} 30d volume
+                </p>
               </div>
 
               {/* Crash Stream Preview (2 cols) */}
@@ -206,16 +232,18 @@ export default function HomePage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                    <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Live Crash Telemetry & Alerts</span>
+                    <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Live Crash Telemetry &amp; Alerts</span>
                   </div>
                   <span className="text-xs text-zinc-500 font-mono">Discord &bull; Telegram &bull; Slack</span>
                 </div>
                 <div className="p-3 rounded-xl bg-zinc-950 border border-red-500/20 flex items-center justify-between gap-3 text-xs">
-                  <div className="space-y-0.5">
-                    <span className="font-semibold text-red-400">ConnectionTimeout: Failed to reach upstream RPC</span>
-                    <p className="text-zinc-500 text-[11px]">Runtime: nodejs@v20.11 &bull; CLI v1.2.0 &bull; 14 minutes ago</p>
+                  <div className="space-y-0.5 min-w-0">
+                    <span className="font-semibold text-red-400 block truncate">{preview.recentCrashTitle}</span>
+                    <p className="text-zinc-500 text-[11px] truncate">{preview.recentCrashSubtext}</p>
                   </div>
-                  <span className="px-2 py-1 rounded-lg bg-zinc-900 text-zinc-400 text-[11px] font-mono">Pushed to Discord</span>
+                  <span className="px-2 py-1 rounded-lg bg-zinc-900 text-zinc-400 text-[11px] font-mono shrink-0">
+                    {preview.mode === "live_demo" ? "Demo Feed" : "Sample"}
+                  </span>
                 </div>
               </div>
 
@@ -226,10 +254,12 @@ export default function HomePage() {
                   <span className="text-xs text-indigo-400 font-mono">&lt;2KB script</span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-extrabold text-white">3,480</span>
-                  <span className="text-xs text-zinc-400 font-medium">Unique Pageviews</span>
+                  <span className="text-3xl font-extrabold text-white tabular-nums">
+                    {preview.pageviewsCount.toLocaleString("en-US")}
+                  </span>
+                  <span className="text-xs text-zinc-400 font-medium">Recorded Events</span>
                 </div>
-                <p className="text-xs text-zinc-500">Top: HackerNews (28%) &bull; GitHub (41%)</p>
+                <p className="text-xs text-zinc-500">Zero cookies &bull; HMAC monthly visitor rotation</p>
               </div>
             </div>
           </div>
