@@ -272,10 +272,22 @@ export function UptimeMonitorsCard({
         )}
 
         {summary.monitors.length === 0 ? (
-          <div className="py-5 px-4 text-center rounded-xl bg-zinc-950/60 border border-zinc-800/60 text-xs text-zinc-400">
-            {isPublicPortal
-              ? "No public uptime endpoints configured for this project yet."
-              : "Add your app's /health URL to monitor uptime availability, P95 latency, and instant downtime alerts."}
+          <div className="py-5 px-4 text-center rounded-xl bg-zinc-950/60 border border-zinc-800/60 text-xs text-zinc-400 space-y-2.5">
+            <p>
+              {isPublicPortal
+                ? "No public uptime endpoints configured for this project yet."
+                : "Add your app's /health URL to monitor uptime availability, P95 latency, and instant downtime alerts."}
+            </p>
+            {!isPublicPortal && !showAdd && (
+              <button
+                type="button"
+                onClick={() => setShowAdd(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/40 text-emerald-200 text-xs font-semibold transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add First /health Probe</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-2 max-h-40 overflow-y-auto pr-1">

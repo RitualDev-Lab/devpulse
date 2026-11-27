@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Package, Download, KeyRound, Plus, Trash2, Loader2, ExternalLink } from "lucide-react";
 import {
   AreaChart,
@@ -13,6 +14,7 @@ import {
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { useWorkspaceData } from "../WorkspaceCacheContext";
+import { useToast } from "../ToastContext";
 import { NpmDownloadsCard } from "../widgets/NpmDownloadsCard";
 import { PyPiDownloadsCard } from "../widgets/PyPiDownloadsCard";
 import { RustCratesCard } from "../widgets/RustCratesCard";
@@ -27,6 +29,8 @@ import { PackageSearchPicker } from "../PackageSearchPicker";
 import { securitySummaryKey } from "@/lib/integrations/registry-adapter";
 
 export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
+  const router = useRouter();
+  const { showToast } = useToast();
   const { projects, customDomain, storageTier, isDemo } = workspace;
   const initialData = useWorkspaceData(workspace.initialData);
   const project = initialData.project;
@@ -63,7 +67,13 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
           apiKey: pkgToken.trim() || undefined,
         }),
       });
-      if (res.ok) window.location.reload();
+      if (res.ok) {
+        setPkgLabel("");
+        setPkgUrl("");
+        setPkgToken("");
+        showToast("Package connector added", "success");
+        router.refresh();
+      }
     } finally {
       setSavingPkg(false);
     }
@@ -76,7 +86,8 @@ export function PackagesFullView({ workspace }: { workspace: LoadedWorkspaceRead
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "delete_connector", projectId: project.id, connectorId }),
     });
-    window.location.reload();
+    showToast("Package connector removed", "info");
+    router.refresh();
   };
 
   const hasAnyPackage = Boolean(

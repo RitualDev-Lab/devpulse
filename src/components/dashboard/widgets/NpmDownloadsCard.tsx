@@ -40,6 +40,15 @@ export function NpmDownloadsCard({ stats, packageName, security }: NpmDownloadsC
   const areaPath =
     points.length > 1 ? `M 0,${height} L ${points.join(" L ")} L ${width},${height} Z` : "";
 
+  let sevenDayDeltaPct: number | null = null;
+  if (history.length >= 14) {
+    const recent7 = history.slice(-7).reduce((acc, pt) => acc + pt.downloads, 0);
+    const prev7 = history.slice(-14, -7).reduce((acc, pt) => acc + pt.downloads, 0);
+    if (prev7 > 0) {
+      sevenDayDeltaPct = ((recent7 - prev7) / prev7) * 100;
+    }
+  }
+
   return (
     <div className="flex flex-col h-full justify-between p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg shadow-black/40 hover:border-zinc-700 transition">
       <div>
@@ -135,9 +144,22 @@ export function NpmDownloadsCard({ stats, packageName, security }: NpmDownloadsC
 
         {/* Sparkline Chart */}
         <div className="mt-2">
-          <div className="flex items-center justify-between text-[11px] text-zinc-400 mb-1.5">
-            <span className="flex items-center gap-1 text-zinc-300">
-              <TrendingUp className="w-3.5 h-3.5 text-red-400" /> 30-Day Download Velocity
+          <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-400 mb-1.5">
+            <span className="flex items-center gap-1.5 text-zinc-300">
+              <TrendingUp className="w-3.5 h-3.5 text-red-400" />
+              <span>30-Day Download Velocity</span>
+              {sevenDayDeltaPct !== null && (
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                    sevenDayDeltaPct >= 0
+                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                      : "bg-red-500/15 border-red-500/30 text-red-300"
+                  }`}
+                >
+                  {sevenDayDeltaPct >= 0 ? "+" : ""}
+                  {sevenDayDeltaPct.toFixed(1)}% 7d
+                </span>
+              )}
             </span>
             <span>Peak: {formatNumber(maxDownload)}</span>
           </div>

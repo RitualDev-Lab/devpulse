@@ -165,23 +165,23 @@ export function SortableCard({
     >
       {/* Dedicated Customization Bar ABOVE card body (never overlaps card headers/buttons) */}
       {isCustomizing && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-t-2xl bg-zinc-900/95 border-b border-indigo-500/30 text-xs shrink-0">
-          <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-t-2xl bg-zinc-900/95 border-b border-indigo-500/30 text-xs shrink-0">
+          <div className="flex items-center gap-1 min-w-0 shrink-0">
             {/* Drag Handle */}
             <div
               {...attributes}
               {...listeners}
-              className="hidden md:flex cursor-grab active:cursor-grabbing text-indigo-300 hover:text-white p-1 rounded hover:bg-zinc-800 transition touch-none"
+              className="hidden md:flex cursor-grab active:cursor-grabbing text-indigo-300 hover:text-white p-1 rounded hover:bg-zinc-800 transition touch-none shrink-0"
               title="Drag card anywhere on 2D grid"
             >
-              <GripVertical className="w-4 h-4" />
+              <GripVertical className="w-3.5 h-3.5" />
             </div>
-            <span className="text-[10px] font-mono text-zinc-400">
+            <span className="text-[10px] font-mono text-zinc-400 whitespace-nowrap shrink-0">
               {w}c &times; {h}r
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
             {onResize && activeCols >= 8 && (
               <div className="hidden sm:flex items-center gap-0.5 bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 mr-0.5">
                 {COMPACT_WIDTH_OPTIONS.map((opt) => {

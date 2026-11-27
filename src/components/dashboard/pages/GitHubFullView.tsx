@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   GitBranch,
   GitPullRequest,
@@ -34,6 +35,7 @@ import {
 import type { LoadedWorkspaceReady } from "@/lib/dashboard/load-workspace";
 import { WorkspaceShell } from "../WorkspaceShell";
 import { useWorkspaceData } from "../WorkspaceCacheContext";
+import { useToast } from "../ToastContext";
 
 interface GitHubManagePayload {
   repo: string;
@@ -77,6 +79,8 @@ interface GitHubManagePayload {
 }
 
 export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady }) {
+  const router = useRouter();
+  const { showToast } = useToast();
   const { projects, customDomain, storageTier, isDemo } = workspace;
   const initialData = useWorkspaceData(workspace.initialData);
   const gh = initialData.githubStats;
@@ -139,7 +143,10 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to connect repository");
-      window.location.reload();
+      setShowMultiGitForm(false);
+      setGitTok("");
+      showToast(`Connected ${gitProv.toUpperCase()} repository (${gitSlug.trim()})`, "success");
+      router.refresh();
     } catch (err: any) {
       setFeedback({ ok: false, msg: err?.message || "Failed to connect Git host" });
     } finally {
@@ -195,6 +202,15 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
   useEffect(() => {
     loadGitHubData();
   }, [loadGitHubData]);
+
+  useEffect(() => {
+    if (!threadModal) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setThreadModal(null);
+    };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [threadModal]);
 
   const handleGitHubAction = async (
     action: "close_issue" | "reopen_issue" | "comment" | "merge_pr" | "add_label" | "remove_label",
@@ -923,7 +939,9 @@ export function GitHubFullView({ workspace }: { workspace: LoadedWorkspaceReady 
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl p-6 max-h-[85vh] flex flex-col"
+              role="dialog"
+              aria-modal="true"
+              className="devpulse-modal-panel w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl p-6 max-h-[85vh] flex flex-col"
             >
             <div className="flex items-start justify-between gap-3 pb-3 border-b border-zinc-800">
               <div>
