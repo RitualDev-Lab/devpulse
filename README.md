@@ -13,7 +13,7 @@
 
 **DevPulse** is a unified command center designed for modern maintainers and indie hackers. If you maintain multiple repositories, ship npm packages, release PyPI libraries, or build CLI tools, DevPulse brings all your downloads, open issues, pull requests, and live runtime crashes into **one customizable, draggable mission control dashboard.**
 
-[Live Demo](https://devpulse.ritualdev.in) • [Report a Bug](https://devpulse.ritualdev.in/report/ritual-core) • [Documentation](#quick-start)
+[Live Demo](https://devpulse.ritualdev.in/dashboard?demo=1) • [OSSInsight Alternative](https://devpulse.ritualdev.in/ossinsight-alternative) • [Report a Bug](https://devpulse.ritualdev.in/report/ritual-core) • [Security](./SECURITY.md) • [Contributing](./CONTRIBUTING.md) • [Accessibility](./ACCESSIBILITY.md) • [llms.txt](./llms.txt)
 
 </div>
 

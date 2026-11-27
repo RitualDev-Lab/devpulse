@@ -1,0 +1,23 @@
+# DevPulse — Unified Developer Headquarters & Multi-Registry Telemetry Engine
+
+> Built by RitualDev Lab (`https://devpulse.ritualdev.in`, `https://github.com/RitualDev-Lab/devpulse`). MIT Licensed.
+
+## Key Links
+- Home & Overview: https://devpulse.ritualdev.in/
+- Interactive Live Demo (No Auth Required): https://devpulse.ritualdev.in/dashboard?demo=1
+- OSSInsight Shutdown Migration & SVG Badge Converter: https://devpulse.ritualdev.in/ossinsight-alternative
+- MCP Analytics Demo: https://devpulse.ritualdev.in/dashboard/mcp?demo=1
+- Security & SBOM Center Demo: https://devpulse.ritualdev.in/dashboard/security?demo=1
+- Traces, Logs & RUM Analytics Demo: https://devpulse.ritualdev.in/dashboard/analytics?demo=1
+
+## Capabilities
+- **Multi-Git Intelligence:** GitHub, GitLab (SaaS & self-hosted), Bitbucket, Codeberg / Gitea / Forgejo PRs, issues, stars, and webhook verification.
+- **23+ Package Ecosystems:** npm, PyPI, Crates.io, Go, Docker Hub, VS Code Marketplace, Open-VSX, MCP registries, NuGet, RubyGems, Packagist, pub.dev, JSR, Hex.pm, Anaconda, CRAN, Homebrew, Maven, C++ Conan/vcpkg, Swift, Hackage, MetaCPAN, LuaRocks, Julia.
+- **Runtime Observability:** Crash fingerprinting, R2 session replay timelines, Source Map / DWARF symbolication, OpenTelemetry OTLP traces (`/api/v1/ingest/otlp/traces`), Loki logs (`/api/v1/loki/api/v1/push`), and Core Web Vitals RUM (`LCP`, `INP`, `CLS`, `TTFB`).
+- **Dynamic README SVG Badges:**
+  - `GET /api/badge/downloads/{slug}.svg`
+  - `GET /api/badge/stars/{slug}.svg`
+  - `GET /api/badge/health/{slug}.svg`
+  - `GET /api/badge/security/{slug}.svg`
+- **12 Zero-Bloat SDK Packages (`/packages`):** JS/TS (`devpulse-js`), Python (`devpulse-py`), Rust (`devpulse-rs`), Go (`devpulse-go`), .NET (`DevPulse.Sdk`), JVM (`devpulse-jvm`), PHP (`devpulse-php`), Swift (`DevPulseSwift`), C++ (`devpulse-cpp`), Ruby (`devpulse-rb`), Flutter (`devpulse_flutter`), and MCP (`devpulse-mcp`).
+- **Contact & Security Disclosure:** `security@ritualdev.in` | `accessibility@ritualdev.in` | `conduct@ritualdev.in`.

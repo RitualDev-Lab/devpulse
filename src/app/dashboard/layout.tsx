@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { loadDashboardShellMeta } from "@/lib/dashboard/load-workspace";
 import { DashboardLayoutShell } from "@/components/dashboard/DashboardLayoutShell";
 
@@ -12,8 +12,10 @@ export default async function DashboardLayout({
   const shellMeta = await loadDashboardShellMeta();
 
   return (
-    <DashboardLayoutShell shellMeta={shellMeta}>
-      {children}
-    </DashboardLayoutShell>
+    <Suspense fallback={<div className="min-h-screen bg-[#08090c]" />}>
+      <DashboardLayoutShell shellMeta={shellMeta}>
+        {children}
+      </DashboardLayoutShell>
+    </Suspense>
   );
 }

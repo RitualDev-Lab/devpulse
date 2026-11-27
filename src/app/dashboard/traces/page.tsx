@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { DashboardAuthGate } from "@/components/dashboard/DashboardAuthGate";
 import { DashboardOnboardingView } from "@/components/dashboard/DashboardOnboardingView";
 import { TracesFullView } from "@/components/dashboard/pages/TracesFullView";
@@ -13,5 +14,9 @@ export default async function TracesWorkspacePage(props: {
   });
   if (loaded.status === "auth_gate") return <DashboardAuthGate />;
   if (loaded.status === "onboarding") return <DashboardOnboardingView user={loaded.user} />;
-  return <TracesFullView workspace={loaded} />;
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#08090c]" />}>
+      <TracesFullView workspace={loaded} />
+    </Suspense>
+  );
 }

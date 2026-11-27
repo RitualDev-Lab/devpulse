@@ -48,6 +48,7 @@ export default function HomePage() {
           <nav className="hidden md:flex items-center gap-6 text-xs font-medium text-zinc-400">
             <a href="#about" className="hover:text-white transition">About</a>
             <a href="#features" className="hover:text-white transition">Features</a>
+            <a href="/ossinsight-alternative" className="hover:text-white transition">OSSInsight Alt</a>
             <a href="#revenue" className="hover:text-white transition">Revenue Engine</a>
             <a href="#pricing" className="hover:text-white transition">Pricing</a>
             <a href="#cli" className="hover:text-white transition">Terminal CLI</a>
